@@ -153,7 +153,9 @@ describe("PartyTracksMediaManager", () => {
       session_id: "sharer-session",
       kind: "audio",
     };
-    // The viewer joins: VoiceReady lists only the sharer's microphone.
+    // The viewer joins: VoiceReady lists only the sharer's microphone. The
+    // viewer watches the sharer (screen video is pulled only when watched).
+    viewer.setRemoteTrackSubscription("screen-video-sharer", true);
     viewer.syncRemoteTracks([microphone]);
     transport.pulledTracks
       .get(microphone.track_name)
@@ -181,6 +183,43 @@ describe("PartyTracksMediaManager", () => {
       "add:cam-audio-sharer",
       "add:screen-video-sharer",
     ]);
+    viewer.dispose();
+  });
+
+  it("pulls screen video only once the viewer subscribes to it", () => {
+    const transport = new TestTransport();
+    const viewer = new PartyTracksMediaManager(transport, "viewer", {
+      onPublicationMetadata: vi.fn(),
+      onPublicationStopped: vi.fn(),
+      onRemoteTrack: vi.fn(),
+    });
+    const track = (kind: "audio" | "video", name: string): TrackInfo => ({
+      participant_id: "sharer",
+      track_name: `${name}-sharer`,
+      sfu_track_name: `opaque-${name}`,
+      session_id: "sharer-session",
+      kind,
+    });
+    // A late joiner's VoiceReady lists a running share: its audio and the
+    // camera are pulled; its video waits for Watch.
+    viewer.syncRemoteTracks([
+      track("audio", "screen-audio"),
+      track("video", "screen-video"),
+      track("video", "cam-video"),
+    ]);
+    expect([...transport.pullMetadata.keys()].sort()).toEqual([
+      "cam-video-sharer",
+      "screen-audio-sharer",
+    ]);
+
+    viewer.setRemoteTrackSubscription("screen-video-sharer", true);
+    expect(transport.pullMetadata.get("screen-video-sharer")).toEqual([
+      track("video", "screen-video"),
+    ]);
+    viewer.setRemoteTrackSubscription("screen-video-sharer", false);
+    // Unwatched, a re-announcement does not pull it again.
+    viewer.offerTracks([track("video", "screen-video")]);
+    expect(transport.pullCount).toBe(3);
     viewer.dispose();
   });
 
@@ -277,6 +316,7 @@ describe("PartyTracksMediaManager", () => {
       session_id: "remote-capability",
       kind: "video",
     };
+    manager.setRemoteTrackSubscription(offer.track_name, true);
     manager.offerTracks([offer]);
     const remoteVideo = mediaTrack("video", "remote-video");
     transport.pulledTracks.get(offer.track_name)?.next(remoteVideo);
@@ -551,6 +591,7 @@ describe("PartyTracksMediaManager pull watchdog", () => {
       sfu_track_name: "opaque-joiner-screen",
       kind: "video",
     };
+    manager.setRemoteTrackSubscription(other.track_name, true);
     manager.offerTracks([offer, other]);
     expect(transport.pullCount).toBe(2);
 

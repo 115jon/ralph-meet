@@ -130,6 +130,8 @@ const DEFAULT_TRACK_UNAVAILABLE_REPORT_INTERVAL_MS = 5_000;
 const DEFAULT_TRACK_UNAVAILABLE_MAX_REPORTS = 3;
 const DEFAULT_LAYER_UPGRADE_DELAY_MS = 150;
 const DEFAULT_LAYER_DOWNGRADE_DELAY_MS = 1_000;
+/** Remote tracks pulled only once subscribed (see isSubscribed). */
+const OPT_IN_TRACK_PREFIX = "screen-video-";
 /** Until something renders a pulled camera, it is pulled at the low layer. */
 const INITIAL_VIDEO_LAYER: VideoLayerQuality = "low";
 
@@ -218,6 +220,8 @@ export class PartyTracksMediaManager {
   private readonly pulls = new Map<string, RemotePull>();
   private readonly pullRetries = new Map<string, PullRetry>();
   private readonly unsubscribedTrackNames = new Set<string>();
+  /** Opt-in tracks (screen video) the viewer has asked for. */
+  private readonly subscribedTrackNames = new Set<string>();
   private readonly stateSubscription: Subscription;
   private peerConnectionState: RTCPeerConnectionState = "new";
   private disposed = false;
@@ -461,7 +465,7 @@ export class PartyTracksMediaManager {
           );
           pull.metadata$.next(track);
         }
-      } else if (this.unsubscribedTrackNames.has(track.track_name)) {
+      } else if (!this.isSubscribed(track.track_name)) {
         continue;
       } else if (this.pullRetries.get(track.track_name)?.cancel) {
         // A dropped pull is waiting out its backoff; the re-pull takes the
@@ -494,13 +498,29 @@ export class PartyTracksMediaManager {
     return this.offers.has(trackName);
   }
 
+  /**
+   * Screen video is opt-in: it is pulled only once the viewer subscribes
+   * (watches the share), so joining a room with shares running does not
+   * pull, negotiate and then drop each of them. Everything else is pulled
+   * unless unsubscribed.
+   */
+  private isSubscribed(trackName: string): boolean {
+    if (this.unsubscribedTrackNames.has(trackName)) return false;
+    return (
+      !trackName.startsWith(OPT_IN_TRACK_PREFIX) ||
+      this.subscribedTrackNames.has(trackName)
+    );
+  }
+
   setRemoteTrackSubscription(trackName: string, subscribe: boolean): void {
     if (subscribe) {
       this.unsubscribedTrackNames.delete(trackName);
+      this.subscribedTrackNames.add(trackName);
       const offer = this.offers.get(trackName);
       if (offer && !this.pulls.has(trackName)) this.startPull(offer);
       return;
     }
+    this.subscribedTrackNames.delete(trackName);
     this.unsubscribedTrackNames.add(trackName);
     this.stopPull(trackName);
     this.clearPullRetry(trackName);
@@ -572,6 +592,7 @@ export class PartyTracksMediaManager {
     }
     this.offers.clear();
     this.unsubscribedTrackNames.clear();
+    this.subscribedTrackNames.clear();
     this.notFound.clear();
     this.unsubscribeVideoRenderDemand();
     this.pullErrorSubscription?.unsubscribe();
@@ -722,7 +743,7 @@ export class PartyTracksMediaManager {
         this.disposed ||
         !offer ||
         this.pulls.has(trackName) ||
-        this.unsubscribedTrackNames.has(trackName)
+        !this.isSubscribed(trackName)
       ) {
         return;
       }

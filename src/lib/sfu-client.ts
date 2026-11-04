@@ -122,6 +122,12 @@ export class SFUClient extends TypedEventEmitter<SFUEventMap> {
   private standby = false;
   private joinedSnapshot: SFUEventMap["joined"] | null = null;
   private readonly deferredRemoteTracks = new Map<string, TrackInfo>();
+  /**
+   * The viewer's latest subscription choice per remote track, kept here so
+   * a PartyTracks session created (or rebuilt) after the choice still gets
+   * it: screen video is pulled only once subscribed.
+   */
+  private readonly remoteTrackSubscriptions = new Map<string, boolean>();
   private partyTracksTransport: PartyTracksClientTransport | null = null;
   private partyTracksMedia: PartyTracksMediaManager | null = null;
   private partyTracksParticipantId: string | null = null;
@@ -830,6 +836,9 @@ export class SFUClient extends TypedEventEmitter<SFUEventMap> {
         },
       },
     );
+    for (const [trackName, subscribe] of this.remoteTrackSubscriptions) {
+      this.partyTracksMedia.setRemoteTrackSubscription(trackName, subscribe);
+    }
     this.flushDeferredRemoteTracks();
     this.resolvePartyTracksReadiness();
   }
@@ -1220,6 +1229,7 @@ export class SFUClient extends TypedEventEmitter<SFUEventMap> {
     trackName: string,
     subscribe: boolean,
   ): void {
+    this.remoteTrackSubscriptions.set(trackName, subscribe);
     this.partyTracksMedia?.setRemoteTrackSubscription(trackName, subscribe);
   }
 
