@@ -6,7 +6,7 @@
 //   sends to the voice room as TrackUnavailable;
 // - the publisher half: republishTrack() pushes a publication again under a
 //   new SFU track when the voice room relays a RepublishRequest.
-import type { ScheduleTimer } from "@ralph/realtime";
+import { scheduleWithGlobalTimers, type ScheduleTimer } from "@ralph/realtime";
 import { BehaviorSubject, type Observable, Subscription } from "rxjs";
 
 import type { TrackInfo } from "./protocol";
@@ -101,11 +101,6 @@ const DEFAULT_TRACK_UNAVAILABLE_AFTER_MS = 1_000;
 const DEFAULT_TRACK_UNAVAILABLE_MIN_ERRORS = 2;
 const DEFAULT_TRACK_UNAVAILABLE_REPORT_INTERVAL_MS = 5_000;
 const DEFAULT_TRACK_UNAVAILABLE_MAX_REPORTS = 3;
-
-const scheduleWithGlobalTimers: ScheduleTimer = (callback, ms) => {
-  const handle = setTimeout(callback, ms);
-  return () => clearTimeout(handle);
-};
 
 interface RemotePull {
   currentTrack?: MediaStreamTrack;
