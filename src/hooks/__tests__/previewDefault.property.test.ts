@@ -7,9 +7,9 @@
 import { describe, expect, it } from "vitest";
 import fc from "fast-check";
 import {
-  resolveCameraVideoSubscriptionRid,
   resolvePreviewStartState,
   resolveScreenVideoSubscription,
+  resolveStreamThumbnails,
   type ScreenSharePreviewKind,
 } from "@/hooks/useVoiceChannel";
 
@@ -67,20 +67,42 @@ describe("resolvePreviewStartState — Property 9 (preview-default decision)", (
 });
 
 describe("resolveScreenVideoSubscription", () => {
-  it("keeps screen video subscribed even when stream audio is always-heard", () => {
+  it("pulls screen video only while the share is watched or on stage", () => {
     fc.assert(
-      fc.property(fc.boolean(), fc.boolean(), (alwaysHear, isWatched) => {
-        expect(resolveScreenVideoSubscription({ alwaysHear, isWatched })).toBe(
-          true,
+      fc.property(fc.boolean(), fc.boolean(), (isWatched, isFocused) => {
+        expect(resolveScreenVideoSubscription({ isWatched, isFocused })).toBe(
+          isWatched || isFocused,
         );
       }),
       { numRuns: 20 },
     );
   });
-});
 
-describe("resolveCameraVideoSubscriptionRid", () => {
-  it("always selects the full-resolution camera layer", () => {
-    expect(resolveCameraVideoSubscriptionRid()).toBe("h");
+  it("shows an unwatched share's broadcast still, keeping local and captured ones", () => {
+    const captured = { me: "local-capture", bob: "old-capture" };
+    const merged = resolveStreamThumbnails(
+      captured,
+      [
+        { user_id: "me", stream_preview_url: "my-broadcast" },
+        { user_id: "bob", stream_preview_url: "bob-broadcast" },
+        { user_id: "ann", stream_preview_url: "ann-broadcast" },
+        { user_id: "cy", stream_preview_url: null },
+      ],
+      "me",
+    );
+    expect(merged).toEqual({
+      me: "local-capture",
+      bob: "bob-broadcast",
+      ann: "ann-broadcast",
+    });
+    expect(captured).toEqual({ me: "local-capture", bob: "old-capture" });
+    // Nothing to add: the same object, so memoized consumers keep theirs.
+    expect(resolveStreamThumbnails(captured, [], "me")).toBe(captured);
+  });
+
+  it("does not pull an unwatched share's video", () => {
+    expect(
+      resolveScreenVideoSubscription({ isWatched: false, isFocused: false }),
+    ).toBe(false);
   });
 });

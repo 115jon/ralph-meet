@@ -1211,15 +1211,21 @@ export class SFUClient extends TypedEventEmitter<SFUEventMap> {
     return this.audio.resumeAudioContext();
   }
 
+  /**
+   * Pulls a remote track while subscribed and stops pulling it otherwise.
+   * Which simulcast layer a pulled camera comes at follows where it is
+   * rendered (see video-layers.ts), not this call.
+   */
   public setRemoteTrackSubscription(
-    participantId: string,
     trackName: string,
     subscribe: boolean,
-    rid?: string,
   ): void {
-    void participantId;
-    void rid;
     this.partyTracksMedia?.setRemoteTrackSubscription(trackName, subscribe);
+  }
+
+  /** The RID each simulcast pull asks for, by alias (diagnostics). */
+  public getRemoteVideoLayers(): Record<string, string> {
+    return this.partyTracksMedia?.getRemoteVideoLayers() ?? {};
   }
 
   public unpublishTrack(trackName: string): void {

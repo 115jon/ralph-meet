@@ -1,4 +1,5 @@
 import { cn } from "@/lib/utils";
+import { videoRenderDemand } from "@/lib/voice/video-render-demand";
 import React, { useEffect, useRef } from "react";
 
 interface VideoPlayerProps {
@@ -35,6 +36,29 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({
       if (video) video.srcObject = null;
     };
   }, [stream, label]);
+
+  // Reports this element's size so a remote camera is pulled at the
+  // simulcast layer it is shown at (see video-layers.ts).
+  useEffect(() => {
+    const video = videoRef.current;
+    if (!video || !stream || isLocal || typeof ResizeObserver === "undefined")
+      return;
+    const owner = Symbol("video-render");
+    const report = () => {
+      const scale = window.devicePixelRatio || 1;
+      videoRenderDemand.report(owner, stream, {
+        width: Math.round(video.clientWidth * scale),
+        height: Math.round(video.clientHeight * scale),
+      });
+    };
+    report();
+    const observer = new ResizeObserver(report);
+    observer.observe(video);
+    return () => {
+      observer.disconnect();
+      videoRenderDemand.withdraw(owner);
+    };
+  }, [stream, isLocal]);
 
   return (
     <video
