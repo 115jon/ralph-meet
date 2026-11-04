@@ -87,6 +87,10 @@ export function ChatHeader({
   // Search replaces the right column, so the members toggle reads unpressed
   // while it is open.
   const membersPressed = !!showMembers && !showSearch;
+  // A closable header is the call's chat docked beside the voice stage (a
+  // 360 column): the 224px search field doesn't fit there, so search is a
+  // key like the others.
+  const docked = !!onClose;
 
   // "/" opens search when nothing editable has focus (the hint on the
   // header field). Typing "/" in the composer still starts a command.
@@ -257,7 +261,20 @@ export function ChatHeader({
         <div className="flex items-center">
           {/* One search input on screen: while the panel is open its own
               field is the input, and this collapses to a pressed toggle. */}
-          {showSearch ? (
+          {docked ? (
+            <IconButton
+              icon="search"
+              variant="muted"
+              size={40}
+              tone={showSearch ? "toggled" : "idle"}
+              aria-label="Search"
+              aria-pressed={showSearch}
+              aria-keyshortcuts="/"
+              onClick={onOpenSearch}
+              tooltip={isDM ? "Search this conversation" : "Search messages"}
+              tooltipSide="bottom"
+            />
+          ) : showSearch ? (
             <IconButton
               icon="search"
               variant="muted"
@@ -294,14 +311,16 @@ export function ChatHeader({
               </button>
             </div>
           )}
-          <IconButton
-            aria-label="Search"
-            icon="search"
-            variant="muted"
-            size={40}
-            className="md:hidden"
-            onClick={onOpenSearch}
-          />
+          {docked ? null : (
+            <IconButton
+              aria-label="Search"
+              icon="search"
+              variant="muted"
+              size={40}
+              className="md:hidden"
+              onClick={onOpenSearch}
+            />
+          )}
         </div>
         {onClose && (
           <IconButton

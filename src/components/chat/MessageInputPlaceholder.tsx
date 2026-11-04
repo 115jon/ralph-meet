@@ -7,6 +7,8 @@ interface MessageInputPlaceholderProps {
   replyDisplayName: string | null;
   /** DMs address a person ("Message @Ada"), channels a room ("#general"). */
   isDM?: boolean;
+  /** A voice channel's chat: its glyph already says voice, so no "#". */
+  isVoice?: boolean;
   className?: string;
 }
 
@@ -15,22 +17,31 @@ export function composerPrompt({
   channelName,
   replyDisplayName,
   isDM = false,
+  isVoice = false,
 }: {
   channelName: string;
   replyDisplayName: string | null;
   isDM?: boolean;
+  isVoice?: boolean;
 }) {
   if (replyDisplayName) return `Reply to ${replyDisplayName}…`;
-  return isDM ? `Message @${channelName}` : `Message #${channelName}`;
+  if (isDM) return `Message @${channelName}`;
+  return isVoice ? `Message ${channelName}` : `Message #${channelName}`;
 }
 
 export function MessageInputPlaceholder({
   channelName,
   replyDisplayName,
   isDM = false,
+  isVoice = false,
   className,
 }: MessageInputPlaceholderProps) {
-  const text = composerPrompt({ channelName, replyDisplayName, isDM });
+  const text = composerPrompt({
+    channelName,
+    replyDisplayName,
+    isDM,
+    isVoice,
+  });
 
   return (
     <InlineEmojiText
