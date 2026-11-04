@@ -32,6 +32,7 @@ const PERMISSION_LABELS: Record<PermissionKey, string> = {
   MUTE_MEMBERS: "Mute members",
   DEAFEN_MEMBERS: "Deafen members",
   VIEW_AUDIT_LOG: "View audit log",
+  MOVE_MEMBERS: "Move members",
 };
 
 /** Permission names set in `bits`, in bit order. */
