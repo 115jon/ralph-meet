@@ -41,6 +41,7 @@ import { Route as ApiAvatarUploadRouteImport } from './routes/api/avatar-upload'
 import { Route as ApiAccountClaimsRouteImport } from './routes/api/account-claims'
 import { Route as ApiSharesIndexRouteImport } from './routes/api/shares/index'
 import { Route as ApiWordleTodayRouteImport } from './routes/api/wordle/today'
+import { Route as ApiVoiceMoveRouteImport } from './routes/api/voice/move'
 import { Route as ApiVoiceSocketTicketRouteImport } from './routes/api/voice/socket-ticket'
 import { Route as ApiVoiceStatusMediaSplatRouteImport } from './routes/api/voice-status-media/$'
 import { Route as ApiUsersMeRouteImport } from './routes/api/users/me'
@@ -265,6 +266,11 @@ const ApiSharesIndexRoute = ApiSharesIndexRouteImport.update({
 const ApiWordleTodayRoute = ApiWordleTodayRouteImport.update({
   id: '/api/wordle/today',
   path: '/api/wordle/today',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ApiVoiceMoveRoute = ApiVoiceMoveRouteImport.update({
+  id: '/api/voice/move',
+  path: '/api/voice/move',
   getParentRoute: () => rootRouteImport,
 } as any)
 const ApiVoiceSocketTicketRoute = ApiVoiceSocketTicketRouteImport.update({
@@ -662,6 +668,7 @@ export interface FileRoutesByFullPath {
   '/api/shares/$id': typeof ApiSharesIdRoute
   '/api/users/me': typeof ApiUsersMeRoute
   '/api/voice-status-media/$': typeof ApiVoiceStatusMediaSplatRoute
+  '/api/voice/move': typeof ApiVoiceMoveRoute
   '/api/voice/socket-ticket': typeof ApiVoiceSocketTicketRoute
   '/api/wordle/today': typeof ApiWordleTodayRoute
   '/api/shares/': typeof ApiSharesIndexRoute
@@ -761,6 +768,7 @@ export interface FileRoutesByTo {
   '/api/shares/$id': typeof ApiSharesIdRoute
   '/api/users/me': typeof ApiUsersMeRoute
   '/api/voice-status-media/$': typeof ApiVoiceStatusMediaSplatRoute
+  '/api/voice/move': typeof ApiVoiceMoveRoute
   '/api/voice/socket-ticket': typeof ApiVoiceSocketTicketRoute
   '/api/wordle/today': typeof ApiWordleTodayRoute
   '/api/shares': typeof ApiSharesIndexRoute
@@ -861,6 +869,7 @@ export interface FileRoutesById {
   '/api/shares/$id': typeof ApiSharesIdRoute
   '/api/users/me': typeof ApiUsersMeRoute
   '/api/voice-status-media/$': typeof ApiVoiceStatusMediaSplatRoute
+  '/api/voice/move': typeof ApiVoiceMoveRoute
   '/api/voice/socket-ticket': typeof ApiVoiceSocketTicketRoute
   '/api/wordle/today': typeof ApiWordleTodayRoute
   '/api/shares/': typeof ApiSharesIndexRoute
@@ -962,6 +971,7 @@ export interface FileRouteTypes {
     | '/api/shares/$id'
     | '/api/users/me'
     | '/api/voice-status-media/$'
+    | '/api/voice/move'
     | '/api/voice/socket-ticket'
     | '/api/wordle/today'
     | '/api/shares/'
@@ -1061,6 +1071,7 @@ export interface FileRouteTypes {
     | '/api/shares/$id'
     | '/api/users/me'
     | '/api/voice-status-media/$'
+    | '/api/voice/move'
     | '/api/voice/socket-ticket'
     | '/api/wordle/today'
     | '/api/shares'
@@ -1160,6 +1171,7 @@ export interface FileRouteTypes {
     | '/api/shares/$id'
     | '/api/users/me'
     | '/api/voice-status-media/$'
+    | '/api/voice/move'
     | '/api/voice/socket-ticket'
     | '/api/wordle/today'
     | '/api/shares/'
@@ -1256,6 +1268,7 @@ export interface RootRouteChildren {
   ApiSharesIdRoute: typeof ApiSharesIdRoute
   ApiUsersMeRoute: typeof ApiUsersMeRoute
   ApiVoiceStatusMediaSplatRoute: typeof ApiVoiceStatusMediaSplatRoute
+  ApiVoiceMoveRoute: typeof ApiVoiceMoveRoute
   ApiVoiceSocketTicketRoute: typeof ApiVoiceSocketTicketRoute
   ApiWordleTodayRoute: typeof ApiWordleTodayRoute
   ApiSharesIndexRoute: typeof ApiSharesIndexRoute
@@ -1492,6 +1505,13 @@ declare module '@tanstack/react-router' {
       path: '/api/wordle/today'
       fullPath: '/api/wordle/today'
       preLoaderRoute: typeof ApiWordleTodayRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/voice/move': {
+      id: '/api/voice/move'
+      path: '/api/voice/move'
+      fullPath: '/api/voice/move'
+      preLoaderRoute: typeof ApiVoiceMoveRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/api/voice/socket-ticket': {
@@ -2235,6 +2255,7 @@ const rootRouteChildren: RootRouteChildren = {
   ApiSharesIdRoute: ApiSharesIdRoute,
   ApiUsersMeRoute: ApiUsersMeRoute,
   ApiVoiceStatusMediaSplatRoute: ApiVoiceStatusMediaSplatRoute,
+  ApiVoiceMoveRoute: ApiVoiceMoveRoute,
   ApiVoiceSocketTicketRoute: ApiVoiceSocketTicketRoute,
   ApiWordleTodayRoute: ApiWordleTodayRoute,
   ApiSharesIndexRoute: ApiSharesIndexRoute,

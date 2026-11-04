@@ -107,6 +107,48 @@ export async function verifySocketTicket(
   return { ok: true, claims };
 }
 
+/**
+ * Signs `claims` in the ticket's `<version>.<payload>.<signature>` format.
+ * The version is part of the signed value, so a token minted for one
+ * purpose (another version) never verifies as another.
+ */
+export async function sealSignedToken(
+  version: string,
+  claims: Record<string, unknown>,
+  secret: string,
+): Promise<string> {
+  if (!secret || !ticketTokenPattern.test(version)) {
+    throw new Error("Cannot seal a token without a secret and version");
+  }
+  const payload = base64UrlEncode(textEncoder.encode(JSON.stringify(claims)));
+  const signedValue = `${version}.${payload}`;
+  return `${signedValue}.${base64UrlEncode(await sign(signedValue, secret))}`;
+}
+
+/** The claims of a token sealed with `version` and `secret`, else null. */
+export async function openSignedToken(
+  version: string,
+  token: unknown,
+  secret: string,
+): Promise<Record<string, unknown> | null> {
+  if (!secret || typeof token !== "string" || token.length > 4096) return null;
+  const parts = token.split(".");
+  if (parts.length !== 3 || parts[0] !== version) return null;
+  const [, encodedPayload, encodedSignature] = parts;
+  const payloadBytes = base64UrlDecode(encodedPayload);
+  const signatureBytes = base64UrlDecode(encodedSignature);
+  if (!payloadBytes || !signatureBytes) return null;
+  if (!(await verify(`${version}.${encodedPayload}`, signatureBytes, secret))) {
+    return null;
+  }
+  try {
+    const value: unknown = JSON.parse(new TextDecoder().decode(payloadBytes));
+    return isRecord(value) && !Array.isArray(value) ? value : null;
+  } catch {
+    return null;
+  }
+}
+
 export function buildSocketTicketProtocols(ticket: string): string[] {
   if (typeof ticket !== "string" || ticket.length === 0) {
     throw new Error("Cannot build WebSocket protocols without a ticket");

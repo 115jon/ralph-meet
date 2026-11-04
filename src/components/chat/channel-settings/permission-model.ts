@@ -93,6 +93,11 @@ export const VOICE_PERMISSIONS: PermissionDef[] = [
     name: "Mute members",
     desc: "Mute other people in this channel.",
   },
+  {
+    mask: PERMISSIONS.MOVE_MEMBERS,
+    name: "Move members",
+    desc: "Move members between voice channels.",
+  },
 ];
 
 export function triStateOf(

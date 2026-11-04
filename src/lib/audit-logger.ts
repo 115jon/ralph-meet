@@ -16,6 +16,8 @@ export enum AuditLogAction {
   MEMBER_BAN = "MEMBER_BAN",
   MEMBER_UNBAN = "MEMBER_UNBAN",
   MEMBER_ROLE_UPDATE = "MEMBER_ROLE_UPDATE",
+  /** Moved between voice channels; changes: from_channel_id, to_channel_id. */
+  MEMBER_MOVE = "MEMBER_MOVE",
 }
 
 export async function logAuditAction({

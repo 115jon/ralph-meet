@@ -34,6 +34,7 @@ import {
   type OutboundFrame,
 } from "@/lib/realtime-socket";
 import { fetchSocketProtocols } from "@/lib/voice/socket-ticket-client";
+import { voiceMoveGrantFor } from "@/lib/voice/voice-move-grants";
 import {
   areReconnectSoundsSuppressed,
   beginReconnectSoundSuppression,
@@ -1194,6 +1195,8 @@ export function createChatGateway(
           channel_id: channelId,
           self_mute: selfMute ?? true,
           started_at: startedAt ?? undefined,
+          // Moved here by a moderator: the grant stands in for CONNECT.
+          move_grant: voiceMoveGrantFor(channelId),
         },
       }),
     sendVoiceChannelLeave: (channelId?: string) =>

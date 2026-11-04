@@ -47,7 +47,16 @@ describe("FriendsView header", () => {
     window.confirm = vi.fn(() => true);
     useChatStore.setState({
       relationships: [{ user: ada, type: 0, created_at: "" }],
+      onlineUsers: new Set(["u-ada"]),
     } as never);
+  });
+
+  it("leaves a friend who is not connected out of Online, whatever users.status says", () => {
+    setViewport(1280);
+    useChatStore.setState({ onlineUsers: new Set<string>() } as never);
+    renderView();
+
+    expect(screen.queryByText("Ada Lovelace")).toBeNull();
   });
 
   it("at 390, moves the tabs to their own strip and keeps Add friend in the header", () => {

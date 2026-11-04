@@ -8,6 +8,7 @@ import { PERMISSIONS } from "@/lib/permissions";
 import type { WorkerBindings } from "@/server/bindings";
 import { brokenAuth, memoryAuth, testServices } from "@/server/testing";
 import { verifySocketTicket } from "@/lib/voice/socket-ticket";
+import { issueVoiceMoveGrant } from "@/lib/voice/voice-move-grant";
 import { verifyVoiceToken } from "../../../../realtime/voice-token";
 import { socketTicketRoutes } from "@/server/routes/socket-ticket";
 
@@ -439,6 +440,100 @@ describe("socket ticket route", () => {
     await expect(response.json()).resolves.toMatchObject({
       code: "CONNECT_DENIED",
     });
+  });
+
+  it("lets a voice move grant stand in for CONNECT, for its user and channel only", async () => {
+    voiceChannelInServer1();
+    db.mockQuery("JOIN member_roles", {
+      results: [
+        {
+          id: "role-everyone",
+          permissions: PERMISSIONS.VIEW_CHANNELS,
+          position: 0,
+          is_default: 1,
+        },
+      ],
+    });
+    // The global gateway's ledger: the user's latest grant, spent once per use.
+    const live = new Map<string, string>([["user-123", "move-c"]]);
+    const spent = new Set<string>();
+    const gatewayCalls: unknown[] = [];
+    env = {
+      ...env,
+      MEETING_ROOM: {
+        idFromName: (name: string) => name,
+        get: () => ({
+          fetch: async (_url: string, init: RequestInit) => {
+            const use = JSON.parse(String(init.body)) as {
+              user_id: string;
+              jti: string;
+              use: string;
+            };
+            gatewayCalls.push(use);
+            const key = `${use.jti}:${use.use}`;
+            const ok = live.get(use.user_id) === use.jti && !spent.has(key);
+            if (ok) spent.add(key);
+            return Response.json({ ok });
+          },
+        }),
+      },
+    } as unknown as Partial<WorkerBindings>;
+    const grantFor = (subject: string, channelId: string, jti = "move-c") =>
+      issueVoiceMoveGrant(
+        {
+          jti,
+          subject,
+          serverId: "server-1",
+          channelId,
+          expiresAt: Date.now() + 60_000,
+        },
+        ticketSecret,
+      );
+    const request = (moveGrant: string, audience = "voice") =>
+      socketTicketPost({
+        request: new Request("https://meet.test/api/voice/socket-ticket", {
+          method: "POST",
+          headers: { authorization: TOKEN },
+          body: JSON.stringify({ audience, channelId: "channel-1", moveGrant }),
+        }),
+      });
+
+    const grant = await grantFor("user-123", "channel-1");
+    expect((await request(grant)).status).toBe(200);
+    expect((await request(grant, "room")).status).toBe(200);
+    expect(gatewayCalls).toEqual([
+      {
+        user_id: "user-123",
+        jti: "move-c",
+        channel_id: "channel-1",
+        use: "voice",
+      },
+      {
+        user_id: "user-123",
+        jti: "move-c",
+        channel_id: "channel-1",
+        use: "room",
+      },
+    ]);
+
+    for (const refusedGrant of [
+      // Spent: a second voice ticket from the same grant.
+      grant,
+      // A->B->C: B's grant is no longer the user's latest.
+      await grantFor("user-123", "channel-1", "move-b"),
+      // Not this user, not this channel, not signed.
+      await grantFor("user-456", "channel-1"),
+      await grantFor("user-123", "channel-2"),
+      "vm1.not.signed",
+    ]) {
+      const refused = await request(refusedGrant);
+      expect(refused.status).toBe(403);
+      await expect(refused.json()).resolves.toMatchObject({
+        code: "CONNECT_DENIED",
+      });
+    }
+    // Bad signatures never reach the gateway.
+    expect(gatewayCalls).toHaveLength(4);
   });
 
   it("reads the channel and the caller's roles once per ticket", async () => {

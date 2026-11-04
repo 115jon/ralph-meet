@@ -60,6 +60,7 @@ import {
   LEGACY_CLERK_USER_ID_COMPAT,
   parseGatewayFrame,
   RETIRED_BROWSER_SFU_OPS,
+  VOICE_MOVED_CLOSE_REASON,
   type VoiceClientPayload,
 } from "../src/lib/gateway-protocol";
 import {
@@ -542,6 +543,7 @@ export class VoiceRoom extends DurableObject<Env, unknown> {
           await this.disconnectParticipantImmediately(
             update.participantId,
             update.replaced === true,
+            update.moved === true,
           );
         }
       }
@@ -570,22 +572,29 @@ export class VoiceRoom extends DurableObject<Env, unknown> {
       try {
         const body = (await request.json()) as {
           participant_id?: string;
+          user_id?: string;
         };
 
         const participantId =
           typeof body.participant_id === "string" && body.participant_id.trim()
             ? body.participant_id.trim()
             : "";
+        const userId =
+          typeof body.user_id === "string" && body.user_id.trim()
+            ? body.user_id.trim()
+            : "";
 
-        if (!participantId) {
+        if (!participantId || !userId) {
           return Response.json(
-            { error: "Missing participant id" },
+            { error: "Missing participant or user id" },
             { status: 400 },
           );
         }
 
+        // Only the participant's own user may end it from here.
         const disconnected =
-          await this.disconnectParticipantImmediately(participantId);
+          this.isParticipantOwnedBy(participantId, userId) &&
+          (await this.disconnectParticipantImmediately(participantId));
         return Response.json({ disconnected }, { status: 200 });
       } catch (error) {
         return Response.json(
@@ -1741,28 +1750,26 @@ export class VoiceRoom extends DurableObject<Env, unknown> {
   private async disconnectParticipantImmediately(
     participantId: string,
     replaced = false,
+    moved = false,
   ): Promise<boolean> {
     const ws = this.getWsByParticipant(participantId);
     if (ws) {
+      // A moderator's move says so in its reason, so the client waits for
+      // the room's VoiceMove instead of treating it as a device takeover.
+      const reason = moved
+        ? VOICE_MOVED_CLOSE_REASON
+        : VOICE_SESSION_REPLACED_REASON;
       if (replaced) {
-        // The user's voice moved to another device: tell this one to stop
-        // (no reconnect) before its tracks go.
+        // The user's voice moved to another device or channel: tell this one
+        // to stop (no reconnect) before its tracks go.
         this.sendTo(ws, {
           op: Op.Error,
-          d: {
-            code: CloseCode.SessionReplaced,
-            message: VOICE_SESSION_REPLACED_REASON,
-          },
+          d: { code: CloseCode.SessionReplaced, message: reason },
         });
       }
       await this.handleLeave(
         ws,
-        replaced
-          ? {
-              code: CloseCode.SessionReplaced,
-              reason: VOICE_SESSION_REPLACED_REASON,
-            }
-          : true,
+        replaced ? { code: CloseCode.SessionReplaced, reason } : true,
       );
       return true;
     }
@@ -1779,6 +1786,23 @@ export class VoiceRoom extends DurableObject<Env, unknown> {
 
     await this.disconnectParticipant(participantId);
     return true;
+  }
+
+  /** Whether an authenticated user owns this participant in the room. */
+  private isParticipantOwnedBy(participantId: string, userId: string): boolean {
+    const rows = [
+      ...this.sql.exec(
+        `SELECT ${PARTICIPANT_USER_ID_SQL} AS user_id FROM participants WHERE id = ?`,
+        participantId,
+      ),
+    ];
+    if (rows.length > 0) return rows[0].user_id === userId;
+
+    const ws = this.getWsByParticipant(participantId);
+    const admission = ws ? this.getVoiceAttachment(ws)?.admission : undefined;
+    return (
+      admission?.accessMode === "authenticated" && admission.subject === userId
+    );
   }
 
   private getParticipantId(ws: WebSocket): string | undefined {

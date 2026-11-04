@@ -3120,13 +3120,64 @@ describe("VoiceRoom lifecycle", () => {
       {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ participant_id: participantId }),
+        body: JSON.stringify({
+          participant_id: participantId,
+          user_id: TEST_SUBJECT,
+        }),
       },
     );
 
     expect(disconnectResponse.status).toBe(200);
     await expect(disconnectResponse.json()).resolves.toEqual({
       disconnected: true,
+    });
+  });
+
+  it("only disconnects a participant for the user who owns it", async () => {
+    const roomName = crypto.randomUUID();
+    const participantId = crypto.randomUUID();
+    const socket = await openVoiceSocket(roomName, "owner-user");
+    await identifyVoiceSocket(socket, participantId, roomName, "owner-user");
+
+    const room = env.VOICE_ROOM.get(env.VOICE_ROOM.idFromName(roomName));
+    const participantRows = () =>
+      runInDurableObject(
+        room,
+        (_instance, state) =>
+          [
+            ...state.storage.sql.exec(
+              "SELECT id FROM participants WHERE id = ?",
+              participantId,
+            ),
+          ].length,
+      );
+    const disconnect = (body: Record<string, unknown>) =>
+      room.fetch("https://internal/disconnect-participant", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body),
+      });
+
+    const missingUser = await disconnect({ participant_id: participantId });
+    expect(missingUser.status).toBe(400);
+    await missingUser.body?.cancel();
+
+    const otherUser = await disconnect({
+      participant_id: participantId,
+      user_id: "other-user",
+    });
+    expect(otherUser.status).toBe(200);
+    await expect(otherUser.json()).resolves.toEqual({ disconnected: false });
+    expect(await participantRows()).toBe(1);
+    expect(socket.readyState).toBe(WebSocket.OPEN);
+
+    const owner = await disconnect({
+      participant_id: participantId,
+      user_id: "owner-user",
+    });
+    await expect(owner.json()).resolves.toEqual({ disconnected: true });
+    await vi.waitFor(async () => {
+      expect(await participantRows()).toBe(0);
     });
   });
 
