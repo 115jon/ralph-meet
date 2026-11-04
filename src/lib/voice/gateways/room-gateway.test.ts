@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { GatewayOp } from "@/lib/gateway-protocol";
+import { GatewayCloseCode, GatewayOp } from "@/lib/gateway-protocol";
 
 const mocks = vi.hoisted(() => ({
   fetchSocketProtocols: vi.fn(),
@@ -582,6 +582,38 @@ describe("RoomGateway lifecycle", () => {
     expect(sentMessages(second)).toEqual([
       { op: GatewayOp.Resume, d: { session_id: "session-1", seq_ack: 0 } },
     ]);
+    gateway.disconnect();
+  });
+
+  it("reports admission-rejected and does not reconnect", async () => {
+    const { gateway, socket } = await connectedGateway();
+    const admissionRejected = vi.fn();
+    const disconnected = vi.fn();
+    gateway.on("admission-rejected", admissionRejected);
+    gateway.on("disconnected", disconnected);
+
+    socket.readyState = TestWebSocket.CLOSED;
+    socket.onclose?.({
+      code: GatewayCloseCode.AdmissionRejected,
+      reason: "Resume subject mismatch",
+    } as CloseEvent);
+
+    expect(admissionRejected).toHaveBeenCalledOnce();
+    expect(disconnected).toHaveBeenCalledOnce();
+    await vi.advanceTimersByTimeAsync(60_000);
+    expect(TestWebSocket.instances).toHaveLength(1);
+    gateway.disconnect();
+  });
+
+  it("does not report admission-rejected for a retryable close", async () => {
+    const { gateway, socket } = await connectedGateway();
+    const admissionRejected = vi.fn();
+    gateway.on("admission-rejected", admissionRejected);
+
+    socket.readyState = TestWebSocket.CLOSED;
+    socket.onclose?.({ code: 1006, reason: "" } as CloseEvent);
+
+    expect(admissionRejected).not.toHaveBeenCalled();
     gateway.disconnect();
   });
 

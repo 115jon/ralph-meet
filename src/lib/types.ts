@@ -507,6 +507,8 @@ export interface SFUEventMap {
   kicked: never;
   /** A call socket's ticket was refused twice: the session is gone. */
   "auth-failed": never;
+  /** A call socket was refused admission (AdmissionRejected): the session is gone. */
+  "admission-rejected": never;
   error: { message: string };
   "audio-resumed": {};
   "voice-reconnected": never;

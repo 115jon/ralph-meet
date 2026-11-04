@@ -446,6 +446,10 @@ export class SFUClient extends TypedEventEmitter<SFUEventMap> {
       sfuLog.warn("Room socket ticket refused: the session is gone");
       this.emit("auth-failed", undefined as never);
     });
+    this.roomGW.on("admission-rejected", () => {
+      sfuLog.warn("Room socket admission rejected: the session is gone");
+      if (!this.isLeaving) this.emit("admission-rejected", undefined as never);
+    });
     this.roomGW.on("kicked", () => {
       // The user joined this room from another device (SessionReplaced).
       sfuLog.warn("Voice moved to another device");
@@ -606,6 +610,10 @@ export class SFUClient extends TypedEventEmitter<SFUEventMap> {
     this.voiceGW.on("auth-failed", () => {
       sfuLog.warn("Voice socket ticket refused: the session is gone");
       this.emit("auth-failed", undefined as never);
+    });
+    this.voiceGW.on("admission-rejected", () => {
+      sfuLog.warn("Voice socket admission rejected: the session is gone");
+      if (!this.isLeaving) this.emit("admission-rejected", undefined as never);
     });
     this.voiceGW.on("kicked", () => {
       sfuLog.warn("Kicked from VoiceGateway by a replacement connection");

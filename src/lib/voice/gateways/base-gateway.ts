@@ -17,6 +17,8 @@ export interface BaseGatewayEvents {
   kicked: void;
   /** The socket ticket was refused twice: the session is gone. Not retried until wake. */
   "auth-failed": void;
+  /** The server refused this session (AdmissionRejected). Not retried. */
+  "admission-rejected": void;
 }
 
 /**
@@ -62,6 +64,9 @@ export abstract class BaseGateway<
         },
         closed: ({ next }) => {
           if (next === "replaced") this.emit("kicked", undefined as never);
+          if (next === "admission-rejected") {
+            this.emit("admission-rejected", undefined as never);
+          }
           this.emit("disconnected", undefined as never);
         },
       },

@@ -1110,6 +1110,8 @@ export function useVoiceChannel({
     null,
   );
   const ownedVadMonitorStreamRef = useRef<MediaStream | null>(null);
+  /** This hook's forced-disconnect teardown (not the window-wide event). */
+  const forceDisconnectRef = useRef<(() => void) | null>(null);
   const earlyAudioProcessorRef = useRef<EarlyAudioProcessor | null>(null);
   const rawCameraTrackRef = useRef<MediaStreamTrack | null>(null);
   const cameraBackgroundEffectRef = useRef<CameraBackgroundEffect | null>(null);
@@ -2804,6 +2806,23 @@ export function useVoiceChannel({
       window.dispatchEvent(new CustomEvent("force-voice-disconnect"));
     });
 
+    // The call sockets give up for good on these (tickets refused twice, or
+    // admission rejected): end this session as a forced disconnect would.
+    const endLostSession = (reason: "auth-failed" | "admission-rejected") => {
+      if (sfuRef.current !== sfu) return;
+      vcLog.warn("Voice session lost", { reason, channelId, mode });
+      toast.info("Voice disconnected", {
+        description: "Your voice session ended. Join again to reconnect.",
+      });
+      forceDisconnectRef.current?.();
+    };
+    onSfu("auth-failed", () => endLostSession("auth-failed"));
+    onSfu("admission-rejected", () => endLostSession("admission-rejected"));
+    onSfu("error", ({ message }) => {
+      // Recoverable: the sockets retry, and fatal closes arrive above.
+      vcLog.warn("SFU error", { message, channelId, mode });
+    });
+
     if (adoptingStandby) {
       sfu.replayJoinedSnapshot();
       sfu.promoteStandby({
@@ -4177,23 +4196,34 @@ export function useVoiceChannel({
         screenStreamRef.current = null;
         disposeVoiceActivityStream(ownedVadMonitorStreamRef.current);
         ownedVadMonitorStreamRef.current = null;
+        myIdRef.current = "";
+        speakingByParticipantRef.current = {};
         releaseLocalStream(localMediaOwner);
         if (standbyMediaOwnerRef.current) {
           releaseLocalStream(standbyMediaOwnerRef.current);
           standbyMediaOwnerRef.current = null;
         }
+        participantsRef.current.clear();
+        remoteAggregatorsRef.current = {};
+        uuidToUserIdRef.current.clear();
+        capturingThumbnails.current.clear();
         voiceDispatch({ type: "LEFT" });
         if (wasJoined && mode !== "room" && channelId) {
           sendVoiceChannelLeave(channelId);
         }
       }
     };
+    forceDisconnectRef.current = handleForceDisconnect;
     window.addEventListener("force-voice-disconnect", handleForceDisconnect);
-    return () =>
+    return () => {
+      if (forceDisconnectRef.current === handleForceDisconnect) {
+        forceDisconnectRef.current = null;
+      }
       window.removeEventListener(
         "force-voice-disconnect",
         handleForceDisconnect,
       );
+    };
   }, [
     onLeft,
     sendVoiceChannelLeave,
@@ -4226,7 +4256,11 @@ export function useVoiceChannel({
       sfuRef.current = null;
       cleanupSfuHandlers();
       activeSfu.disconnect("user-leave");
+      stopCameraBackgroundEffect(true);
       activeSfu.vad.setGateController(null);
+      // VAD starts before Joined; its monitor may be a clone of the raw mic.
+      disposeVoiceActivityStream(ownedVadMonitorStreamRef.current);
+      ownedVadMonitorStreamRef.current = null;
       publishedAudioProcessorRef.current?.destroy();
       publishedAudioProcessorRef.current = null;
       discardEarlyAudioProcessor(earlyAudioProcessorRef);
@@ -5284,12 +5318,9 @@ export function useVoiceChannel({
 
   const onToggleStreamAudio = useCallback(async () => {
     const next = !isStreamingAudio;
-    // Check if we're in the native hardware share path.
-    // nativeScreenShareActive is private on SFUClient; cast through any.
-    const isNative = !!(
-      sfuRef.current && (sfuRef.current as any).nativeScreenShareActive
-    );
-    if (isNative) {
+    // Native hardware share: WASAPI loopback audio is not a track here, so
+    // muting a browser track would leave it publishing.
+    if (sfuRef.current?.isNativeScreenShareActive) {
       // Native WASAPI loopback audio is started at init time with a fixed flag.
       // To toggle it we must restart the whole native pipeline with flipped audio.
       if (currentScreenSource?.sourceId) {

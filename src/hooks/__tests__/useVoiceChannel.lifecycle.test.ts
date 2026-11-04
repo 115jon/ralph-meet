@@ -64,6 +64,7 @@ const {
       sendAppEvent: vi.fn(() => true),
     };
     participantId: string | null = null;
+    isNativeScreenShareActive = false;
     readonly getParticipantId = vi.fn((): string | null => this.participantId);
     readonly connect = vi.fn();
     readonly resumeAudioContext = vi.fn();
@@ -814,6 +815,159 @@ describe("useVoiceChannel SFU lifecycle", () => {
       expect.anything(),
       expect.anything(),
     );
+    hook.unmount();
+  });
+
+  it("stops the VAD monitor clone when leaving while still connecting", async () => {
+    const mic = createTrack("audio", "connecting-mic");
+    const monitor = createTrack("audio", "connecting-mic-monitor");
+    const acquisition = deferred<MediaStream>();
+    vi.mocked(acquireLocalStream).mockReturnValue(acquisition.promise);
+    vi.mocked(createLocalAudioProcessor).mockImplementation(async (stream) =>
+      createProcessor(stream, stream, createStream([monitor.track])),
+    );
+    const hook = renderHook(() =>
+      useVoiceChannel({ channelId: "channel", serverId: "server" }),
+    );
+    await act(async () => {
+      await hook.result.current.handleJoin();
+    });
+    const sfu = sfuInstances[0];
+    if (!sfu) throw new Error("SFU was not created");
+    sfu.vad.start.mockReturnValue(true);
+    await act(async () => {
+      acquisition.resolve(createStream([mic.track]));
+    });
+    await waitFor(() => expect(sfu.vad.start).toHaveBeenCalled());
+    expect(sfu.vad.start.mock.lastCall?.[0]?.getAudioTracks()).toEqual([
+      monitor.track,
+    ]);
+    expect(monitor.stop).not.toHaveBeenCalled();
+    expect(hook.result.current.joined).toBe(false);
+
+    await act(async () => {
+      hook.result.current.handleLeave();
+    });
+
+    expect(sfu.disconnect).toHaveBeenCalledWith("user-leave");
+    expect(monitor.stop).toHaveBeenCalled();
+    hook.unmount();
+  });
+
+  it("clears the voice session id after a forced disconnect", async () => {
+    authUser.current = { id: "user-1" };
+    vi.mocked(acquireLocalStream).mockResolvedValue(
+      createStream([createTrack("audio", "forced-mic").track]),
+    );
+    const onLeft = vi.fn();
+    const hook = renderHook(() =>
+      useVoiceChannel({ channelId: "channel", serverId: "server", onLeft }),
+    );
+    await act(async () => {
+      await hook.result.current.handleJoin();
+    });
+    const sfu = sfuInstances[0];
+    if (!sfu) throw new Error("SFU was not created");
+    await act(async () => {
+      sfu.emit("joined", { participantId: "self", participants: [] });
+    });
+    await waitFor(() => expect(hook.result.current.joined).toBe(true));
+    expect(hook.result.current.voiceSessionId).toBe("self");
+
+    await act(async () => {
+      window.dispatchEvent(new CustomEvent("force-voice-disconnect"));
+    });
+
+    expect(hook.result.current.joined).toBe(false);
+    expect(hook.result.current.voiceSessionId).toBeNull();
+    await waitFor(() => expect(onLeft).toHaveBeenCalledOnce());
+    hook.unmount();
+  });
+
+  it.each(["auth-failed", "admission-rejected"] as const)(
+    "tears the session down when the call sockets give up (%s)",
+    async (event) => {
+      authUser.current = { id: "user-1" };
+      vi.mocked(acquireLocalStream).mockResolvedValue(
+        createStream([createTrack("audio", `${event}-mic`).track]),
+      );
+      const onLeft = vi.fn();
+      const hook = renderHook(() =>
+        useVoiceChannel({ channelId: "channel", serverId: "server", onLeft }),
+      );
+      await act(async () => {
+        await hook.result.current.handleJoin();
+      });
+      const sfu = sfuInstances[0];
+      if (!sfu) throw new Error("SFU was not created");
+      await act(async () => {
+        sfu.emit("joined", { participantId: "self", participants: [] });
+      });
+      await waitFor(() => expect(hook.result.current.joined).toBe(true));
+
+      await act(async () => {
+        sfu.emit(event, undefined);
+      });
+
+      expect(hook.result.current.joined).toBe(false);
+      expect(hook.result.current.voiceSessionId).toBeNull();
+      await waitFor(() => expect(onLeft).toHaveBeenCalledOnce());
+      await waitFor(() => expect(sfu.disconnect).toHaveBeenCalled());
+      hook.unmount();
+    },
+  );
+
+  it("keeps the session on a recoverable SFU error", async () => {
+    vi.mocked(acquireLocalStream).mockResolvedValue(
+      createStream([createTrack("audio", "error-mic").track]),
+    );
+    const onLeft = vi.fn();
+    const hook = renderHook(() =>
+      useVoiceChannel({ channelId: "channel", serverId: "server", onLeft }),
+    );
+    await act(async () => {
+      await hook.result.current.handleJoin();
+    });
+    const sfu = sfuInstances[0];
+    if (!sfu) throw new Error("SFU was not created");
+    await act(async () => {
+      sfu.emit("joined", { participantId: "self", participants: [] });
+    });
+    await waitFor(() => expect(hook.result.current.joined).toBe(true));
+
+    await act(async () => {
+      sfu.emit("error", { message: "push failed" });
+    });
+
+    expect(hook.result.current.joined).toBe(true);
+    expect(onLeft).not.toHaveBeenCalled();
+    hook.unmount();
+  });
+
+  it("does not report stream audio on while a native share keeps its own audio", async () => {
+    vi.mocked(acquireLocalStream).mockResolvedValue(
+      createStream([createTrack("audio", "native-mic").track]),
+    );
+    const hook = renderHook(() =>
+      useVoiceChannel({ channelId: "channel", serverId: "server" }),
+    );
+    await act(async () => {
+      await hook.result.current.handleJoin();
+    });
+    const sfu = sfuInstances[0];
+    if (!sfu) throw new Error("SFU was not created");
+    await act(async () => {
+      sfu.emit("joined", { participantId: "self", participants: [] });
+    });
+    sfu.isNativeScreenShareActive = true;
+
+    await act(async () => {
+      await hook.result.current.onToggleStreamAudio();
+    });
+
+    // The native branch restarts the pipeline with flipped audio; it never
+    // takes the browser-track path that only flips the broadcast flag.
+    expect(hook.result.current.isStreamingAudio).toBe(false);
     hook.unmount();
   });
 
