@@ -766,7 +766,6 @@ export function useVoiceChannel({
             streamThumbnails: {},
             remoteStreams: {},
             participantsVersion: 0,
-            participants: [],
             audioStalled: false,
           };
         case "SET_CONNECTION":
@@ -830,13 +829,6 @@ export function useVoiceChannel({
               : action.payload;
           return { ...state, streamThumbnails: next };
         }
-        case "SET_PARTICIPANTS": {
-          const next =
-            typeof action.payload === "function"
-              ? action.payload(state.participants)
-              : action.payload;
-          return { ...state, participants: next };
-        }
         case "SET_AUDIO_STALLED":
           return { ...state, audioStalled: action.payload };
         case "SET_SPATIAL_AUDIO_STATE":
@@ -870,7 +862,6 @@ export function useVoiceChannel({
       audioBlocked: false,
       remoteStreams: {},
       participantsVersion: 0,
-      participants: [],
       audioStalled: false,
       spatialAudioState: DEFAULT_SHARED_SPATIAL_STATE,
     },
@@ -1681,9 +1672,6 @@ export function useVoiceChannel({
       channelId,
       serverId,
       mode,
-      autoJoin,
-      joined,
-      chatConnected,
       hasUser: !!user,
       voiceGateway: (
         sfuRef.current as SFUClient | null
@@ -1694,8 +1682,7 @@ export function useVoiceChannel({
     });
 
     const displayName = chatUserDisplayName?.trim() || null;
-    const username =
-      chatUsername || user?.username || user?.fullName || "Guest";
+    const username = chatUsername || user?.username || user?.name || "Guest";
     const name =
       mode === "room" ? guestName || "Guest" : displayName || username;
     const roomSlug = resolvedRoomSlug;
@@ -1763,14 +1750,6 @@ export function useVoiceChannel({
     const upsertParticipant = (participant: VoiceState) => {
       rememberParticipant(participant);
       voiceDispatch({ type: "BUMP_PARTICIPANTS" });
-      voiceDispatch({
-        type: "SET_PARTICIPANTS",
-        payload: (prev: VoiceState[]) => {
-          const next = prev.filter((p) => p.id !== participant.id);
-          next.push(participant);
-          return next;
-        },
-      });
     };
 
     const syncParticipants = (participants: VoiceState[]) => {
@@ -1833,7 +1812,6 @@ export function useVoiceChannel({
       }
       participants.forEach(rememberParticipant);
       voiceDispatch({ type: "BUMP_PARTICIPANTS" });
-      voiceDispatch({ type: "SET_PARTICIPANTS", payload: participants });
     };
 
     // ── Eager mic acquisition (fire-and-forget, parallel with WS handshake) ──
@@ -2214,11 +2192,6 @@ export function useVoiceChannel({
               : {}),
           };
           participantsRef.current.set(participantId, updated);
-          voiceDispatch({
-            type: "SET_PARTICIPANTS",
-            payload: (prev: VoiceState[]) =>
-              prev.map((x) => (x.id === participantId ? updated : x)),
-          });
           voiceDispatch({ type: "BUMP_PARTICIPANTS" });
         }
         if (profileUserId) {
@@ -2263,11 +2236,6 @@ export function useVoiceChannel({
           otherUserId === appUserId &&
           speakingByParticipantRef.current[otherId],
       );
-      voiceDispatch({
-        type: "SET_PARTICIPANTS",
-        payload: (prev: VoiceState[]) =>
-          prev.filter((p) => p.id !== participantId),
-      });
       voiceDispatch({
         type: "UPDATE_REMOTE_STREAMS",
         payload: (prev: RemoteStreamsByUser) => {
@@ -2816,12 +2784,11 @@ export function useVoiceChannel({
         serverId,
         mode,
         roomSlug,
-        autoJoin,
         hasUser: !!user,
       });
       sfu.connect(
         name,
-        chatUserAvatarUrl || user?.imageUrl,
+        chatUserAvatarUrl || user?.image || undefined,
         user?.id,
         mode === "room" ? undefined : username,
         mode === "room" ? null : displayName,
@@ -2854,10 +2821,7 @@ export function useVoiceChannel({
     chatUserDisplayName,
     chatUsername,
     dispatch,
-    autoJoin,
-    chatConnected,
     currentVoiceChannelStartedAt,
-    joined,
     localMediaOwner,
     restartVadMonitoring,
   ]);
@@ -2931,15 +2895,15 @@ export function useVoiceChannel({
     );
   const standbyProfileRef = useRef({
     avatarDisplay: chatUserAvatarDisplay,
-    avatarUrl: chatUserAvatarUrl || user?.imageUrl,
+    avatarUrl: chatUserAvatarUrl || user?.image || undefined,
     displayName: chatUserDisplayName?.trim() || null,
-    username: chatUsername || user?.username || user?.fullName || "Guest",
+    username: chatUsername || user?.username || user?.name || "Guest",
   });
   standbyProfileRef.current = {
     avatarDisplay: chatUserAvatarDisplay,
-    avatarUrl: chatUserAvatarUrl || user?.imageUrl,
+    avatarUrl: chatUserAvatarUrl || user?.image || undefined,
     displayName: chatUserDisplayName?.trim() || null,
-    username: chatUsername || user?.username || user?.fullName || "Guest",
+    username: chatUsername || user?.username || user?.name || "Guest",
   };
 
   const standbyActive = useVoiceStandbyActive();
@@ -3328,11 +3292,6 @@ export function useVoiceChannel({
             );
             streamToPublish = new MediaStream(newStream.getAudioTracks());
           }
-
-          if (!isCurrent()) {
-            await abortStaleSwap(nextAudioProcessor);
-            return;
-          }
         } else {
           streamToPublish = newStream;
         }
@@ -3382,15 +3341,7 @@ export function useVoiceChannel({
           newAudio &&
           !keepStandbySilence
         ) {
-          if (!isCurrent()) {
-            await abortStaleSwap(nextAudioProcessor);
-            return;
-          }
           if (oldAudio) {
-            if (!isCurrent()) {
-              await abortStaleSwap(nextAudioProcessor);
-              return;
-            }
             const replaced = await sfu.replaceTrack(
               `cam-audio-${myIdRef.current}`,
               newAudio,
@@ -3401,10 +3352,6 @@ export function useVoiceChannel({
               throw new Error("Audio transceiver is unavailable");
             }
           } else {
-            if (!isCurrent()) {
-              await abortStaleSwap(nextAudioProcessor);
-              return;
-            }
             if (nextAudioProcessor) {
               sfu.vad.setGateController(nextAudioProcessor.gateController);
               restartVadMonitoring(sfu, nextAudioProcessor);
@@ -3445,10 +3392,6 @@ export function useVoiceChannel({
         let newVideo = rawVideo;
 
         if (rawVideo) {
-          if (!isCurrent()) {
-            await abortStaleSwap(nextAudioProcessor);
-            return;
-          }
           if (requestedCameraBackgroundKey !== "none") {
             try {
               const effect = await createCameraBackgroundEffect(
@@ -3482,39 +3425,19 @@ export function useVoiceChannel({
               newVideo = rawVideo;
             }
           } else {
-            if (!isCurrent()) {
-              await abortStaleSwap(nextAudioProcessor);
-              return;
-            }
             stopCameraBackgroundEffect(false);
           }
 
-          if (!isCurrent()) {
-            await abortStaleSwap(nextAudioProcessor);
-            return;
-          }
           rawCameraTrackRef.current = rawVideo;
           newVideo.enabled = isCameraActive;
           displayStream.addTrack(newVideo);
         } else {
-          if (!isCurrent()) {
-            await abortStaleSwap(nextAudioProcessor);
-            return;
-          }
           stopCameraBackgroundEffect(true);
         }
 
         if (newVideo && (!oldVideo || newVideo.id !== oldVideo.id)) {
-          if (!isCurrent()) {
-            await abortStaleSwap(nextAudioProcessor);
-            return;
-          }
           newVideo.enabled = isCameraActive;
           if (oldVideo) {
-            if (!isCurrent()) {
-              await abortStaleSwap(nextAudioProcessor);
-              return;
-            }
             if (
               !(await sfu.replaceTrack(
                 `cam-video-${myIdRef.current}`,
@@ -3524,31 +3447,14 @@ export function useVoiceChannel({
               throw new Error("Video transceiver is unavailable");
             }
           } else {
-            if (!isCurrent()) {
-              await abortStaleSwap(nextAudioProcessor);
-              return;
-            }
             await sfu.publishTracks(new MediaStream([newVideo]), "cam");
           }
           if (!isCurrent()) {
             await abortStaleSwap(nextAudioProcessor);
             return;
           }
-        } else if (
-          previousRawVideo &&
-          previousRawVideo !== rawVideo &&
-          previousRawVideo !== oldVideo
-        ) {
-          if (!isCurrent()) {
-            await abortStaleSwap(nextAudioProcessor);
-            return;
-          }
         }
 
-        if (!isCurrent()) {
-          await abortStaleSwap(nextAudioProcessor);
-          return;
-        }
         const committedAudioProcessor = nextAudioProcessor;
         localStreamRef.current = displayStream;
         publishedAudioProcessorRef.current = committedAudioProcessor;
@@ -3615,7 +3521,6 @@ export function useVoiceChannel({
         if (actualAudioTrack) {
           const actualAudioId = actualAudioTrack.getSettings().deviceId;
           if (actualAudioId && actualAudioId !== inputDeviceId) {
-            if (!isCurrent()) return;
             setDevice("input", actualAudioId, undefined, {
               label: actualAudioTrack.label,
               groupId: actualAudioTrack.getSettings().groupId,
@@ -3630,7 +3535,6 @@ export function useVoiceChannel({
         if (actualVideoTrack) {
           const actualVideoId = actualVideoTrack.getSettings().deviceId;
           if (actualVideoId && actualVideoId !== videoDeviceId) {
-            if (!isCurrent()) return;
             setDevice("video", actualVideoId, undefined, {
               label: actualVideoTrack.label,
               groupId: actualVideoTrack.getSettings().groupId,
@@ -3719,7 +3623,6 @@ export function useVoiceChannel({
     hasMicrophone,
     settingsMuted,
     sfuInstance,
-    isCall,
     noiseSuppression,
     noiseReductionEnabled,
     noiseReductionProvider,
@@ -5375,7 +5278,7 @@ export function useVoiceChannel({
         id: `local-camera-${myIdRef.current}`,
         userId: user?.id || myIdRef.current,
         name: localName,
-        avatar: chatUserAvatarUrl || user?.imageUrl,
+        avatar: chatUserAvatarUrl || user?.image || undefined,
         avatarDisplay: chatUserAvatarDisplay,
         stream: localStreamRef.current,
         isLocal: true,
@@ -5400,7 +5303,7 @@ export function useVoiceChannel({
           id: `local-screen-${myIdRef.current}`,
           userId: user?.id || myIdRef.current,
           name: localName,
-          avatar: chatUserAvatarUrl || user?.imageUrl,
+          avatar: chatUserAvatarUrl || user?.image || undefined,
           avatarDisplay: chatUserAvatarDisplay,
           stream: localScreenHasTracks ? localScreenStream : null,
           isLocal: true,
@@ -5684,7 +5587,6 @@ export function useVoiceChannel({
   return {
     joined,
     isScreenSharing,
-    localScreenStream,
     isPreviewHidden,
     isStreamingAudio,
     currentScreenQuality,
@@ -5693,7 +5595,6 @@ export function useVoiceChannel({
     connectionState,
     focusedId,
     setFocusedId,
-    speakingUsers: publishedSpeakingUsers,
     watchedStreams,
     watchersByStreamer,
     streamThumbnails,

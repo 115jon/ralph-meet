@@ -423,6 +423,14 @@ class TestMediaStream {
   }
 }
 
+/** The speaking map the hook last published to the chat store. */
+function publishedSpeakingUsers(): Record<string, boolean> {
+  return (chatActions.setSpeakingUsers.mock.lastCall?.[0] ?? {}) as Record<
+    string,
+    boolean
+  >;
+}
+
 function createTrack(kind: "audio" | "video", deviceId: string) {
   const stop = vi.fn();
   const track = {
@@ -786,9 +794,7 @@ describe("useVoiceChannel SFU lifecycle", () => {
       secondSfu.emit("joined", { participantId: "self-2", participants: [] });
       secondSfu.emit("voice-ready", { speaking: {} });
     });
-    await waitFor(() =>
-      expect(hook.result.current.speakingUsers["user-1"]).toBe(true),
-    );
+    await waitFor(() => expect(publishedSpeakingUsers()["user-1"]).toBe(true));
 
     hook.unmount();
   });
@@ -2075,15 +2081,13 @@ describe("useVoiceChannel SFU lifecycle", () => {
     await act(async () => {
       sfu.emit("vad-speaking", { participantId: "self", isSpeaking: true });
     });
-    await waitFor(() =>
-      expect(hook.result.current.speakingUsers.self).toBe(true),
-    );
+    await waitFor(() => expect(publishedSpeakingUsers().self).toBe(true));
 
     await act(async () => {
       sfu.emit("voice-ready", { speaking: {} });
     });
 
-    expect(hook.result.current.speakingUsers.self).toBe(true);
+    expect(publishedSpeakingUsers().self).toBe(true);
     hook.unmount();
   });
 
@@ -2109,16 +2113,14 @@ describe("useVoiceChannel SFU lifecycle", () => {
     await act(async () => {
       sfu.emit("vad-speaking", { participantId: "self", isSpeaking: true });
     });
-    await waitFor(() =>
-      expect(hook.result.current.speakingUsers.self).toBe(true),
-    );
+    await waitFor(() => expect(publishedSpeakingUsers().self).toBe(true));
 
     // A speaking flip does not rebuild the tile list.
     const tilesBefore = hook.result.current.gridItems;
     await act(async () => {
       sfu.emit("vad-speaking", { participantId: "self", isSpeaking: false });
     });
-    expect(hook.result.current.speakingUsers.self).toBeUndefined();
+    expect(publishedSpeakingUsers().self).toBeUndefined();
     expect(hook.result.current.gridItems).toBe(tilesBefore);
     await act(async () => {
       sfu.emit("vad-speaking", { participantId: "self", isSpeaking: true });
@@ -2131,7 +2133,7 @@ describe("useVoiceChannel SFU lifecycle", () => {
       settingsState.getSettings().isMuted = true;
       hook.rerender();
     });
-    expect(hook.result.current.speakingUsers.self).toBeUndefined();
+    expect(publishedSpeakingUsers().self).toBeUndefined();
     expect(chatActions.setSpeakingUsers).toHaveBeenLastCalledWith(
       expect.not.objectContaining({ self: true }),
       expect.any(String),
@@ -2140,13 +2142,13 @@ describe("useVoiceChannel SFU lifecycle", () => {
     await act(async () => {
       sfu.emit("speaking", { participantId: "self", speaking: 1 });
     });
-    expect(hook.result.current.speakingUsers.self).toBeUndefined();
+    expect(publishedSpeakingUsers().self).toBeUndefined();
 
     await act(async () => {
       settingsState.getSettings().isMuted = false;
       hook.rerender();
     });
-    expect(hook.result.current.speakingUsers.self).toBe(true);
+    expect(publishedSpeakingUsers().self).toBe(true);
     hook.unmount();
   });
 
@@ -2186,7 +2188,7 @@ describe("useVoiceChannel SFU lifecycle", () => {
       });
       sfu.emit("speaking", { participantId: remote.id, speaking: 1 });
     });
-    expect(hook.result.current.speakingUsers[remote.user_id]).toBe(true);
+    expect(publishedSpeakingUsers()[remote.user_id]).toBe(true);
 
     await act(async () => {
       sfu.emit("speaking", {
@@ -2195,7 +2197,7 @@ describe("useVoiceChannel SFU lifecycle", () => {
       });
       sfu.emit("speaking", { participantId: remote.id, speaking: 0 });
     });
-    expect(hook.result.current.speakingUsers[remote.user_id]).toBe(undefined);
+    expect(publishedSpeakingUsers()[remote.user_id]).toBe(undefined);
 
     hook.unmount();
   });
