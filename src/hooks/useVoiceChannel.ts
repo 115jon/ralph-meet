@@ -6,6 +6,11 @@ import {
   type CameraBackgroundEffect,
 } from "@/lib/camera-background-effects";
 import { clog } from "@/lib/console-logger";
+import {
+  VOICE_MOVE_EVENT,
+  type VoiceMoveDetail,
+} from "@/lib/voice/voice-move-client";
+import { clearVoiceMoveGrant } from "@/lib/voice/voice-move-grants";
 import { buildCameraVideoConstraints } from "@/lib/camera-quality";
 import {
   acquireLocalStream,
@@ -2076,6 +2081,9 @@ export function useVoiceChannel({
             currentSettingsRef.current.isMuted,
             currentVoiceChannelStartedAt,
           );
+          // A move grant for this channel has done its job (both tickets
+          // and this join); later reconnects must not offer it again.
+          clearVoiceMoveGrant(channelId);
         }
       },
     );
@@ -2902,6 +2910,30 @@ export function useVoiceChannel({
         description: "Voice is connected there now.",
       });
       window.dispatchEvent(new CustomEvent("force-voice-disconnect"));
+    });
+
+    onSfu("voice-move", (move) => {
+      // A moderator moved this session; the server has already ended it
+      // here. The chat page leaves and joins the target (the normal switch,
+      // so mute and deafen carry over and screen share stops). If nothing
+      // takes the move, leave for good as on a takeover.
+      vcLog.info("Moved to another voice channel", {
+        from: channelId,
+        to: move.channelId,
+      });
+      toast.call(
+        `${move.moverName ?? "A moderator"} moved you to ${move.channelName ?? "another channel"}`,
+      );
+      const detail: VoiceMoveDetail = {
+        serverId: move.serverId,
+        channelId: move.channelId,
+      };
+      const unclaimed = window.dispatchEvent(
+        new CustomEvent(VOICE_MOVE_EVENT, { detail, cancelable: true }),
+      );
+      if (unclaimed) {
+        window.dispatchEvent(new CustomEvent("force-voice-disconnect"));
+      }
     });
 
     if (adoptingStandby) {
@@ -4411,6 +4443,9 @@ export function useVoiceChannel({
   const handleLeave = useCallback(() => {
     const activeSfu = sfuRef.current;
     if (!activeSfu) return;
+    // Leaving on your own drops any move grant; the leave a move causes
+    // keeps the one it just brought.
+    if (!activeSfu.wasMoved) clearVoiceMoveGrant();
     const wasJoined = joinedRef.current;
     cancelAutomaticSoundboardCleanup(automaticSoundboardSessionId);
     if (mode === "channel" && channelId && serverId) {

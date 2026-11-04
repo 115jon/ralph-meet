@@ -36,12 +36,31 @@ describe("DMListPanel", () => {
 
     expect(onSelectDm).toHaveBeenCalledWith("dm-1");
   });
+
+  // /api/dms carries users.status, the status the person last chose, not
+  // whether they are connected. Only the gateway's presence says that.
+  it("shows a recipient who is not connected as offline", () => {
+    renderPanel();
+
+    expect(screen.getByRole("img", { name: "Offline" })).toBeTruthy();
+    expect(screen.queryByRole("img", { name: "Online" })).toBeNull();
+  });
+
+  it("shows a connected recipient with their live status", () => {
+    useChatStore.setState({ onlineUsers: new Set(["user-1"]) });
+
+    renderPanel({ status: "dnd" });
+
+    expect(screen.getByRole("img", { name: "Do not disturb" })).toBeTruthy();
+  });
 });
 
 function renderPanel({
   onSelectDm = vi.fn(),
+  status = "online",
 }: {
   onSelectDm?: (channelId: string) => void;
+  status?: string;
 } = {}) {
   const dispatch = vi.fn();
 
@@ -55,7 +74,7 @@ function renderPanel({
             id: "user-1",
             username: "ada",
             display_name: "Ada",
-            status: "online",
+            status,
           },
         },
       ]}

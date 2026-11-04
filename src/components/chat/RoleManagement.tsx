@@ -112,6 +112,11 @@ const PERMISSION_GROUPS: { title: string; items: PermissionDef[] }[] = [
         desc: "Remove members and stop them rejoining.",
       },
       {
+        mask: PERMISSIONS.MOVE_MEMBERS,
+        name: "Move members",
+        desc: "Move members between voice channels.",
+      },
+      {
         mask: PERMISSIONS.CREATE_INVITE,
         name: "Create invites",
         desc: "Make invite links for this server.",

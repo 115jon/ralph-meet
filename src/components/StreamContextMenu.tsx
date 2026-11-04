@@ -64,6 +64,12 @@ export interface StreamContextMenuProps {
   localUserId?: string | null;
   alwaysShowStreamPreview?: boolean;
   onToggleAlwaysShowStreamPreview?: () => void;
+  /**
+   * Voice channels this person can be moved to (MOVE_MEMBERS): a "Move to"
+   * submenu on someone else's row. The keyboard and touch path for moves.
+   */
+  moveTargets?: ReadonlyArray<{ id: string; name: string }>;
+  onMoveTo?: (channelId: string) => void;
 }
 
 export const StreamContextMenu: React.FC<StreamContextMenuProps> = ({
@@ -97,6 +103,8 @@ export const StreamContextMenu: React.FC<StreamContextMenuProps> = ({
   localUserId: _localUserId,
   alwaysShowStreamPreview,
   onToggleAlwaysShowStreamPreview,
+  moveTargets,
+  onMoveTo,
 }) => {
   const isMobile = useIsMobile();
   const anchor = useMemo(() => pointAnchor(x, y), [x, y]);
@@ -238,6 +246,25 @@ export const StreamContextMenu: React.FC<StreamContextMenuProps> = ({
         handleCopyId,
         showDisconnect,
       });
+  if (!isLocal && onMoveTo && moveTargets && moveTargets.length > 0) {
+    builtEntries.push(
+      { type: "divider", key: "divider-move-to" },
+      {
+        type: "submenu",
+        key: "move-to",
+        label: "Move to…",
+        entries: moveTargets.map((channel) => ({
+          type: "item" as const,
+          key: `move-to-${channel.id}`,
+          label: channel.name,
+          onSelect: () => {
+            onMoveTo(channel.id);
+            onClose();
+          },
+        })),
+      },
+    );
+  }
   const entries = presentEntries(builtEntries);
 
   return (

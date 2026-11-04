@@ -13,8 +13,11 @@ export interface BaseGatewayEvents {
   connected: void;
   disconnected: void;
   message: ServerMessage;
-  /** The voice room replaced this socket with a newer one. Not retried. */
-  kicked: void;
+  /**
+   * The room ended this socket for a newer session (a device takeover) or a
+   * moderator's move (`reason` is VOICE_MOVED_CLOSE_REASON). Not retried.
+   */
+  kicked: { reason: string };
   /** The socket ticket was refused twice: the session is gone. Not retried until wake. */
   "auth-failed": void;
 }
@@ -60,8 +63,8 @@ export abstract class BaseGateway<
           this.emit("message", msg as unknown as EventMap["message"]);
           this.handleMessage(msg);
         },
-        closed: ({ next }) => {
-          if (next === "replaced") this.emit("kicked", undefined as never);
+        closed: ({ next, reason }) => {
+          if (next === "replaced") this.emit("kicked", { reason } as never);
           this.emit("disconnected", undefined as never);
         },
       },
