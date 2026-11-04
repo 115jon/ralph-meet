@@ -1,5 +1,24 @@
 # Changelog
 
+## [3.12.0](https://github.com/115jon/yap/compare/v3.11.0...v3.12.0) (2026-11-04)
+
+
+### Features
+
+* **permissions:** ✨ add the move members permission ([9964773](https://github.com/115jon/yap/commit/99647736e7e3298d100cb0bdb3962660617aea5c))
+* **voice:** ✨ drag members between voice channels in the sidebar ([d66144b](https://github.com/115jon/yap/commit/d66144b3097c6f0e42ec3512991c792ba4147777))
+* **voice:** ✨ move members between voice channels on the server ([7a4a840](https://github.com/115jon/yap/commit/7a4a8403dd1d37e10c8ba960a9d8b8751b24a2ef))
+* **voice:** ✨ switch channels when a moderator moves you ([dfbc9fe](https://github.com/115jon/yap/commit/dfbc9fecb08b453c74fbcd2fdc7620d1c2c64148))
+* **voice:** move members between voice channels ([2376e39](https://github.com/115jon/yap/commit/2376e397b3ea8f71ec51fe5eeada452ea43ab875))
+
+
+### Bug Fixes
+
+* **chat:** 🐛 join the move target only after the old session left ([5444e0d](https://github.com/115jon/yap/commit/5444e0dcbe289b58e20839ebc86c43db07268a9d))
+* **listen-together:** 🐛 send youtube traffic through the egress vpn exit ([d0a6180](https://github.com/115jon/yap/commit/d0a61801056a5effca8e0988624744c2a9809c53))
+* **listen-together:** send youtube traffic through the egress vpn exit ([24674dd](https://github.com/115jon/yap/commit/24674dd1ad6abb0fb5a2f6448d41de39bfe11eaf))
+* **voice:** 🐛 tighten move grants and tell moves from takeovers ([5275c98](https://github.com/115jon/yap/commit/5275c98bf0e00974d910913bb77192736baf0ca9))
+
 ## [3.11.0](https://github.com/115jon/yap/compare/v3.10.1...v3.11.0) (2026-11-04)
 
 
