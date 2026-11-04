@@ -911,6 +911,17 @@ export function useVoiceChannel({
   useEffect(() => {
     currentScreenSourceRef.current = currentScreenSource ?? null;
   }, [currentScreenSource]);
+  const isStreamingAudioRef = useRef(isStreamingAudio);
+  useEffect(() => {
+    isStreamingAudioRef.current = isStreamingAudio;
+  }, [isStreamingAudio]);
+  // Native stream-audio toggles restart the publisher (~1-2 s), and
+  // `isStreamingAudio` only flips once a restart lands. One restart runs at a
+  // time; toggles during it only update `wanted`, and the latest one wins.
+  const streamAudioRestartRef = useRef<{
+    running: boolean;
+    wanted: boolean | null;
+  }>({ running: false, wanted: null });
 
   useEffect(() => {
     const localUserId =
@@ -4154,19 +4165,23 @@ export function useVoiceChannel({
           mode,
           joined: wasJoined,
         });
-        // Play disconnect sound before cleanup (skip for calls — gateway plays call-end sound)
-        if (!isCall) playDisconnect();
+        // Play disconnect sound before cleanup (skip for calls — gateway plays
+        // call-end sound). A session that never joined leaves silently, like
+        // handleLeave's pre-join branch.
+        if (wasJoined && !isCall) playDisconnect();
         cancelAutomaticSoundboardCleanup(automaticSoundboardSessionId);
         const expectedGeneration = getAutomaticSoundboardSessionGeneration(
           automaticSoundboardSessionId,
         );
         sfuRef.current = null;
-        void playAutomaticSoundboardTrigger(
-          "leave",
-          automaticSoundboardSessionId,
-          serverId,
-          createAutomaticSoundboardTransport(activeSfu),
-        ).catch(() => false);
+        if (wasJoined) {
+          void playAutomaticSoundboardTrigger(
+            "leave",
+            automaticSoundboardSessionId,
+            serverId,
+            createAutomaticSoundboardTransport(activeSfu),
+          ).catch(() => false);
+        }
         cleanupSfuHandlers();
         finishAutomaticLeave(
           activeSfu,
@@ -4572,6 +4587,42 @@ export function useVoiceChannel({
         voiceDispatch({ type: "SET_SCREEN_SOURCE", payload: null });
         playScreenShareStop();
       } else {
+        // A failed restart leaves the share state set (it stops the old
+        // capture first) with nothing published. Clear it unless a capture is
+        // still live. A failed first start never set the state.
+        const resetDeadScreenShare = (reason: string) => {
+          if (!isScreenSharing) return;
+          const hasLiveScreenStream = !!screenStreamRef.current
+            ?.getVideoTracks()
+            .some((track) => track.readyState === "live");
+          if (
+            hasLiveScreenStream ||
+            sfuRef.current?.isNativeScreenShareActive
+          ) {
+            return;
+          }
+          logScreenShare("Clearing screen share state after a failed restart", {
+            reason,
+          });
+          screenStreamRef.current?.getTracks().forEach((t) => {
+            t.onended = null;
+            t.stop();
+          });
+          screenStreamRef.current = null;
+          if (sfuRef.current && myIdRef.current) {
+            sfuRef.current.stopTracks([
+              `screen-video-${myIdRef.current}`,
+              `screen-audio-${myIdRef.current}`,
+            ]);
+          }
+          voiceDispatch({
+            type: "SET_SCREEN_SHARING",
+            payload: false,
+            stream: null,
+            audio: false,
+          });
+          voiceDispatch({ type: "SET_SCREEN_SOURCE", payload: null });
+        };
         try {
           const targetQuality = options?.quality || currentScreenQuality;
           const targetAudio =
@@ -4774,7 +4825,10 @@ export function useVoiceChannel({
                 quality: targetQuality,
                 withAudio: targetAudio,
               });
-              if (!sfuRef.current.isNativeScreenShareActive) return;
+              if (!sfuRef.current.isNativeScreenShareActive) {
+                resetDeadScreenShare("native publisher inactive after publish");
+                return;
+              }
               logScreenShare("Native hardware screen publisher connected", {
                 elapsedMs: elapsed(),
                 sourceId: effectiveOptions.sourceId,
@@ -5091,6 +5145,7 @@ export function useVoiceChannel({
           playScreenShareStart();
         } catch (err) {
           screenLog.error("Screen share failed:", err);
+          resetDeadScreenShare("capture or publish failed");
         }
       }
     },
@@ -5317,25 +5372,40 @@ export function useVoiceChannel({
   ]);
 
   const onToggleStreamAudio = useCallback(async () => {
-    const next = !isStreamingAudio;
+    const restart = streamAudioRestartRef.current;
     // Native hardware share: WASAPI loopback audio is not a track here, so
-    // muting a browser track would leave it publishing.
-    if (sfuRef.current?.isNativeScreenShareActive) {
-      // Native WASAPI loopback audio is started at init time with a fixed flag.
-      // To toggle it we must restart the whole native pipeline with flipped audio.
-      if (currentScreenSource?.sourceId) {
-        await toggleScreenShare({
-          sourceId: currentScreenSource.sourceId,
-          captureId: currentScreenSource.captureId ?? undefined,
-          sourceName: currentScreenSource.sourceName ?? undefined,
-          sourceKind: currentScreenSource.sourceKind ?? undefined,
-          quality: currentScreenQuality,
-          withAudio: next,
-          changeSource: true,
-        });
+    // muting a browser track would leave it publishing. Loopback starts at
+    // init with a fixed flag, so toggling it restarts the native pipeline.
+    if (restart.running || sfuRef.current?.isNativeScreenShareActive) {
+      restart.wanted = !(restart.wanted ?? isStreamingAudioRef.current);
+      if (restart.running) return;
+      restart.running = true;
+      try {
+        let applied = isStreamingAudioRef.current;
+        while (restart.wanted !== null && restart.wanted !== applied) {
+          const target = restart.wanted;
+          const source = currentScreenSourceRef.current;
+          if (!source?.sourceId || !sfuRef.current?.isNativeScreenShareActive) {
+            break;
+          }
+          await toggleScreenShareRef.current({
+            sourceId: source.sourceId,
+            captureId: source.captureId ?? undefined,
+            sourceName: source.sourceName ?? undefined,
+            sourceKind: source.sourceKind ?? undefined,
+            quality: currentScreenQuality,
+            withAudio: target,
+            changeSource: true,
+          });
+          applied = target;
+        }
+      } finally {
+        restart.running = false;
+        restart.wanted = null;
       }
       return;
     }
+    const next = !isStreamingAudio;
     // CEF path: just enable/disable the audio track.
     if (screenStreamRef.current) {
       screenStreamRef.current
@@ -5353,8 +5423,6 @@ export function useVoiceChannel({
     isScreenSharing,
     localScreenStream,
     currentScreenQuality,
-    currentScreenSource,
-    toggleScreenShare,
   ]);
 
   const onToggleWatch = useCallback((streamerUserId: string) => {

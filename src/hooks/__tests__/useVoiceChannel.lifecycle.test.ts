@@ -65,6 +65,14 @@ const {
     };
     participantId: string | null = null;
     isNativeScreenShareActive = false;
+    readonly publishNativeScreenShare = vi.fn(async (_options: unknown) => {
+      this.isNativeScreenShareActive = true;
+    });
+    readonly stopNativeScreenShare = vi.fn(async () => {
+      this.isNativeScreenShareActive = false;
+    });
+    readonly updateNativeScreenQuality = vi.fn(async () => false);
+    readonly stopTracks = vi.fn();
     readonly getParticipantId = vi.fn((): string | null => this.participantId);
     readonly connect = vi.fn();
     readonly resumeAudioContext = vi.fn();
@@ -308,10 +316,19 @@ vi.mock("@/lib/local-media-manager", () => ({
   releaseLocalStream: vi.fn(),
   startEarlyMic: vi.fn(),
 }));
+const platformState = vi.hoisted(() => ({ desktop: false }));
 vi.mock("@/lib/platform", () => ({
   getCapturePolicy: vi.fn(),
-  isDesktop: () => false,
+  isDesktop: () => platformState.desktop,
   isWgcCaptureAllowed: () => false,
+}));
+vi.mock("@/lib/host", () => ({
+  getHost: () => ({
+    media: {
+      probeHardwareVideoEncoders: async () => ({ h264: ["nvenc"] }),
+      onNativeScreenShareEnded: async () => () => {},
+    },
+  }),
 }));
 vi.mock("@/lib/reconnect-sound-guard", () => ({
   areReconnectSoundsSuppressed: () => false,
@@ -397,6 +414,7 @@ vi.mock("@/stores/useSoundSettingsStore", () => ({
 import { mergeVoiceState, useVoiceChannel } from "@/hooks/useVoiceChannel";
 import { resetVoiceStandbyForTests } from "@/lib/voice/voice-standby";
 import { playAutomaticSoundboardTrigger } from "@/lib/voice/auto-soundboard";
+import { playDisconnect } from "@/lib/sounds";
 import type { VoiceState, VoiceStateDelta } from "@/lib/types";
 
 class TestMediaStream {
@@ -503,6 +521,7 @@ describe("useVoiceChannel SFU lifecycle", () => {
     vi.mocked(getCameraBackgroundEffectKey).mockReset();
     vi.mocked(getCameraBackgroundEffectKey).mockReturnValue("none");
     sfuInstances.length = 0;
+    platformState.desktop = false;
     authUser.current = null;
     chatState.voiceChannelStates = {};
     settingsState.getSettings().isMuted = false;
@@ -970,6 +989,140 @@ describe("useVoiceChannel SFU lifecycle", () => {
     expect(hook.result.current.isStreamingAudio).toBe(false);
     hook.unmount();
   });
+
+  it("leaves silently when the call sockets give up before the session joined", async () => {
+    const onLeft = vi.fn();
+    const hook = renderHook(() =>
+      useVoiceChannel({ channelId: "channel", serverId: "server", onLeft }),
+    );
+    await act(async () => {
+      await hook.result.current.handleJoin();
+    });
+    const sfu = sfuInstances[0];
+    if (!sfu) throw new Error("SFU was not created");
+    expect(hook.result.current.joined).toBe(false);
+
+    await act(async () => {
+      sfu.emit("auth-failed", undefined);
+    });
+
+    await waitFor(() => expect(onLeft).toHaveBeenCalledOnce());
+    expect(sfu.disconnect).toHaveBeenCalled();
+    expect(playDisconnect).not.toHaveBeenCalled();
+    expect(playAutomaticSoundboardTrigger).not.toHaveBeenCalledWith(
+      "leave",
+      expect.anything(),
+      expect.anything(),
+      expect.anything(),
+    );
+    hook.unmount();
+  });
+
+  async function startNativeShare() {
+    vi.mocked(acquireLocalStream).mockResolvedValue(
+      createStream([createTrack("audio", "native-share-mic").track]),
+    );
+    const hook = renderHook(() =>
+      useVoiceChannel({ channelId: "channel", serverId: "server" }),
+    );
+    await act(async () => {
+      await hook.result.current.handleJoin();
+    });
+    const sfu = sfuInstances[0];
+    if (!sfu) throw new Error("SFU was not created");
+    await act(async () => {
+      sfu.emit("joined", { participantId: "self", participants: [] });
+    });
+    await waitFor(() => expect(hook.result.current.joined).toBe(true));
+    platformState.desktop = true;
+    await act(async () => {
+      await hook.result.current.toggleScreenShare({
+        sourceId: "window:1",
+        sourceName: "Game",
+        sourceKind: "window",
+        withAudio: true,
+      });
+    });
+    expect(hook.result.current.isScreenSharing).toBe(true);
+    expect(hook.result.current.isStreamingAudio).toBe(true);
+    expect(sfu.isNativeScreenShareActive).toBe(true);
+    return { hook, sfu };
+  }
+
+  it("runs one native restart at a time when stream audio is toggled quickly", async () => {
+    const { hook, sfu } = await startNativeShare();
+    const first = deferred<void>();
+    const second = deferred<void>();
+    sfu.publishNativeScreenShare
+      .mockImplementationOnce(async () => {
+        await first.promise;
+        sfu.isNativeScreenShareActive = true;
+      })
+      .mockImplementationOnce(async () => {
+        await second.promise;
+        sfu.isNativeScreenShareActive = true;
+      });
+
+    let toggles: Promise<void>[] = [];
+    await act(async () => {
+      toggles = [
+        hook.result.current.onToggleStreamAudio(),
+        hook.result.current.onToggleStreamAudio(),
+      ];
+    });
+    await waitFor(() =>
+      expect(sfu.publishNativeScreenShare).toHaveBeenCalledTimes(2),
+    );
+    // The second toggle waits for the first restart instead of racing it.
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 10));
+    });
+    expect(sfu.publishNativeScreenShare).toHaveBeenCalledTimes(2);
+
+    await act(async () => {
+      first.resolve();
+    });
+    await waitFor(() =>
+      expect(sfu.publishNativeScreenShare).toHaveBeenCalledTimes(3),
+    );
+    await act(async () => {
+      second.resolve();
+      await Promise.all(toggles);
+    });
+
+    expect(
+      sfu.publishNativeScreenShare.mock.calls.map(
+        ([options]) => (options as { withAudio: boolean }).withAudio,
+      ),
+    ).toEqual([true, false, true]);
+    expect(hook.result.current.isScreenSharing).toBe(true);
+    expect(hook.result.current.isStreamingAudio).toBe(true);
+    hook.unmount();
+  });
+
+  it.each([
+    ["the publisher throws", () => Promise.reject(new Error("hook failed"))],
+    ["the publisher ends inactive", () => Promise.resolve()],
+  ] as const)(
+    "clears the share state when a native restart fails (%s)",
+    async (_label, publish) => {
+      const { hook, sfu } = await startNativeShare();
+      sfu.publishNativeScreenShare.mockImplementationOnce(publish);
+
+      await act(async () => {
+        await hook.result.current.onToggleStreamAudio();
+      });
+
+      expect(sfu.isNativeScreenShareActive).toBe(false);
+      expect(hook.result.current.isScreenSharing).toBe(false);
+      expect(hook.result.current.currentScreenSource).toBeNull();
+      expect(sfu.stopTracks).toHaveBeenCalledWith([
+        "screen-video-self",
+        "screen-audio-self",
+      ]);
+      hook.unmount();
+    },
+  );
 
   it("merges compact participant updates and forwards profile updates to the sidebar cache", async () => {
     const hook = renderHook(() =>
