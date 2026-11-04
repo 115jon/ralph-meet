@@ -2,6 +2,7 @@ import type { TrackInfo } from "@/lib/types";
 import type { TrackMetadata } from "partytracks/client";
 import {
   BehaviorSubject,
+  filter,
   firstValueFrom,
   type Observable,
   Subject,
@@ -29,7 +30,10 @@ class FakePartyTracks implements PartyTracksClient {
   pullOptions: PullOptions;
   pulledMetadata: TrackMetadata[] = [];
 
-  push(sourceTrack$: Observable<MediaStreamTrack>, options?: PushOptions) {
+  push(
+    sourceTrack$: Observable<MediaStreamTrack>,
+    options?: PushOptions,
+  ): Observable<TrackMetadata> {
     this.pushOptions = options;
     sourceTrack$.subscribe();
     return this.pushedMetadata$;
@@ -124,6 +128,83 @@ describe("PartyTracksTransport simulcast publishing", () => {
     expect(fake.pushOptions).toBeUndefined();
     fake.pushedMetadata$.next({ trackName: "sfu-camera", sessionId: "cap" });
     expect((await announced).simulcast_rids).toBeUndefined();
+  });
+
+  it("keeps the negotiated RIDs when the source track is replaced", async () => {
+    // As in a browser: replaceTrack() resolves later, and only then does
+    // sender.track change. PartyTracks re-emits the push's metadata right
+    // after calling it (dist/client push(): tap(replaceTrack) then map).
+    const sender = {
+      track: camera as MediaStreamTrack | null,
+      getParameters: () => ({
+        encodings: [{ rid: "f" }, { rid: "h" }, { rid: "q" }],
+      }),
+      replaceTrack(next: MediaStreamTrack | null) {
+        return Promise.resolve().then(() => {
+          sender.track = next;
+        });
+      },
+    };
+    const pc = {
+      getSenders: () => [sender],
+      setConfiguration: () => {},
+      getConfiguration: () => ({}),
+    } as unknown as RTCPeerConnection;
+    const fake = new FakePartyTracks();
+    const metadata = { trackName: "sfu-camera", sessionId: "cap" };
+    fake.push = (sourceTrack$) => {
+      const out = new BehaviorSubject<TrackMetadata | null>(null);
+      let pushed = false;
+      sourceTrack$.subscribe((track) => {
+        if (pushed) void sender.replaceTrack(track);
+        pushed = true;
+        out.next(metadata);
+      });
+      return out.pipe(filter((value) => value !== null));
+    };
+    const transport = new PartyTracksTransport(
+      { roomSlug: "room", participantId: "publisher", voiceToken: "t" },
+      { factory: () => fake, resolveApiUrl: (path) => path, opusPtimeMs: null },
+    );
+    fake.peerConnection$.next(pc);
+    const source$ = new BehaviorSubject(camera);
+    const announced: TrackInfo[] = [];
+    transport
+      .push(source$, identity, { sendEncodings: CAMERA_SIMULCAST_ENCODINGS })
+      .subscribe((track) => announced.push(track));
+    expect(announced.map((track) => track.simulcast_rids)).toEqual([
+      ["f", "h", "q"],
+    ]);
+
+    const switched = { id: "camera-2", kind: "video" } as MediaStreamTrack;
+    source$.next(switched);
+    // Announced while the sender still holds the old track.
+    expect(sender.track).toBe(camera);
+    expect(announced.map((track) => track.simulcast_rids)).toEqual([
+      ["f", "h", "q"],
+      ["f", "h", "q"],
+    ]);
+    await Promise.resolve();
+    expect(sender.track).toBe(switched);
+  });
+
+  it("reads the RIDs again for a new SFU track", async () => {
+    const { fake, transport } = setup();
+    fake.peerConnection$.next(peerConnectionSending(camera, ["f", "h", "q"]));
+    const announced: TrackInfo[] = [];
+    transport
+      .push(new BehaviorSubject(camera), identity, {
+        sendEncodings: CAMERA_SIMULCAST_ENCODINGS,
+      })
+      .subscribe((track) => announced.push(track));
+    fake.pushedMetadata$.next({ trackName: "sfu-camera", sessionId: "cap" });
+    // The session was rebuilt and this time simulcast was declined.
+    fake.peerConnection$.next(peerConnectionSending(camera, [undefined]));
+    fake.pushedMetadata$.next({ trackName: "sfu-camera-2", sessionId: "cap2" });
+    expect(announced.map((track) => track.simulcast_rids)).toEqual([
+      ["f", "h", "q"],
+      undefined,
+    ]);
   });
 
   it("reads RIDs only from the sender of the announced track", () => {

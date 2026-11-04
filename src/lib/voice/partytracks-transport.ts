@@ -246,6 +246,27 @@ export class PartyTracksTransport {
   ): Observable<TrackInfo> {
     const sendEncodings = options.sendEncodings;
     let currentTrack: MediaStreamTrack | null = null;
+    // PartyTracks re-emits a push's metadata as soon as it hands a new source
+    // track to sender.replaceTrack(), but sender.track changes only once that
+    // resolves, so the sender cannot be found by the new track then. The
+    // negotiated layers belong to the SFU track (one transceiver), not to the
+    // source track: read them once per SFU track and keep them across
+    // replacements (device switch, recovery).
+    let negotiated: { sfuTrack: string; rids: string[] | undefined } | null =
+      null;
+    const negotiatedRids = (track: TrackInfo): string[] | undefined => {
+      const sfuTrack = `${track.session_id}/${track.sfu_track_name}`;
+      if (negotiated?.sfuTrack !== sfuTrack) {
+        negotiated = {
+          sfuTrack,
+          rids: negotiatedSimulcastRids(
+            this.activePeerConnection,
+            currentTrack,
+          ),
+        };
+      }
+      return negotiated.rids;
+    };
     const pushOptions: PushOptions | undefined = sendEncodings
       ? {
           sendEncodings$: of(
@@ -267,9 +288,7 @@ export class PartyTracksTransport {
             session_id: requireMetadataField(metadata, "sessionId"),
             kind: identity.kind,
           };
-          const rids = sendEncodings
-            ? negotiatedSimulcastRids(this.activePeerConnection, currentTrack)
-            : undefined;
+          const rids = sendEncodings ? negotiatedRids(track) : undefined;
           return rids ? { ...track, simulcast_rids: rids } : track;
         }),
       );
