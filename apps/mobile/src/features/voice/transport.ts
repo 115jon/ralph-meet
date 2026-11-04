@@ -7,6 +7,7 @@ import { map, type Observable, type Subscription } from "rxjs";
 import { config } from "@/lib/config";
 
 import type { IceServer, TrackInfo } from "./protocol";
+import { toPartyTracksMetadata } from "./pull-metadata";
 import { observePullErrors, type PartyTracksPullError } from "./pull-errors";
 
 // Port of src/lib/voice/partytracks-transport.ts: the one PartyTracks session
@@ -42,14 +43,6 @@ function requireField(
   const value = metadata[field];
   if (!value) throw new Error(`PartyTracks metadata is missing ${field}`);
   return value;
-}
-
-function toPartyTracksMetadata(track: TrackInfo): TrackMetadata {
-  return {
-    location: "remote",
-    trackName: track.sfu_track_name ?? track.track_name,
-    sessionId: track.session_id,
-  };
 }
 
 function toRtcIceServers(servers: readonly IceServer[]): RTCIceServer[] {
