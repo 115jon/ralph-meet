@@ -168,6 +168,11 @@ interface VoiceAttachment {
   participant_id: string;
   connection_id?: string;
   supports_listen_together_snapshot_events?: boolean;
+  /**
+   * When an unidentified socket was last heard from (accepted, or a
+   * heartbeat). Identified sockets track liveness in participants instead.
+   */
+  last_seen_at?: number;
 }
 
 // ── Constants ───────────────────────────────────────────────────────────────
@@ -500,7 +505,10 @@ export class VoiceRoom extends DurableObject<Env, unknown> {
           subject: admission.subject,
           ...(admission.serverId ? { serverId: admission.serverId } : {}),
         },
+        last_seen_at: Date.now(),
       });
+      // The alarm closes this socket if it goes silent before identifying.
+      this.scheduleAlarm();
 
       log.info(`New connection, gateway_version=${gatewayVersion}`);
 
@@ -808,6 +816,7 @@ export class VoiceRoom extends DurableObject<Env, unknown> {
       }
 
       await this.reapParticipantsWithoutJoin(now);
+      this.closeSilentUnidentifiedSockets(now);
 
       // Prune pending reconnects whose grace period expired
       this.advanceListenTogetherIfNeeded(now);
@@ -833,6 +842,10 @@ export class VoiceRoom extends DurableObject<Env, unknown> {
       `SELECT last_heartbeat FROM participants WHERE last_heartbeat > 0`,
     )) {
       deadlines.push((row.last_heartbeat as number) + VOICE_ZOMBIE_TIMEOUT_MS);
+    }
+    for (const ws of this.unidentifiedSockets()) {
+      const lastSeenAt = this.getVoiceAttachment(ws)?.last_seen_at;
+      deadlines.push((lastSeenAt ?? now) + VOICE_ZOMBIE_TIMEOUT_MS);
     }
     for (const row of this.sql.exec(
       `SELECT MIN(expires_at) as expires_at FROM demo_chat_messages`,
@@ -884,6 +897,7 @@ export class VoiceRoom extends DurableObject<Env, unknown> {
       const listenTogetherDeadline = this.getListenTogetherTrackDeadline(now);
       const hasWork =
         participantCount > 0 ||
+        this.unidentifiedSockets().length > 0 ||
         demoChatCount > 0 ||
         legacyPlaybackOwnerCount > 0 ||
         typeof listenTogetherDeadline === "number";
@@ -976,7 +990,9 @@ export class VoiceRoom extends DurableObject<Env, unknown> {
   ) {
     for (const ws of this.ctx.getWebSockets()) {
       const attachment = this.getVoiceAttachment(ws);
-      if (attachment?.supports_listen_together_snapshot_events === true) {
+      // Only identified participants hear the room (see broadcast).
+      if (!attachment?.participant_id) continue;
+      if (attachment.supports_listen_together_snapshot_events === true) {
         this.sendTo(ws, {
           op: Op.VoiceAppEvent,
           d: {
@@ -1708,6 +1724,49 @@ export class VoiceRoom extends DurableObject<Env, unknown> {
     return participantIds;
   }
 
+  /** Open voice sockets that have not identified (and are not identifying). */
+  private unidentifiedSockets(): WebSocket[] {
+    return this.ctx
+      .getWebSockets()
+      .filter(
+        (ws) =>
+          !this.getParticipantId(ws) &&
+          !this.identifyingSockets.has(ws) &&
+          ws.readyState === WebSocket.OPEN,
+      );
+  }
+
+  /**
+   * Heartbeats are the only liveness signal of an unidentified socket, as
+   * participants' last_heartbeat is for identified ones. One that stops
+   * sending them for VOICE_ZOMBIE_TIMEOUT_MS is closed, so a vanished peer
+   * cannot hold a socket open forever. A live standby socket heartbeats and
+   * stays.
+   */
+  private closeSilentUnidentifiedSockets(now: number): void {
+    for (const ws of this.unidentifiedSockets()) {
+      const attachment = this.getVoiceAttachment(ws);
+      const lastSeenAt = attachment?.last_seen_at;
+      if (typeof lastSeenAt !== "number") {
+        // Accepted before sockets carried last_seen_at: start its clock now.
+        try {
+          ws.serializeAttachment({ ...attachment, last_seen_at: now });
+        } catch {
+          // The socket is already gone.
+        }
+        continue;
+      }
+      if (now - lastSeenAt < VOICE_ZOMBIE_TIMEOUT_MS) continue;
+      roomLog.info(
+        `Closing unidentified voice socket, silent for ${Math.round((now - lastSeenAt) / 1000)}s`,
+      );
+      this.closeVoiceSocket(ws, {
+        code: CloseCode.SessionTimeout,
+        reason: "Voice socket timed out",
+      });
+    }
+  }
+
   private getVoiceAttachment(ws: WebSocket): VoiceAttachment | null {
     return ws.deserializeAttachment() as VoiceAttachment | null;
   }
@@ -2306,6 +2365,12 @@ export class VoiceRoom extends DurableObject<Env, unknown> {
   private handleHeartbeat(ws: WebSocket) {
     const pid = this.getParticipantId(ws);
     if (!pid) {
+      // A standby session keeps its socket unidentified until the user joins
+      // (see SFUClient.connectVoice); its heartbeats keep it open.
+      const attachment = this.getVoiceAttachment(ws);
+      if (attachment) {
+        ws.serializeAttachment({ ...attachment, last_seen_at: Date.now() });
+      }
       this.sendTo(ws, { op: Op.HeartbeatACK, d: { seq: 0 } });
       return;
     }
@@ -4186,10 +4251,17 @@ export class VoiceRoom extends DurableObject<Env, unknown> {
     }
   }
 
+  /**
+   * Sends to every identified voice socket. An unidentified socket (a
+   * standby session, or a ticket holder that never sent VoiceIdentify) has
+   * not been admitted to the room and hears none of it; VoiceReady gives it
+   * the room's state once it identifies.
+   */
   private broadcast(msg: ServerMsg, excludeWs?: WebSocket) {
     const data = JSON.stringify(msg);
     for (const ws of this.ctx.getWebSockets()) {
       if (ws === excludeWs) continue;
+      if (!this.getParticipantId(ws)) continue;
       try {
         ws.send(data);
       } catch {
