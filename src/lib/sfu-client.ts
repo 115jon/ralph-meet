@@ -460,6 +460,13 @@ export class SFUClient extends TypedEventEmitter<SFUEventMap> {
       sfuLog.warn("Room socket ticket refused: the session is gone");
       this.emit("auth-failed", undefined as never);
     });
+    this.roomGW.on("admission-rejected", () => {
+      sfuLog.warn("Room socket admission rejected: the session is gone");
+      // A move ends this session on purpose; the switch takes it from here.
+      if (!this.isLeaving && !this.moved) {
+        this.emit("admission-rejected", undefined as never);
+      }
+    });
     this.roomGW.on("voice-move", (move) => {
       sfuLog.info("Moved to another voice channel", {
         channelId: move.channel_id,
@@ -640,6 +647,12 @@ export class SFUClient extends TypedEventEmitter<SFUEventMap> {
     this.voiceGW.on("auth-failed", () => {
       sfuLog.warn("Voice socket ticket refused: the session is gone");
       this.emit("auth-failed", undefined as never);
+    });
+    this.voiceGW.on("admission-rejected", () => {
+      sfuLog.warn("Voice socket admission rejected: the session is gone");
+      if (!this.isLeaving && !this.moved) {
+        this.emit("admission-rejected", undefined as never);
+      }
     });
     this.voiceGW.on("kicked", ({ reason }) => {
       if (this.isLeaving || this.moved) return;

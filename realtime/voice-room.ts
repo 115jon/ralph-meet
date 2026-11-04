@@ -158,6 +158,12 @@ interface VoiceSocketClose {
 /** Close reason (with CloseCode.SessionReplaced) when voice moves device. */
 const VOICE_SESSION_REPLACED_REASON = "Voice moved to another device";
 
+/**
+ * Close code ("Try Again Later") when a voice identify's join grant could not
+ * be verified with the MeetingRoom. Unlike AdmissionRejected, clients retry.
+ */
+const VOICE_JOIN_UNVERIFIED_CLOSE_CODE = 1013;
+
 // WebSocket attachment for voice sessions
 interface VoiceAttachment {
   admission?: {
@@ -2046,19 +2052,33 @@ export class VoiceRoom extends DurableObject<Env, unknown> {
   private async waitForVoiceJoinGrant(
     query: VoiceJoinGrantQuery,
   ): Promise<boolean> {
+    return (await this.awaitVoiceJoinVerdict(query)) === "granted";
+  }
+
+  /**
+   * Like waitForVoiceJoinGrant, but tells a refusal apart from a wait that
+   * ended with no grant, no revocation and no answer from the MeetingRoom
+   * (its check failed or is still running): "unverified".
+   */
+  private async awaitVoiceJoinVerdict(
+    query: VoiceJoinGrantQuery,
+  ): Promise<"granted" | "denied" | "unverified"> {
     const state = this.voiceJoinGrants.state(
       query.participantId,
       query.subject,
     );
-    if (state !== "unknown") return state === "granted";
+    if (state !== "unknown") return state === "granted" ? "granted" : "denied";
 
-    void this.confirmVoiceJoinGrant(query).then((confirmed) => {
-      if (!confirmed) return;
+    // undefined while the check runs; null when the MeetingRoom could not say.
+    let checked: boolean | null | undefined;
+    void this.checkVoiceJoinGrant(query).then((answer) => {
+      checked = answer;
+      if (answer !== true) return;
       this.voiceJoinGrants.recordConfirmed(query);
       this.voiceJoinGrantWaiters.notify(query.participantId);
     });
 
-    return this.voiceJoinGrantWaiters.wait(
+    const granted = await this.voiceJoinGrantWaiters.wait(
       query.participantId,
       this.voiceJoinGrantWaitMs,
       () => {
@@ -2069,12 +2089,12 @@ export class VoiceRoom extends DurableObject<Env, unknown> {
         return next === "unknown" ? null : next === "granted";
       },
     );
-  }
-
-  private async confirmVoiceJoinGrant(
-    query: VoiceJoinGrantQuery,
-  ): Promise<boolean> {
-    return (await this.checkVoiceJoinGrant(query)) === true;
+    if (granted) return "granted";
+    const final = this.voiceJoinGrants.state(
+      query.participantId,
+      query.subject,
+    );
+    return final === "unknown" && checked !== false ? "unverified" : "denied";
   }
 
   /**
@@ -2233,13 +2253,28 @@ export class VoiceRoom extends DurableObject<Env, unknown> {
     // joined (not standby) in this channel's MeetingRoom before it may see
     // tracks, publish or appear to the voice room.
     const joinWaitStartedAt = Date.now();
-    const joined = await this.waitForVoiceJoinGrant({
+    const verdict = await this.awaitVoiceJoinVerdict({
       participantId: d.participant_id,
       subject: admission.subject,
     });
     const joinWaitMs = Date.now() - joinWaitStartedAt;
     if (ws.readyState !== WebSocket.OPEN || this.getParticipantId(ws)) return;
-    if (!joined) {
+    if (verdict === "unverified") {
+      // The MeetingRoom could not be asked (a failed or slow fetch). Not a
+      // refusal: close with a retryable code so the client reconnects and
+      // identifies again instead of ending the session (AdmissionRejected).
+      roomLog.warn(
+        `VoiceIdentify deferred: participant=${d.participant_id} join could not be verified`,
+      );
+      try {
+        ws.close(
+          VOICE_JOIN_UNVERIFIED_CLOSE_CODE,
+          "Voice channel join could not be verified",
+        );
+      } catch {}
+      return;
+    }
+    if (verdict === "denied") {
       roomLog.warn(
         `VoiceIdentify refused: participant=${d.participant_id} has not joined the channel`,
       );
