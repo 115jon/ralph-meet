@@ -39,7 +39,7 @@ export interface RoomGatewayEvents extends BaseGatewayEvents {
   resumed: {
     voiceToken?: string;
     iceServers?: IceServer[];
-    participants?: VoiceState[];
+    participants: VoiceState[];
     spatialAudioState?: SharedSpatialAudioState;
   };
   "participant-joined": { participant: VoiceState };

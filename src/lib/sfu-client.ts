@@ -11,11 +11,7 @@ import {
   type VoiceState,
   type VoiceStateDelta,
 } from "./types";
-import {
-  GatewayCloseCode,
-  GatewayOp,
-  type RepublishRequestPayload,
-} from "./gateway-protocol";
+import { GatewayOp, type RepublishRequestPayload } from "./gateway-protocol";
 import { AudioPipeline } from "./voice/audio-pipeline";
 import { AudioSentinel, OutboundAudioSentinel } from "./voice/audio-sentinel";
 import { getLocalAudioDiagnostics } from "./voice/capture-audio-context";
@@ -426,12 +422,10 @@ export class SFUClient extends TypedEventEmitter<SFUEventMap> {
         this.voiceGW.updateVoiceToken(event.voiceToken);
         this.partyTracksTransport?.updateVoiceToken(event.voiceToken);
       }
-      if (event.participants) {
-        this.emit("participants-sync", {
-          participants: event.participants,
-          spatialAudioState: event.spatialAudioState,
-        });
-      }
+      this.emit("participants-sync", {
+        participants: event.participants,
+        spatialAudioState: event.spatialAudioState,
+      });
       this.scheduleCredentialRefresh();
       if (!this.voiceGW.isReady) this.connectVoice();
     });
@@ -475,14 +469,6 @@ export class SFUClient extends TypedEventEmitter<SFUEventMap> {
 
   private wireVoiceEvents(): void {
     this.voiceGW.on("error", (event) => {
-      if (
-        event.code === GatewayCloseCode.UnknownOpcode &&
-        event.message.endsWith(`opcode: ${GatewayOp.TrackUnavailable}`)
-      ) {
-        // A voice room older than the track-unavailable report: nothing to do.
-        sfuLog.info("Voice room does not take track-unavailable reports");
-        return;
-      }
       if (event.message === "Voice token expired" || event.code === 4004) {
         sfuLog.warn(
           "Voice token expired; requesting fresh RoomGateway credentials",
@@ -502,7 +488,6 @@ export class SFUClient extends TypedEventEmitter<SFUEventMap> {
       const partyTracks = remoteTracks.filter((track) =>
         Boolean(track.sfu_track_name),
       );
-      this.warnDroppedLegacyTracks(remoteTracks, "VoiceReady");
 
       this.emit("voice-ready", { speaking: event.speaking ?? {} });
       // Register local senders before replay pulls enqueue negotiation on the
@@ -565,7 +550,7 @@ export class SFUClient extends TypedEventEmitter<SFUEventMap> {
         }
         return;
       }
-      this.offerPartyTracksOrDropLegacy([track], "TrackOffered");
+      this.offerPartyTracks([track]);
     });
     this.voiceGW.on("stop-tracks", (event) => {
       for (const trackName of event.track_names) {
@@ -580,14 +565,6 @@ export class SFUClient extends TypedEventEmitter<SFUEventMap> {
       );
       if (partyTrackNames.length > 0) {
         this.partyTracksMedia?.stopRemoteTracks(partyTrackNames);
-      }
-      const legacyTrackCount =
-        event.track_names.length - partyTrackNames.length;
-      if (legacyTrackCount > 0) {
-        sfuLog.warn(
-          "Ignoring legacy browser StopTracks; PartyTracks metadata is required",
-          { trackCount: legacyTrackCount },
-        );
       }
     });
     this.voiceGW.on("client-disconnect", ({ participant_id }) => {
@@ -687,20 +664,8 @@ export class SFUClient extends TypedEventEmitter<SFUEventMap> {
     this.disposePartyTracksMedia();
   }
 
-  private warnDroppedLegacyTracks(tracks: TrackInfo[], source: string): void {
-    const trackCount = tracks.filter((track) => !track.sfu_track_name).length;
-    if (trackCount === 0) return;
-    sfuLog.warn(
-      "Ignoring legacy browser track descriptors; PartyTracks metadata is required",
-      { source, trackCount },
-    );
-  }
-
-  private offerPartyTracksOrDropLegacy(
-    tracks: TrackInfo[],
-    source: string,
-  ): void {
-    this.warnDroppedLegacyTracks(tracks, source);
+  /** Offers the tracks that carry PartyTracks metadata (sfu_track_name). */
+  private offerPartyTracks(tracks: TrackInfo[]): void {
     this.partyTracksMedia?.offerTracks(
       tracks.filter((track) => Boolean(track.sfu_track_name)),
     );
@@ -1323,11 +1288,7 @@ export class SFUClient extends TypedEventEmitter<SFUEventMap> {
   }
 
   public pullTracks(tracks: TrackInfo[]): void {
-    if (!this.partyTracksMedia) {
-      this.warnDroppedLegacyTracks(tracks, "PullTracksWithoutPartyTracks");
-      return;
-    }
-    this.offerPartyTracksOrDropLegacy(tracks, "PullTracks");
+    this.offerPartyTracks(tracks);
   }
 
   public replaceTrack(
