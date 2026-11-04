@@ -2007,6 +2007,9 @@ export class VoiceRoom extends DurableObject<Env, unknown> {
       await this.identifyVoiceParticipant(ws, d);
     } finally {
       this.identifyingSockets.delete(ws);
+      // A failed identify leaves an unidentified socket that the alarm must
+      // still watch; the room's last leave may have cleared the alarm.
+      await this.scheduleAlarm();
     }
   }
 
