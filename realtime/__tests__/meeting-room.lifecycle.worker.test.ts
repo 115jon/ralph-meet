@@ -360,6 +360,36 @@ async function hasMessageWithOpcode(
 }
 
 describe("MeetingRoom lifecycle", () => {
+  // The DM list and friends list are only right if the client knows who is
+  // connected before it opens any channel (ChannelSubscribe also sends one).
+  it("sends the presence list on identify, before any channel subscribe", async () => {
+    const roomName = crypto.randomUUID();
+    const present = await openGlobalSocket(roomName, "present-user");
+    await identifyMeetingSocket(present, { name: "Present" });
+
+    const joining = await openGlobalSocket(roomName, "joining-user");
+    const presenceList = nextDispatchEvent(joining, "PRESENCE_LIST");
+    await identifyMeetingSocket(joining, { name: "Joining" });
+
+    const data = (
+      (await presenceList).d as {
+        data: {
+          user_ids: string[];
+          users: Array<{ user_id: string; status: string }>;
+        };
+      }
+    ).data;
+    expect(data.user_ids).toEqual(
+      expect.arrayContaining(["present-user", "joining-user"]),
+    );
+    expect(data.users).toContainEqual(
+      expect.objectContaining({ user_id: "present-user", status: "online" }),
+    );
+
+    present.close(1000, "test complete");
+    joining.close(1000, "test complete");
+  });
+
   it("hides a standby identify until the session is promoted", async () => {
     const roomName = crypto.randomUUID();
     const seated = await openMeetingSocket(roomName, "seated-user");

@@ -3003,6 +3003,19 @@ export class MeetingRoom extends DurableObject<Env> {
       // Build roster (after the takeover, so no replaced session is in it)
       const participants = this.buildRoomRoster(ws);
 
+      // Who is connected now, ahead of Ready and any ChannelSubscribe: the
+      // client's DM and friends rows read live presence from this list, not
+      // users.status (the status a person last chose, kept after they leave).
+      if (attachment.user_id) {
+        this.sendTo(ws, {
+          op: Op.Dispatch,
+          d: {
+            event: "PRESENCE_LIST",
+            data: this.buildPresenceListPayload(),
+          },
+        });
+      }
+
       // Op 2: Ready — includes voice_token for Voice Gateway connection
       this.sendTo(ws, {
         op: Op.Ready,
