@@ -730,4 +730,39 @@ describe("chat gateway frame decoding", () => {
     mocks.callState = {};
     vi.unstubAllGlobals();
   });
+
+  it("prefers the gateway user over a stale store user for the DM call room", async () => {
+    vi.stubGlobal("document", { hasFocus: () => true });
+    const setIncomingCall = vi.fn();
+    mocks.callState = { status: "idle", setIncomingCall };
+    // Store still holds the previous account ("user-1") after a switch.
+    const { gateway } = createFixture();
+    gateway.initGateway("user-b");
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    const socket = FakeWebSocket.instances[0]!;
+    socket.open();
+    socket.message({ op: 8, d: { heartbeat_interval: 45_000 } });
+    socket.message({ op: 2, d: { participant_id: "session-1" } });
+
+    socket.message({
+      op: 19,
+      d: {
+        seq: 1,
+        event: "CALL_RING",
+        data: {
+          call_id: "call-1",
+          caller_id: "user-a",
+          caller_name: "A",
+          channel_id: "dm-1",
+        },
+      },
+    });
+
+    expect(setIncomingCall).toHaveBeenCalledWith(
+      expect.objectContaining({ voiceRoomId: "dm-call-user-a-user-b" }),
+    );
+    gateway.disconnectGateway();
+    mocks.callState = {};
+    vi.unstubAllGlobals();
+  });
 });

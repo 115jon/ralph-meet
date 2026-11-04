@@ -791,9 +791,11 @@ export function createChatGateway(
           return;
         }
 
-        // The store user can lag the identified gateway user; the slug must
-        // match the server's (socket-ticket getAuthorizedDmCallRoomSlug).
-        const myId = currentUser?.id || appUserId;
+        // Prefer the identified gateway user: the slug must match the
+        // server's (socket-ticket getAuthorizedDmCallRoomSlug checks the
+        // authenticated user), and the store user can lag or go stale on an
+        // account switch.
+        const myId = appUserId || currentUser?.id;
         if (!myId) {
           chatLog.warn("Ignoring CALL_RING before the user id is known", {
             call_id,
@@ -855,7 +857,7 @@ export function createChatGateway(
         const callState = useCallStore.getState();
         const currentUser = get().user;
 
-        const myId = currentUser?.id || appUserId;
+        const myId = appUserId || currentUser?.id;
         if (!myId) {
           chatLog.warn("Ignoring CALL_RINGING before the user id is known", {
             call_id,
