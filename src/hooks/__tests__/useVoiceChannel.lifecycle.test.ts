@@ -972,6 +972,70 @@ describe("useVoiceChannel SFU lifecycle", () => {
     },
   );
 
+  it("completes a pending leave when the hook unmounts inside its send window", async () => {
+    authUser.current = { id: "user-1" };
+    vi.mocked(acquireLocalStream).mockResolvedValue(
+      createStream([createTrack("audio", "unmount-window-mic").track]),
+    );
+    const onLeft = vi.fn();
+    const hook = renderHook(() =>
+      useVoiceChannel({ channelId: "channel", serverId: "server", onLeft }),
+    );
+    await act(async () => {
+      await hook.result.current.handleJoin();
+    });
+    const sfu = sfuInstances[0];
+    if (!sfu) throw new Error("SFU was not created");
+    await act(async () => {
+      sfu.emit("joined", { participantId: "self", participants: [] });
+    });
+    await waitFor(() => expect(hook.result.current.joined).toBe(true));
+
+    act(() => hook.result.current.handleLeave());
+    expect(sfu.disconnect).not.toHaveBeenCalled();
+    hook.unmount();
+
+    expect(sfu.disconnect).toHaveBeenCalledOnce();
+    expect(sfu.disconnect).toHaveBeenCalledWith("user-leave");
+    expect(onLeft).toHaveBeenCalledOnce();
+    await new Promise((resolve) => setTimeout(resolve, 120));
+    expect(sfu.disconnect).toHaveBeenCalledOnce();
+  });
+
+  it("runs one teardown when a forced disconnect lands during a leave", async () => {
+    authUser.current = { id: "user-1" };
+    vi.mocked(acquireLocalStream).mockResolvedValue(
+      createStream([createTrack("audio", "leave-then-force-mic").track]),
+    );
+    const onLeft = vi.fn();
+    const hook = renderHook(() =>
+      useVoiceChannel({ channelId: "channel", serverId: "server", onLeft }),
+    );
+    await act(async () => {
+      await hook.result.current.handleJoin();
+    });
+    const sfu = sfuInstances[0];
+    if (!sfu) throw new Error("SFU was not created");
+    await act(async () => {
+      sfu.emit("joined", { participantId: "self", participants: [] });
+    });
+    await waitFor(() => expect(hook.result.current.joined).toBe(true));
+
+    await act(async () => {
+      hook.result.current.handleLeave();
+      hook.result.current.handleLeave();
+      window.dispatchEvent(new CustomEvent("force-voice-disconnect"));
+    });
+    await new Promise((resolve) => setTimeout(resolve, 120));
+
+    expect(sfu.disconnect).toHaveBeenCalledOnce();
+    expect(sfu.disconnect).toHaveBeenCalledWith("user-leave");
+    expect(playDisconnect).toHaveBeenCalledOnce();
+    expect(chatActions.sendVoiceChannelLeave).toHaveBeenCalledOnce();
+    expect(onLeft).toHaveBeenCalledOnce();
+    hook.unmount();
+  });
+
   it("keeps the session on a recoverable SFU error", async () => {
     vi.mocked(acquireLocalStream).mockResolvedValue(
       createStream([createTrack("audio", "error-mic").track]),
