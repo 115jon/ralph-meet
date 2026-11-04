@@ -3,7 +3,7 @@ import { describe, expect, it } from "vitest";
 import {
   isReconnectWithinGrace,
   isSupersededVoiceConnection,
-} from "../src/lib/voice/connection-generation";
+} from "./connection-lifecycle";
 
 describe("isSupersededVoiceConnection", () => {
   it("treats a socket as stale when the participant row has a newer connection", () => {

@@ -485,4 +485,171 @@ describe("local-media-manager", () => {
     ).resolves.toBe(streamB.stream);
     expect(getUserMedia).toHaveBeenCalledTimes(2);
   });
+
+  describe("saved microphone while the device list is hidden", () => {
+    // Chromium before media permission; desktop CEF on every launch.
+    const hiddenList = [
+      { deviceId: "", groupId: "", kind: "audioinput", label: "" },
+    ] as MediaDeviceInfo[];
+    const savedMic: LocalAudioConstraints = {
+      ...audioConstraints,
+      deviceId: "saved-shure",
+      deviceLabel: "Shure MV7",
+      groupId: "g-shure",
+    };
+
+    it("opens the saved id instead of the system default", async () => {
+      const saved = createAudioStream("saved-shure");
+      const getUserMedia = vi.fn().mockResolvedValue(saved.stream);
+      vi.stubGlobal("navigator", {
+        mediaDevices: {
+          enumerateDevices: vi.fn().mockResolvedValue(hiddenList),
+          getUserMedia,
+        },
+      });
+
+      await expect(acquireLocalStream(savedMic, null)).resolves.toBe(
+        saved.stream,
+      );
+      expect(getUserMedia).toHaveBeenCalledOnce();
+      expect(getUserMedia.mock.calls[0]?.[0]).toMatchObject({
+        audio: { deviceId: { exact: "saved-shure" } },
+      });
+    });
+
+    it("reopens the saved device by label once the fallback capture unlocks the list", async () => {
+      const fallback = createAudioStream("default");
+      const reopened = createAudioStream("renamed-shure");
+      const enumerateDevices = vi
+        .fn()
+        .mockResolvedValueOnce(hiddenList)
+        .mockResolvedValue([
+          {
+            deviceId: "default",
+            groupId: "g-new",
+            kind: "audioinput",
+            label: "Default - Webcam Mic",
+          },
+          {
+            deviceId: "renamed-shure",
+            groupId: "g-renamed",
+            kind: "audioinput",
+            label: "Shure MV7",
+          },
+        ] as MediaDeviceInfo[]);
+      const getUserMedia = vi
+        .fn()
+        .mockRejectedValueOnce(
+          Object.assign(new Error("no such device"), {
+            name: "OverconstrainedError",
+            constraint: "deviceId",
+          }),
+        )
+        .mockResolvedValueOnce(fallback.stream)
+        .mockResolvedValueOnce(reopened.stream);
+      vi.stubGlobal("navigator", {
+        mediaDevices: { enumerateDevices, getUserMedia },
+      });
+
+      await expect(acquireLocalStream(savedMic, null)).resolves.toBe(
+        reopened.stream,
+      );
+      expect(getUserMedia).toHaveBeenCalledTimes(3);
+      expect(getUserMedia.mock.calls[1]?.[0]).toMatchObject({
+        audio: { deviceId: undefined },
+      });
+      expect(getUserMedia.mock.calls[2]?.[0]).toMatchObject({
+        audio: { deviceId: { exact: "renamed-shure" } },
+      });
+      expect(fallback.track.stop).toHaveBeenCalledOnce();
+      expect(reopened.track.stop).not.toHaveBeenCalled();
+    });
+
+    it("keeps the fallback stream when the saved device is really gone", async () => {
+      const fallback = createAudioStream("default");
+      const enumerateDevices = vi
+        .fn()
+        .mockResolvedValueOnce(hiddenList)
+        .mockResolvedValue([
+          {
+            deviceId: "webcam-mic",
+            groupId: "g-cam",
+            kind: "audioinput",
+            label: "Webcam Mic",
+          },
+        ] as MediaDeviceInfo[]);
+      const getUserMedia = vi
+        .fn()
+        .mockRejectedValueOnce(
+          Object.assign(new Error("no such device"), {
+            name: "OverconstrainedError",
+          }),
+        )
+        .mockResolvedValueOnce(fallback.stream);
+      vi.stubGlobal("navigator", {
+        mediaDevices: { enumerateDevices, getUserMedia },
+      });
+
+      await expect(acquireLocalStream(savedMic, null)).resolves.toBe(
+        fallback.stream,
+      );
+      expect(getUserMedia).toHaveBeenCalledTimes(2);
+      expect(fallback.track.stop).not.toHaveBeenCalled();
+    });
+
+    it("hands back the fallback stream when the second lookup fails", async () => {
+      const fallback = createAudioStream("default");
+      const enumerateDevices = vi
+        .fn()
+        .mockResolvedValueOnce(hiddenList)
+        .mockRejectedValue(new Error("enumerate failed"));
+      const getUserMedia = vi
+        .fn()
+        .mockRejectedValueOnce(
+          Object.assign(new Error("no such device"), {
+            name: "OverconstrainedError",
+          }),
+        )
+        .mockResolvedValueOnce(fallback.stream);
+      vi.stubGlobal("navigator", {
+        mediaDevices: { enumerateDevices, getUserMedia },
+      });
+
+      await expect(acquireLocalStream(savedMic, null)).resolves.toBe(
+        fallback.stream,
+      );
+      expect(getUserMedia).toHaveBeenCalledTimes(2);
+      expect(fallback.track.stop).not.toHaveBeenCalled();
+    });
+
+    it("reuses a fallback stream opened for the same saved id while the list stays hidden", async () => {
+      const fallback = createAudioStream("default");
+      const overconstrained = () =>
+        Object.assign(new Error("no such device"), {
+          name: "OverconstrainedError",
+        });
+      const getUserMedia = vi
+        .fn()
+        .mockRejectedValueOnce(overconstrained())
+        .mockResolvedValueOnce(fallback.stream)
+        .mockRejectedValueOnce(overconstrained());
+      vi.stubGlobal("navigator", {
+        mediaDevices: {
+          enumerateDevices: vi.fn().mockResolvedValue(hiddenList),
+          getUserMedia,
+        },
+      });
+
+      await expect(acquireLocalStream(savedMic, null)).resolves.toBe(
+        fallback.stream,
+      );
+      const callsAfterJoin = getUserMedia.mock.calls.length;
+
+      await expect(acquireLocalStream(savedMic, null)).resolves.toBe(
+        fallback.stream,
+      );
+      expect(getUserMedia).toHaveBeenCalledTimes(callsAfterJoin);
+      expect(fallback.track.stop).not.toHaveBeenCalled();
+    });
+  });
 });

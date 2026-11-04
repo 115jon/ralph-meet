@@ -26,6 +26,18 @@ export function normalizeUserStatus(value: unknown): UserStatus {
     : "offline";
 }
 
+/**
+ * The status to draw for someone else. `users.status` (what REST returns) is
+ * the status they last chose and stays "online" after they disconnect, so
+ * only someone the gateway reports as connected shows it.
+ */
+export function livePresenceStatus(
+  status: unknown,
+  connected: boolean,
+): UserStatus {
+  return connected ? normalizeUserStatus(status ?? "online") : "offline";
+}
+
 // The offline ring and the dnd bar are holes cut with a mask, not shapes
 // painted in a surface colour: whatever sits behind the dot (a ring, a row
 // tint, a profile gradient) shows through, so the cut-out matches every

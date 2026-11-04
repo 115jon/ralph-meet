@@ -6,6 +6,7 @@ const mocks = vi.hoisted(() => ({
   fetchSocketProtocols: vi.fn(),
   bootstrapChat: vi.fn(),
   loadMessages: vi.fn(),
+  callState: {} as Record<string, unknown>,
 }));
 
 vi.mock("@/lib/voice/socket-ticket-client", () => ({
@@ -58,7 +59,7 @@ vi.mock("@/lib/sounds", () => ({
   playVoiceLeave: vi.fn(),
 }));
 vi.mock("./useCallStore", () => ({
-  useCallStore: { getState: () => ({}) },
+  useCallStore: { getState: () => mocks.callState },
 }));
 vi.mock("./useDesktopSettingsStore", () => ({
   useDesktopSettingsStore: {
@@ -121,12 +122,14 @@ function sentMessages(socket: FakeWebSocket) {
   );
 }
 
-function createFixture() {
+function createFixture({ withUser = true } = {}) {
   const state: ChatState = {
     ...initialState,
-    user: { ...initialState.user, id: "user-1" } as NonNullable<
-      ChatState["user"]
-    >,
+    user: withUser
+      ? ({ ...initialState.user, id: "user-1" } as NonNullable<
+          ChatState["user"]
+        >)
+      : null,
     activeChannelId: "channel-1",
   };
   const dispatch = vi.fn();
@@ -646,7 +649,7 @@ describe("chat gateway frame decoding", () => {
 
     first.message({ op: 8, d: { heartbeat_interval: 45_000 } });
     // The wire bytes of Identify are unchanged by the codec. No user id: the
-    // room takes it from the ticket (clients no longer send clerk_user_id).
+    // room takes it from the ticket.
     expect(first.sent).toEqual([
       '{"op":0,"d":{"name":"ChatClient","platform":"web","supports_voice_state_deltas":true}}',
     ]);
@@ -675,5 +678,91 @@ describe("chat gateway frame decoding", () => {
       '{"op":7,"d":{"session_id":"session-1","seq_ack":5}}',
     ]);
     gateway.disconnectGateway();
+  });
+
+  it("builds the DM call room from the gateway user before the store user loads", async () => {
+    vi.stubGlobal("document", { hasFocus: () => true });
+    const setIncomingCall = vi.fn();
+    const setOutgoingCall = vi.fn();
+    mocks.callState = { status: "idle", setIncomingCall, setOutgoingCall };
+    const { gateway } = createFixture({ withUser: false });
+    gateway.initGateway("user-b");
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    const socket = FakeWebSocket.instances[0]!;
+    socket.open();
+    socket.message({ op: 8, d: { heartbeat_interval: 45_000 } });
+    socket.message({ op: 2, d: { participant_id: "session-1" } });
+
+    socket.message({
+      op: 19,
+      d: {
+        seq: 1,
+        event: "CALL_RING",
+        data: {
+          call_id: "call-1",
+          caller_id: "user-a",
+          caller_name: "A",
+          channel_id: "dm-1",
+        },
+      },
+    });
+    socket.message({
+      op: 19,
+      d: {
+        seq: 2,
+        event: "CALL_RINGING",
+        data: {
+          call_id: "call-2",
+          callee_id: "user-c",
+          callee_name: "C",
+          channel_id: "dm-2",
+        },
+      },
+    });
+
+    expect(setIncomingCall).toHaveBeenCalledWith(
+      expect.objectContaining({ voiceRoomId: "dm-call-user-a-user-b" }),
+    );
+    expect(setOutgoingCall).toHaveBeenCalledWith(
+      expect.objectContaining({ voiceRoomId: "dm-call-user-b-user-c" }),
+    );
+    gateway.disconnectGateway();
+    mocks.callState = {};
+    vi.unstubAllGlobals();
+  });
+
+  it("prefers the gateway user over a stale store user for the DM call room", async () => {
+    vi.stubGlobal("document", { hasFocus: () => true });
+    const setIncomingCall = vi.fn();
+    mocks.callState = { status: "idle", setIncomingCall };
+    // Store still holds the previous account ("user-1") after a switch.
+    const { gateway } = createFixture();
+    gateway.initGateway("user-b");
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    const socket = FakeWebSocket.instances[0]!;
+    socket.open();
+    socket.message({ op: 8, d: { heartbeat_interval: 45_000 } });
+    socket.message({ op: 2, d: { participant_id: "session-1" } });
+
+    socket.message({
+      op: 19,
+      d: {
+        seq: 1,
+        event: "CALL_RING",
+        data: {
+          call_id: "call-1",
+          caller_id: "user-a",
+          caller_name: "A",
+          channel_id: "dm-1",
+        },
+      },
+    });
+
+    expect(setIncomingCall).toHaveBeenCalledWith(
+      expect.objectContaining({ voiceRoomId: "dm-call-user-a-user-b" }),
+    );
+    gateway.disconnectGateway();
+    mocks.callState = {};
+    vi.unstubAllGlobals();
   });
 });

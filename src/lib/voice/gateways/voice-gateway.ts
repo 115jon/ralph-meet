@@ -59,7 +59,6 @@ export class VoiceGateway extends BaseGateway<
   private helloReceived = false;
   private identifySent = false;
   private identifiedParticipantId: string | null = null;
-  private identifiedVoiceToken: string | null = null;
   private clearCredentialsOnNextPrepare = false;
 
   constructor() {
@@ -97,9 +96,6 @@ export class VoiceGateway extends BaseGateway<
     // identify; the voice room has already admitted this socket.
     const replacingIdentifiedGeneration =
       this.identifySent && this.identifiedParticipantId !== participantId;
-    if (this.identifySent && !replacingIdentifiedGeneration) {
-      this.identifiedVoiceToken = voiceToken;
-    }
 
     this.participantId = participantId;
     this.voiceToken = voiceToken;
@@ -218,7 +214,6 @@ export class VoiceGateway extends BaseGateway<
           // token arrives (updateVoiceToken), instead of staying unidentified.
           this.identifySent = false;
           this.identifiedParticipantId = null;
-          this.identifiedVoiceToken = null;
         }
         this.emit("error", {
           message: err.message,
@@ -308,7 +303,6 @@ export class VoiceGateway extends BaseGateway<
     this.helloReceived = false;
     this.identifySent = false;
     this.identifiedParticipantId = null;
-    this.identifiedVoiceToken = null;
   }
 
   private maybeSendIdentify() {
@@ -342,6 +336,5 @@ export class VoiceGateway extends BaseGateway<
 
     this.identifySent = true;
     this.identifiedParticipantId = participantId;
-    this.identifiedVoiceToken = voiceToken;
   }
 }

@@ -1,7 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
   createSoundboardPlaybackId,
-  isLegacySoundboardPlaybackOwnedBy,
   isSoundboardPlaybackOwnedBy,
   parseSoundboardPlaybackId,
 } from "./soundboard-playback-id";
@@ -18,21 +17,9 @@ describe("soundboard playback IDs", () => {
     expect(isSoundboardPlaybackOwnedBy(playbackId, "user")).toBe(false);
   });
 
-  it("requires the legacy compatibility check to match the complete ID", () => {
-    expect(
-      isLegacySoundboardPlaybackOwnedBy(
-        "s-user-other-airhorn",
-        "user-other",
-        "airhorn",
-      ),
-    ).toBe(true);
-    expect(
-      isLegacySoundboardPlaybackOwnedBy(
-        "s-user-other-airhorn",
-        "user",
-        "airhorn",
-      ),
-    ).toBe(false);
+  it("does not parse the retired s-<owner>-<sound> form", () => {
+    expect(parseSoundboardPlaybackId("s-user-airhorn")).toBeNull();
+    expect(isSoundboardPlaybackOwnedBy("s-user-airhorn", "user")).toBe(false);
   });
 
   it("rejects malformed length-prefixed IDs", () => {

@@ -4,6 +4,7 @@ import {
   readReplaySeq,
   type GatewayFrame,
   type RoomGatewayServerMessage,
+  type VoiceMovePayload,
 } from "@/lib/gateway-protocol";
 import {
   type IceServer,
@@ -39,7 +40,7 @@ export interface RoomGatewayEvents extends BaseGatewayEvents {
   resumed: {
     voiceToken?: string;
     iceServers?: IceServer[];
-    participants?: VoiceState[];
+    participants: VoiceState[];
     spatialAudioState?: SharedSpatialAudioState;
   };
   "participant-joined": { participant: VoiceState };
@@ -62,6 +63,11 @@ export interface RoomGatewayEvents extends BaseGatewayEvents {
       | null;
   };
   error: { message: string; code?: number };
+  /**
+   * A moderator moved this session to another channel. The room closes the
+   * socket with SessionReplaced right after; this comes first.
+   */
+  "voice-move": VoiceMovePayload;
 }
 
 export interface ConnectOptions {
@@ -261,6 +267,12 @@ export class RoomGateway extends BaseGateway<
         break;
       }
 
+      case GatewayOp.VoiceMove: {
+        this.log.info(`Moved to voice channel ${msg.d.channel_id}`);
+        this.emit("voice-move", msg.d);
+        break;
+      }
+
       case GatewayOp.Error: {
         const err = msg.d;
         this.log.error(`Error (code=${err.code}):`, err.message);
@@ -310,13 +322,6 @@ export class RoomGateway extends BaseGateway<
       supports_voice_state_deltas: true,
       ...(this.options?.standby ? { standby: true } : {}),
     };
-  }
-
-  public sendMuteUpdate(isMicOn: boolean, isCameraOn: boolean) {
-    this.send({
-      op: GatewayOp.VoiceStateUpdate,
-      d: { self_mute: !isMicOn, self_video: isCameraOn },
-    });
   }
 
   public sendVoiceState(state: any) {

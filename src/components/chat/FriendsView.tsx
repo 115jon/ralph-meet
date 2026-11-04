@@ -42,7 +42,7 @@ import { apiDelete, apiPost, apiPut } from "@/lib/api-client";
 import { describeApiError } from "@/lib/api-errors";
 import type { Relationship } from "@/lib/types";
 import { cn } from "@/lib/utils";
-import { normalizeUserStatus, UserStatusDot } from "./UserStatusDot";
+import { livePresenceStatus, UserStatusDot } from "./UserStatusDot";
 import { useChatActions, useChatStore } from "@/stores/chat-store";
 import { useCallStore } from "@/stores/useCallStore";
 import {
@@ -216,11 +216,14 @@ export default function FriendsView({
   onSelectDm,
   initialTab = "online",
 }: Props) {
-  const { relationships } = useChatStore(
+  const { relationships, onlineUsers } = useChatStore(
     useShallow((s) => ({
       relationships: s.relationships,
+      onlineUsers: s.onlineUsers,
     })),
   );
+  const presenceOf = (user: Relationship["user"]) =>
+    livePresenceStatus(user.status, onlineUsers.has(user.id));
   const { loadRelationships, openDm, setProfileUser } = useChatActions();
   const { menu, openMenu, closeMenu, shouldRender, isClosing } =
     useContextMenu();
@@ -402,7 +405,8 @@ export default function FriendsView({
   );
 
   const filteredFriends = relationships.filter((f) => {
-    if (tab === "online") return f.type === 0 && f.user.status === "online";
+    if (tab === "online")
+      return f.type === 0 && presenceOf(f.user) === "online";
     if (tab === "all") return f.type === 0;
     if (tab === "pending") return f.type === 2 || f.type === 3;
     if (tab === "blocked") return f.type === 1;
@@ -518,7 +522,7 @@ export default function FriendsView({
           />
           {rel.type !== 1 && (
             <UserStatusDot
-              status={normalizeUserStatus(rel.user.status)}
+              status={presenceOf(rel.user)}
               ring="bg-ply-0"
               className="absolute -right-1 -bottom-1 size-3"
             />

@@ -18,6 +18,7 @@ describe("voice join grant messages", () => {
       granted: true,
       seq: 42,
       replaced: false,
+      moved: false,
     };
     expect(
       parseVoiceJoinGrantUpdate(
@@ -31,6 +32,23 @@ describe("voice join grant messages", () => {
         JSON.parse(serializeVoiceJoinGrantUpdate(replaced)),
       ),
     ).toEqual(replaced);
+    // ...or that a moderator moved it to another channel.
+    const moved = { ...replaced, moved: true };
+    expect(
+      parseVoiceJoinGrantUpdate(
+        JSON.parse(serializeVoiceJoinGrantUpdate(moved)),
+      ),
+    ).toEqual(moved);
+    // "moved" only rides on a replaced revocation.
+    expect(
+      parseVoiceJoinGrantUpdate({
+        participant_id: "participant-1",
+        subject: "user-1",
+        granted: false,
+        seq: 1,
+        moved: true,
+      }),
+    ).toMatchObject({ moved: false });
     // A grant is never "replaced"; an old sender omits the field.
     expect(
       parseVoiceJoinGrantUpdate({

@@ -56,10 +56,6 @@ const { instances, FakeSFU, micTrack, silenceTrack } = vi.hoisted(() => {
     readonly republishTrack = vi.fn((trackName: string) =>
       this.published.has(trackName),
     );
-    senderTrack: { id: string } | null = null;
-    readonly senderHasLiveTrack = vi.fn(
-      (track: { id: string }) => this.senderTrack === track,
-    );
     readonly setPublishedTrackEnabled = vi.fn(
       (trackName: string, enabled: boolean) => {
         const track = this.published.get(trackName);

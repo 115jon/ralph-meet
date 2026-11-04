@@ -1,5 +1,5 @@
 import type { TrackInfo } from "@/lib/types";
-import type { ScheduleTimer } from "@/lib/voice/heartbeat-manager";
+import { scheduleWithGlobalTimers, type ScheduleTimer } from "@ralph/realtime";
 import {
   type PartyTracksPullError,
   SFU_TRACK_NOT_FOUND,
@@ -134,11 +134,6 @@ const DEFAULT_LAYER_DOWNGRADE_DELAY_MS = 1_000;
 const OPT_IN_TRACK_PREFIX = "screen-video-";
 /** Until something renders a pulled camera, it is pulled at the low layer. */
 const INITIAL_VIDEO_LAYER: VideoLayerQuality = "low";
-
-const scheduleWithGlobalTimers: ScheduleTimer = (callback, ms) => {
-  const handle = setTimeout(callback, ms);
-  return () => clearTimeout(handle);
-};
 
 interface RemotePull {
   currentTrack?: MediaStreamTrack;

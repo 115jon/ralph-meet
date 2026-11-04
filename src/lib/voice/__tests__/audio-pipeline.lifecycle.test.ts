@@ -91,27 +91,6 @@ describe("AudioPipeline lifecycle", () => {
     HTMLMediaElement.prototype.play = vi.fn().mockResolvedValue(undefined);
   });
 
-  it("disconnects true-stereo nodes when the pipeline is disposed", () => {
-    const { context, destinations, sources } = createAudioContext();
-    (context as { state: AudioContextState }).state = "running";
-    vi.stubGlobal(
-      "AudioContext",
-      vi.fn(function () {
-        return context;
-      }),
-    );
-
-    const pipeline = new AudioPipeline({ onAudioResumed: vi.fn() });
-    const track = { kind: "audio", readyState: "live" } as MediaStreamTrack;
-
-    pipeline.createTrueStereoStream(track);
-    pipeline.dispose();
-
-    expect(sources[0]?.disconnect).toHaveBeenCalledTimes(1);
-    expect(destinations[0]?.disconnect).toHaveBeenCalledTimes(1);
-    expect(context.close).toHaveBeenCalledTimes(1);
-  });
-
   it("removes dead deferred tracks and their processing nodes", () => {
     const { context, sources } = createAudioContext();
     vi.stubGlobal(

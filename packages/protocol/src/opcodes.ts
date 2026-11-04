@@ -104,6 +104,13 @@ export enum GatewayOp {
   RefreshVoiceCredentials = 40,
   /** S→C: Media credentials before full room/profile Ready */
   MediaReady = 41,
+  /**
+   * S→C room: a moderator moved this voice session to another channel. The
+   * room then closes the socket with SessionReplaced; a client that knows
+   * this op switches to `channel_id` instead of stopping. Old clients ignore
+   * it and stop as on a device takeover.
+   */
+  VoiceMove = 42,
 
   // ── Voice Gateway specific (100+) ─────────────────────────────────
 
@@ -128,19 +135,16 @@ export enum GatewayOp {
 }
 
 /**
- * Opcodes of the retired browser SFU negotiation (14, 103-105, 107, 108).
- * Old builds may still send them; the voice gateway answers each with
- * "Browser SFU negotiation is unsupported" instead of "Unknown opcode".
- */
-export const RETIRED_BROWSER_SFU_OPS: ReadonlySet<number> = new Set([
-  14, 103, 104, 105, 107, 108,
-]);
-
-/**
  * The heartbeat exactly as clients send it: no `d`, no extra fields, no
  * whitespace. Keep it byte-stable; heartbeats are never schema-decoded.
  */
 export const HEARTBEAT_FRAME = '{"op":3}';
+
+/**
+ * Close reason (with SessionReplaced) when a moderator moved the session to
+ * another channel, on both call sockets. Tells a move from a device takeover.
+ */
+export const VOICE_MOVED_CLOSE_REASON = "Moved to another voice channel";
 
 /**
  * Codes carried in `Error` frames (`d.code`) and, for some, as WebSocket close

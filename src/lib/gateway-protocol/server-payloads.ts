@@ -9,16 +9,12 @@
 // is required only when the client reads it without a fallback. Nested domain
 // objects (VoiceState, TrackInfo, IceServer, spatial audio state, Dispatch
 // data) are checked only to be objects; their shape is the server's to keep.
-// Extra keys are never rejected, and the client receives the original object,
-// except that every VoiceState is normalized to `user_id` (a pre-rename server
-// sends only `clerk_user_id`; see user-id.ts in @ralph/protocol).
+// Extra keys are never rejected, and the client receives the original object.
 
 import {
   ErrorPayload,
   GatewayOp,
   HelloPayload,
-  normalizeUserIdField,
-  normalizeUserIdFields,
   type PayloadRules,
 } from "@ralph/protocol";
 import { Schema } from "effect";
@@ -67,18 +63,6 @@ const NullableString = Schema.NullOr(Schema.String);
 
 // ── Main gateway (MeetingRoom) ─────────────────────────────────────────────
 
-// TODO(user-id-rename phase 2): the `normalize` steps below (and the
-// `clerk_user_id` fallback they apply) go; see docs/user-id-rename.md.
-
-/** Ready and Resumed: the roster, with each user id under `user_id`. */
-function normalizeParticipantUserIds<
-  T extends { readonly participants?: VoiceState[] },
->(d: T): T {
-  return d.participants === undefined
-    ? d
-    : { ...d, participants: normalizeUserIdFields(d.participants) };
-}
-
 const MediaReadyPayload = Schema.Struct({
   participant_id: Schema.String,
   ice_servers: IceServers,
@@ -118,13 +102,6 @@ const VoiceStateUpdatePayload = Schema.Union([
   }),
 ]);
 
-/** VoiceStateUpdate: the participant's user id under `user_id`. */
-function normalizeVoiceStateUpdateUserId<
-  T extends { readonly participant: object },
->(d: T): T {
-  return { ...d, participant: normalizeUserIdField(d.participant) };
-}
-
 const ProfileUpdatePayload = Schema.Struct({
   participant_id: Schema.String,
   name: Schema.String,
@@ -132,6 +109,17 @@ const ProfileUpdatePayload = Schema.Struct({
   display_name: Schema.optional(NullableString),
   avatar_url: Schema.optional(NullableString),
   avatar_display: Schema.optional(NullableString),
+});
+
+/** VoiceMove: where a moderator moved this session, and how to get in. */
+const VoiceMovePayload = Schema.Struct({
+  channel_id: Schema.String,
+  server_id: Schema.String,
+  channel_name: Schema.optional(NullableString),
+  mover_name: Schema.optional(NullableString),
+  /** Signed for this user and channel; stands in for CONNECT there. */
+  grant: Schema.optional(Schema.String),
+  grant_expires_at: Schema.optional(Schema.Number),
 });
 
 /** Server opcodes RoomGateway handles (MeetingRoom, room or global socket). */
@@ -145,23 +133,24 @@ export const roomGatewayServerRules = {
   [GatewayOp.Ready]: {
     schema: ReadyPayload,
     invalid: "Invalid Ready",
-    normalize: normalizeParticipantUserIds,
   },
   [GatewayOp.Resumed]: {
     schema: ResumedPayload,
     invalid: "Invalid Resumed",
-    normalize: normalizeParticipantUserIds,
   },
   [GatewayOp.VoiceStateUpdate]: {
     schema: VoiceStateUpdatePayload,
     invalid: "Invalid VoiceStateUpdate",
-    normalize: normalizeVoiceStateUpdateUserId,
   },
   [GatewayOp.ProfileUpdate]: {
     schema: ProfileUpdatePayload,
     invalid: "Invalid ProfileUpdate",
   },
   [GatewayOp.Error]: { schema: ErrorPayload, invalid: "Invalid Error" },
+  [GatewayOp.VoiceMove]: {
+    schema: VoiceMovePayload,
+    invalid: "Invalid VoiceMove",
+  },
 } as const satisfies PayloadRules;
 
 // ── Voice gateway (VoiceRoom) ──────────────────────────────────────────────
@@ -268,6 +257,7 @@ type ReadyPayload = typeof ReadyPayload.Type;
 type ResumedPayload = typeof ResumedPayload.Type;
 type VoiceStateUpdatePayload = typeof VoiceStateUpdatePayload.Type;
 type ProfileUpdatePayload = typeof ProfileUpdatePayload.Type;
+export type VoiceMovePayload = typeof VoiceMovePayload.Type;
 type VoiceReadyPayload = typeof VoiceReadyPayload.Type;
 export type SessionDescriptionPayload = typeof SessionDescriptionPayload.Type;
 export type NegotiationDonePayload = typeof NegotiationDonePayload.Type;

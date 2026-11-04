@@ -15,7 +15,6 @@
 import { Schema } from "effect";
 import { GatewayOp } from "./opcodes";
 import type { PayloadRules } from "./codec";
-import { normalizeVoiceDispatchUserIds } from "./user-id";
 
 // ── Both gateways ──────────────────────────────────────────────────────────
 
@@ -38,11 +37,7 @@ export const ErrorPayload = Schema.Struct({
 
 // ── Main gateway (MeetingRoom): the chat socket ───────────────────────────
 
-/**
- * The event payload is routed by `event` in the chat store, not checked here.
- * Voice channel members are normalized to `user_id` (see user-id.ts).
- * TODO(user-id-rename phase 2): the `normalize` step goes.
- */
+/** The event payload is routed by `event` in the chat store, not checked here. */
 const DispatchPayload = Schema.Struct({
   event: Schema.String,
   data: Schema.optional(Schema.Unknown),
@@ -68,7 +63,6 @@ export const chatGatewayServerRules = {
   [GatewayOp.Dispatch]: {
     schema: DispatchPayload,
     invalid: "Invalid Dispatch",
-    normalize: normalizeVoiceDispatchUserIds,
   },
 } as const satisfies PayloadRules;
 

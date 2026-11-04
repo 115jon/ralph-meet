@@ -15,7 +15,7 @@ import {
   HEARTBEAT_FRAME,
   mainGatewayClientRules,
 } from "../../src/lib/gateway-protocol";
-import { MeetingRoom } from "../meeting-room";
+import type { IceServer } from "../meeting-room/turn-credentials";
 
 async function createAdmissionHeaders(
   roomName: string,
@@ -360,6 +360,36 @@ async function hasMessageWithOpcode(
 }
 
 describe("MeetingRoom lifecycle", () => {
+  // The DM list and friends list are only right if the client knows who is
+  // connected before it opens any channel (ChannelSubscribe also sends one).
+  it("sends the presence list on identify, before any channel subscribe", async () => {
+    const roomName = crypto.randomUUID();
+    const present = await openGlobalSocket(roomName, "present-user");
+    await identifyMeetingSocket(present, { name: "Present" });
+
+    const joining = await openGlobalSocket(roomName, "joining-user");
+    const presenceList = nextDispatchEvent(joining, "PRESENCE_LIST");
+    await identifyMeetingSocket(joining, { name: "Joining" });
+
+    const data = (
+      (await presenceList).d as {
+        data: {
+          user_ids: string[];
+          users: Array<{ user_id: string; status: string }>;
+        };
+      }
+    ).data;
+    expect(data.user_ids).toEqual(
+      expect.arrayContaining(["present-user", "joining-user"]),
+    );
+    expect(data.users).toContainEqual(
+      expect.objectContaining({ user_id: "present-user", status: "online" }),
+    );
+
+    present.close(1000, "test complete");
+    joining.close(1000, "test complete");
+  });
+
   it("hides a standby identify until the session is promoted", async () => {
     const roomName = crypto.randomUUID();
     const seated = await openMeetingSocket(roomName, "seated-user");
@@ -496,7 +526,6 @@ describe("MeetingRoom lifecycle", () => {
       participant: {
         id: senderReady.participant_id,
         user_id: "profile-sender",
-        clerk_user_id: "profile-sender",
         platform: "web",
         stream_preview_url: null,
         self_mute: false,
@@ -517,7 +546,6 @@ describe("MeetingRoom lifecycle", () => {
       participant: {
         id: senderReady.participant_id,
         user_id: "profile-sender",
-        clerk_user_id: "profile-sender",
         name: "Sender Name",
         username: "sender-user",
         display_name: "Sender Display",
@@ -607,7 +635,6 @@ describe("MeetingRoom lifecycle", () => {
       participant: {
         id: senderReady.participant_id,
         user_id: "replay-sender",
-        clerk_user_id: "replay-sender",
         platform: "web",
         stream_preview_url: null,
         self_mute: false,
@@ -628,7 +655,6 @@ describe("MeetingRoom lifecycle", () => {
       participant: {
         id: senderReady.participant_id,
         user_id: "replay-sender",
-        clerk_user_id: "replay-sender",
         name: "Replay Sender",
         username: "replay-sender",
         display_name: "Replay Display",
@@ -1999,13 +2025,12 @@ describe("MeetingRoom lifecycle", () => {
     const socket = await openMeetingSocket(roomName);
     const ready = nextMessageWithOpcode(socket, 2);
 
-    // Pre-rename clients still send clerk_user_id in Identify. The room must
-    // accept the frame and take the user from the ticket, not from either key.
+    // The room must accept the frame and take the user from the ticket, not
+    // from the payload.
     socket.send(
       JSON.stringify({
         op: 0,
         d: {
-          clerk_user_id: "forged-user",
           user_id: "forged-user",
           name: "Forged Name",
         },
@@ -2272,7 +2297,10 @@ describe("MeetingRoom lifecycle", () => {
         {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ participant_id: participantId }),
+          body: JSON.stringify({
+            participant_id: participantId,
+            user_id: "user-test",
+          }),
         },
       );
       await expect(sessionCheck.json()).resolves.toEqual({
@@ -2432,13 +2460,11 @@ describe("MeetingRoom lifecycle", () => {
         d: { channel_id: channelId, self_mute: true },
       }),
     );
-    // Members carry user_id and, for pre-rename clients, clerk_user_id too.
     expect(
       ((await initialJoin).d as { data: { members: unknown[] } }).data.members,
     ).toEqual([
       expect.objectContaining({
         user_id: "user-test",
-        clerk_user_id: "user-test",
       }),
     ]);
 
@@ -3759,209 +3785,6 @@ describe("MeetingRoom gateway protocol edge", () => {
   });
 });
 
-describe("MeetingRoom user_id rename compatibility", () => {
-  it("sends VoiceState with user_id and the pre-rename clerk_user_id", async () => {
-    const roomName = crypto.randomUUID();
-    const first = await openMeetingSocket(roomName, "first-user");
-    await identifyMeetingSocket(first, { name: "First" });
-    const second = await openMeetingSocket(roomName, "second-user");
-    const joined = nextMessageWithOpcodeMatching(
-      first,
-      15,
-      (message) =>
-        (message.d as { participant?: { user_id?: string } }).participant
-          ?.user_id === "second-user",
-    );
-    const ready = await identifyMeetingSocket(second, { name: "Second" });
-
-    expect(ready.participants).toContainEqual(
-      expect.objectContaining({
-        user_id: "first-user",
-        clerk_user_id: "first-user",
-      }),
-    );
-    expect((await joined).d).toMatchObject({
-      action: "join",
-      participant: { user_id: "second-user", clerk_user_id: "second-user" },
-    });
-
-    first.close();
-    second.close();
-  });
-
-  it("restores pre-rename state as user_id and stores both names for a rollback", async () => {
-    const roomName = crypto.randomUUID();
-    const socket = await openMeetingSocket(roomName, "live-user");
-    await identifyMeetingSocket(socket, { name: "Live" });
-    const now = Date.now();
-    // Attachments persist voice_channel_id, and a member survives a restart
-    // only while a session of its user is in that channel.
-    const legacyAttachment = (id: string, userId: string) => ({
-      id,
-      name: userId,
-      clerk_user_id: userId,
-      voice_channel_id: "vc-legacy",
-      self_mute: true,
-      self_deaf: false,
-      self_stream: false,
-      self_video: false,
-      suppress: false,
-      tracks: [],
-      seq: 0,
-      subscribed_channels: [],
-      subscribed_servers: [],
-    });
-    const legacyMember = (userId: string) => ({
-      clerk_user_id: userId,
-      name: userId,
-      self_mute: true,
-      self_deaf: false,
-      self_video: false,
-      self_stream: false,
-      connected: true,
-    });
-
-    await runInDurableObject(
-      meetingRoom(roomName),
-      async (_instance, state) => {
-        // Rewrite what this room stored in the shape written before the rename.
-        const [ws] = state.getWebSockets();
-        const { user_id: liveUserId, ...attachment } =
-          ws.deserializeAttachment() as Record<string, unknown>;
-        expect(liveUserId).toBe("live-user");
-        ws.serializeAttachment({
-          ...attachment,
-          clerk_user_id: liveUserId,
-          voice_channel_id: "vc-legacy",
-        });
-        await state.storage.put({
-          resumableSessions: {
-            "snapshot-session": {
-              attachment: legacyAttachment("snapshot-session", "snapshot-user"),
-              replay: [],
-              persist_writes: 1,
-            },
-            "bare-session": {
-              ...legacyAttachment("bare-session", "bare-user"),
-              replay_buffer: [],
-            },
-          },
-          resumableSessionExpiry: {
-            "snapshot-session": now,
-            "bare-session": now,
-          },
-          "vc:members:vc-legacy": [
-            legacyMember("live-user"),
-            legacyMember("snapshot-user"),
-          ],
-        });
-
-        // A restart (deploy or hibernation wake) reads it all back.
-        // The test env's bindings type is wider than the room's Env.
-        const restarted = new MeetingRoom(
-          state as unknown as ConstructorParameters<typeof MeetingRoom>[0],
-          env as unknown as ConstructorParameters<typeof MeetingRoom>[1],
-        ) as unknown as {
-          sessions: Map<WebSocket, Record<string, unknown>>;
-          resumableSessions: Map<string, Record<string, unknown>>;
-          voiceChannelMembers: Map<
-            string,
-            Map<string, Record<string, unknown>>
-          >;
-          persist(ws: WebSocket, data: Record<string, unknown>): void;
-          persistVoiceChannelMembers(): void;
-          persistResumableSessions(): void;
-          flushDirtyStorage(): void;
-        };
-        await vi.waitFor(() =>
-          expect(restarted.voiceChannelMembers.get("vc-legacy")?.size).toBe(2),
-        );
-
-        const session = restarted.sessions.get(ws);
-        expect(session).toMatchObject({
-          id: attachment.id,
-          user_id: "live-user",
-        });
-        expect(session).not.toHaveProperty("clerk_user_id");
-        for (const [id, userId] of [
-          ["snapshot-session", "snapshot-user"],
-          ["bare-session", "bare-user"],
-        ]) {
-          const resumable = restarted.resumableSessions.get(id);
-          expect(resumable).toMatchObject({ id, user_id: userId });
-          expect(resumable).not.toHaveProperty("clerk_user_id");
-          expect(resumable).not.toHaveProperty("replay_buffer");
-        }
-        const members = restarted.voiceChannelMembers.get("vc-legacy")!;
-        expect([...members.keys()].sort()).toEqual([
-          "live-user",
-          "snapshot-user",
-        ]);
-        for (const member of members.values()) {
-          expect(member).not.toHaveProperty("clerk_user_id");
-        }
-
-        // Writes carry both names, so the previous Worker version (which
-        // reads only clerk_user_id) still finds every user after a rollback.
-        restarted.persist(ws, session!);
-        restarted.persistVoiceChannelMembers();
-        restarted.persistResumableSessions();
-        restarted.flushDirtyStorage();
-        let stored = new Map<string, unknown>();
-        await vi.waitFor(async () => {
-          stored = await state.storage.get([
-            "vc:members:vc-legacy",
-            "resumableSessions",
-          ]);
-          expect(stored.size).toBe(2);
-        });
-
-        // The previous version's reads, field for field.
-        const preRenameAttachment = ws.deserializeAttachment() as {
-          id?: string;
-          clerk_user_id?: string;
-        };
-        expect(preRenameAttachment.clerk_user_id).toBe("live-user");
-        const preRenameMembers = new Map<string, unknown>();
-        for (const m of stored.get("vc:members:vc-legacy") as Array<{
-          clerk_user_id: string;
-        }>) {
-          preRenameMembers.set(m.clerk_user_id, m);
-        }
-        expect([...preRenameMembers.keys()].sort()).toEqual([
-          "live-user",
-          "snapshot-user",
-        ]);
-        const preRenameSnapshots = stored.get("resumableSessions") as Record<
-          string,
-          { attachment: { clerk_user_id?: string; user_id?: string } }
-        >;
-        for (const [id, userId] of [
-          ["snapshot-session", "snapshot-user"],
-          ["bare-session", "bare-user"],
-        ]) {
-          expect(preRenameSnapshots[id]?.attachment).toMatchObject({
-            clerk_user_id: userId,
-            user_id: userId,
-          });
-        }
-        // Both names, the same value, everywhere.
-        expect(
-          (stored.get("vc:members:vc-legacy") as unknown[]).every(
-            (member) =>
-              (member as { user_id?: string }).user_id ===
-              (member as { clerk_user_id?: string }).clerk_user_id,
-          ),
-        ).toBe(true);
-        // What the room keeps in memory has only user_id.
-        expect(restarted.sessions.get(ws)).not.toHaveProperty("clerk_user_id");
-      },
-    );
-
-    socket.close();
-  });
-});
-
 /** Resolves with the close code the client socket receives from the room. */
 function closeOf(socket: WebSocket) {
   return new Promise<{ code: number; reason: string }>((resolve) => {
@@ -4195,6 +4018,84 @@ describe("MeetingRoom one voice session per user", () => {
     standby.close();
   });
 
+  it("drops an Identify whose socket closed before it finished", async () => {
+    const roomName = crypto.randomUUID();
+    const userId = "closed-mid-identify-user";
+    const room = meetingRoom(roomName);
+    // Hold the first Identify's TURN step open (plain flags: a promise made
+    // here cannot be awaited inside the room).
+    const turn = { calls: 0, released: false };
+    await runInDurableObject(room, (instance) => {
+      const live = instance as unknown as {
+        generateTurnCredentials(): Promise<IceServer[]>;
+      };
+      const generate = live.generateTurnCredentials.bind(live);
+      live.generateTurnCredentials = async () => {
+        turn.calls += 1;
+        if (turn.calls === 1) {
+          while (!turn.released) {
+            await new Promise((resolve) => setTimeout(resolve, 5));
+          }
+        }
+        return generate();
+      };
+    });
+
+    const stale = await openMeetingSocket(roomName, userId);
+    stale.send(JSON.stringify({ op: 0, d: { name: "Old tab" } }));
+    await vi.waitFor(() => {
+      expect(turn.calls).toBe(1);
+    });
+    const staleClosed = closeOf(stale);
+    stale.close(1000, "tab closed");
+    await staleClosed;
+
+    const current = await openMeetingSocket(roomName, userId);
+    const currentMessages: Array<{ op: number; d: unknown }> = [];
+    current.addEventListener("message", (event) => {
+      currentMessages.push(JSON.parse(event.data as string));
+    });
+    let currentClosed = false;
+    const currentClose = closeOf(current).then((close) => {
+      currentClosed = true;
+      return close;
+    });
+    const currentReady = await identifyMeetingSocket(current, {
+      name: "New tab",
+    });
+
+    turn.released = true;
+    await vi.waitFor(async () => {
+      const identifying = await runInDurableObject(
+        room,
+        (instance) =>
+          (
+            instance as unknown as {
+              identifyingVoiceJoins: Map<string, string>;
+            }
+          ).identifyingVoiceJoins.size,
+      );
+      expect(identifying).toBe(0);
+    });
+    // A replaced socket is closed and never acks.
+    await Promise.race([settled(current), currentClose]);
+
+    expect(currentMessages.filter((message) => message.op === 18)).toEqual([]);
+    expect(currentClosed).toBe(false);
+    const sessionIds = await runInDurableObject(room, (instance) =>
+      [
+        ...(
+          instance as unknown as {
+            sessions: Map<WebSocket, { id: string }>;
+          }
+        ).sessions.values(),
+      ].map((session) => session.id),
+    );
+    expect(sessionIds).toEqual([currentReady.participant_id]);
+
+    current.close();
+  });
+
   it("never replaces a different user's session", async () => {
     const roomName = crypto.randomUUID();
     const first = await openMeetingSocket(roomName, "peer-one");
@@ -4308,6 +4209,66 @@ describe("MeetingRoom voice-channel membership across one user's sessions", () =
     );
     return { roomName, channelId, first, firstReady, second, secondReady };
   }
+
+  it("keeps the current mute and deafen state on a re-sent join without them", async () => {
+    const userId = "rejoin-state-user";
+    const roomName = crypto.randomUUID();
+    const channelId = await seedDmVoiceChannel([userId]);
+    const socket = await openGlobalSocket(roomName, userId);
+    const ready = await identifyMeetingSocket(socket);
+    await joinVoiceChannel(roomName, socket, ready.participant_id, channelId);
+    const voiceState = () =>
+      runInDurableObject(meetingRoom(roomName), (instance) => {
+        const live = instance as unknown as {
+          voiceChannelMembers: Map<
+            string,
+            Map<string, { self_mute?: boolean; self_deaf?: boolean }>
+          >;
+          sessions: Map<
+            unknown,
+            { id: string; self_mute?: boolean; self_deaf?: boolean }
+          >;
+        };
+        const member = live.voiceChannelMembers.get(channelId)?.get(userId);
+        const session = [...live.sessions.values()].find(
+          (entry) => entry.id === ready.participant_id,
+        );
+        return {
+          member: {
+            self_mute: member?.self_mute,
+            self_deaf: member?.self_deaf,
+          },
+          session: {
+            self_mute: session?.self_mute,
+            self_deaf: session?.self_deaf,
+          },
+        };
+      });
+
+    socket.send(
+      JSON.stringify({ op: 15, d: { self_mute: false, self_deaf: true } }),
+    );
+    await settled(socket);
+    // The periodic re-send names only the channel.
+    socket.send(JSON.stringify({ op: 33, d: { channel_id: channelId } }));
+    await settled(socket);
+    expect(await voiceState()).toEqual({
+      member: { self_mute: false, self_deaf: true },
+      session: { self_mute: false, self_deaf: true },
+    });
+
+    // A join that names the state still sets it.
+    socket.send(
+      JSON.stringify({ op: 33, d: { channel_id: channelId, self_mute: true } }),
+    );
+    await settled(socket);
+    expect(await voiceState()).toEqual({
+      member: { self_mute: true, self_deaf: true },
+      session: { self_mute: true, self_deaf: true },
+    });
+
+    socket.close();
+  });
 
   it("keeps the member until the user's last session leaves the channel", async () => {
     const userId = "multi-leave-user";

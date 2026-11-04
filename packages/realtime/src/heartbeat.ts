@@ -20,7 +20,8 @@ export interface HeartbeatCallbacks {
 /** Runs `callback` once after `ms`; returns a function that cancels it. */
 export type ScheduleTimer = (callback: () => void, ms: number) => () => void;
 
-const scheduleWithGlobalTimers: ScheduleTimer = (callback, ms) => {
+/** ScheduleTimer over the global setTimeout/clearTimeout. */
+export const scheduleWithGlobalTimers: ScheduleTimer = (callback, ms) => {
   const handle = setTimeout(callback, ms);
   return () => clearTimeout(handle);
 };
