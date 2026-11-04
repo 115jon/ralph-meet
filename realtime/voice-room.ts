@@ -60,6 +60,7 @@ import {
   LEGACY_CLERK_USER_ID_COMPAT,
   parseGatewayFrame,
   RETIRED_BROWSER_SFU_OPS,
+  VOICE_MOVED_CLOSE_REASON,
   type VoiceClientPayload,
 } from "../src/lib/gateway-protocol";
 import {
@@ -536,6 +537,7 @@ export class VoiceRoom extends DurableObject<Env, unknown> {
           await this.disconnectParticipantImmediately(
             update.participantId,
             update.replaced === true,
+            update.moved === true,
           );
         }
       }
@@ -1735,28 +1737,26 @@ export class VoiceRoom extends DurableObject<Env, unknown> {
   private async disconnectParticipantImmediately(
     participantId: string,
     replaced = false,
+    moved = false,
   ): Promise<boolean> {
     const ws = this.getWsByParticipant(participantId);
     if (ws) {
+      // A moderator's move says so in its reason, so the client waits for
+      // the room's VoiceMove instead of treating it as a device takeover.
+      const reason = moved
+        ? VOICE_MOVED_CLOSE_REASON
+        : VOICE_SESSION_REPLACED_REASON;
       if (replaced) {
-        // The user's voice moved to another device: tell this one to stop
-        // (no reconnect) before its tracks go.
+        // The user's voice moved to another device or channel: tell this one
+        // to stop (no reconnect) before its tracks go.
         this.sendTo(ws, {
           op: Op.Error,
-          d: {
-            code: CloseCode.SessionReplaced,
-            message: VOICE_SESSION_REPLACED_REASON,
-          },
+          d: { code: CloseCode.SessionReplaced, message: reason },
         });
       }
       await this.handleLeave(
         ws,
-        replaced
-          ? {
-              code: CloseCode.SessionReplaced,
-              reason: VOICE_SESSION_REPLACED_REASON,
-            }
-          : true,
+        replaced ? { code: CloseCode.SessionReplaced, reason } : true,
       );
       return true;
     }
