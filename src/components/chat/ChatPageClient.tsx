@@ -38,6 +38,7 @@ import { cn } from "@/lib/utils";
 import { prewarmAudioContext } from "@/lib/voice/audio-pipeline";
 import { useOccupiedVoiceStandby } from "@/lib/voice/voice-standby";
 import { useFollowVoiceMove } from "./useFollowVoiceMove";
+import { useJoinVoiceAfterLeave } from "./useJoinVoiceAfterLeave";
 import { useChatActions, useChatStore } from "@/stores/chat-store";
 import { useCallStore } from "@/stores/useCallStore";
 import { useVoiceSettingsStore } from "@/stores/useVoiceSettingsStore";
@@ -489,7 +490,8 @@ export default function ChatPage() {
         type: "voice";
         channelId: string;
         channelName: string;
-        doJoin: () => void;
+        /** Opens the channel now (a sidebar click). */
+        select?: () => void;
       }
     | { type: "call"; action: () => void };
   const [pendingSwitch, setPendingSwitch] = useState<PendingSwitch | null>(
@@ -513,6 +515,31 @@ export default function ChatPage() {
     }
   }, [callActive, localStreamState, voiceState.joined]);
 
+  const joinVoiceChannel = useCallback(
+    (channelId: string) =>
+      handleSelectChannel(channelId, { forceVoiceJoin: true }),
+    [handleSelectChannel],
+  );
+  const joinVoiceAfterLeave = useJoinVoiceAfterLeave({
+    activeChannelId,
+    voiceJoined: voiceState.joined,
+    joinChannel: joinVoiceChannel,
+  });
+
+  /**
+   * Leaves the current session for voice channel `channelId`. `select` opens
+   * the channel right away; the join waits until the old session has left,
+   * since that leave clears the auto-join flag a select sets.
+   */
+  const switchVoiceChannel = useCallback(
+    (channelId: string, select?: () => void) => {
+      leaveCurrentVoiceSession();
+      select?.();
+      joinVoiceAfterLeave(channelId);
+    },
+    [joinVoiceAfterLeave, leaveCurrentVoiceSession],
+  );
+
   /**
    * Wraps `handleSelectChannel` — if the target is a voice channel and we are
    * already in a voice session, shows a confirmation modal first.
@@ -530,16 +557,16 @@ export default function ChatPage() {
           return;
         }
 
+        const select = () => handleSelectChannel(channelId, options);
         if (shouldShowVoiceSwitchModal()) {
           setPendingSwitch({
             type: "voice",
             channelId,
             channelName: targetChannel?.name ?? "Voice",
-            doJoin: () => handleSelectChannel(channelId, options),
+            select,
           });
         } else {
-          leaveCurrentVoiceSession();
-          handleSelectChannel(channelId, options);
+          switchVoiceChannel(channelId, select);
         }
         return;
       }
@@ -551,7 +578,7 @@ export default function ChatPage() {
       isInVoiceSession,
       voiceState.channelId,
       handleSelectChannel,
-      leaveCurrentVoiceSession,
+      switchVoiceChannel,
     ],
   );
 
@@ -586,18 +613,13 @@ export default function ChatPage() {
       dispatch({ type: "SWITCH_SERVER", serverId, channelId }),
     [dispatch],
   );
-  const joinChannelForMove = useCallback(
-    (channelId: string) =>
-      handleSelectChannel(channelId, { forceVoiceJoin: true }),
-    [handleSelectChannel],
-  );
   useFollowVoiceMove({
     activeServerId,
     channelIds,
     voiceJoined: voiceState.joined,
     disconnect: handleVoiceDisconnect,
     switchServer: switchServerForMove,
-    joinChannel: joinChannelForMove,
+    joinChannel: joinVoiceChannel,
   });
 
   const handleVoiceNavigate = useCallback(() => {
@@ -816,12 +838,11 @@ export default function ChatPage() {
     setPendingSwitch(null);
 
     if (ps.type === "voice") {
-      leaveCurrentVoiceSession();
-      ps.doJoin();
+      switchVoiceChannel(ps.channelId, ps.select);
     } else {
       ps.action();
     }
-  }, [leaveCurrentVoiceSession]);
+  }, [switchVoiceChannel]);
 
   const handleSwitchCancel = useCallback(() => {
     setPendingSwitch(null);
@@ -892,23 +913,21 @@ export default function ChatPage() {
     setPendingCallTarget(null);
   }, []);
 
-  const handleEphemeralVoiceBeforeJoin = useCallback(
-    (doJoin: () => void) => {
-      if (shouldShowVoiceSwitchModal() && activeChannelId) {
-        setPendingSwitch({
-          type: "voice",
-          channelId: activeChannelId,
-          channelName: channelDisplayName,
-          doJoin,
-        });
-        return;
-      }
-
-      leaveCurrentVoiceSession();
-      doJoin();
-    },
-    [activeChannelId, channelDisplayName, leaveCurrentVoiceSession],
-  );
+  // Join on a voice channel opened while another session runs. That view's
+  // own join would not survive: once the old session has left, the session
+  // view replaces it, so the join goes there.
+  const handleEphemeralVoiceBeforeJoin = useCallback(() => {
+    if (!activeChannelId) return;
+    if (shouldShowVoiceSwitchModal()) {
+      setPendingSwitch({
+        type: "voice",
+        channelId: activeChannelId,
+        channelName: channelDisplayName,
+      });
+      return;
+    }
+    switchVoiceChannel(activeChannelId);
+  }, [activeChannelId, channelDisplayName, switchVoiceChannel]);
 
   // Compute homepage badge: unread DMs + pending friend requests
   const unreadDms = useMemo(() => {
