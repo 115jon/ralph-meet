@@ -63,6 +63,12 @@ import { useDesktopSettingsStore } from "./useDesktopSettingsStore";
 
 const chatLog = clog("ChatGW");
 
+/** A DM call's voice room: both user ids, sorted, as the server builds it. */
+function dmCallRoomSlug(userId: string, peerId: string): string {
+  const [a, b] = [userId, peerId].sort();
+  return `dm-call-${a}-${b}`;
+}
+
 export interface ChatGatewayActions {
   initGateway: (userId: string | null | undefined) => void;
   disconnectGateway: () => void;
@@ -785,8 +791,16 @@ export function createChatGateway(
           return;
         }
 
-        const sortedIds = [currentUser?.id || "", caller_id].sort();
-        const voiceRoomId = `dm-call-${sortedIds[0]}-${sortedIds[1]}`;
+        // The store user can lag the identified gateway user; the slug must
+        // match the server's (socket-ticket getAuthorizedDmCallRoomSlug).
+        const myId = currentUser?.id || appUserId;
+        if (!myId) {
+          chatLog.warn("Ignoring CALL_RING before the user id is known", {
+            call_id,
+          });
+          break;
+        }
+        const voiceRoomId = dmCallRoomSlug(myId, caller_id);
 
         playRingStart();
         callState.setIncomingCall({
@@ -841,8 +855,14 @@ export function createChatGateway(
         const callState = useCallStore.getState();
         const currentUser = get().user;
 
-        const sortedIds = [currentUser?.id || "", callee_id].sort();
-        const voiceRoomId = `dm-call-${sortedIds[0]}-${sortedIds[1]}`;
+        const myId = currentUser?.id || appUserId;
+        if (!myId) {
+          chatLog.warn("Ignoring CALL_RINGING before the user id is known", {
+            call_id,
+          });
+          break;
+        }
+        const voiceRoomId = dmCallRoomSlug(myId, callee_id);
 
         callState.setOutgoingCall({
           callId: call_id,
