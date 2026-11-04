@@ -22,6 +22,7 @@ import { StreamLoadingIndicator } from "./StreamLoadingIndicator";
 import { GridItem, VoiceActions } from "./types";
 import { VideoPlayer } from "./VideoPlayer";
 import { StickerReactionsOverlay } from "./StickerReactionsOverlay";
+import { hasLiveVideoTrack } from "./media-stream-tracks";
 import { TileAvatar, TileNameplate } from "./TileParts";
 import {
   cardPropsEqual,
@@ -107,7 +108,8 @@ function ParticipantCardImpl({
   const displayName = tileDisplayName(item);
   const shouldShowWatchers =
     !isTray && streamWatchers.length > 0 && isEffectivelyWatchingStream;
-  const shouldRenderVideo = !!item.stream && !suppressVideo && !isPreviewHidden;
+  const hasVideo = hasLiveVideoTrack(item.stream);
+  const shouldRenderVideo = hasVideo && !suppressVideo && !isPreviewHidden;
   const shouldShowWatchPrompt =
     isScreen && !item.isLocal && !isEffectivelyWatchingStream;
   const shouldRenderThumbnailPoster =
@@ -118,7 +120,7 @@ function ParticipantCardImpl({
     !isPreviewHidden;
   const isLoadingStream =
     (isCamera || isScreen) &&
-    !item.stream &&
+    !hasVideo &&
     !shouldShowWatchPrompt &&
     !isPreviewHidden &&
     !shouldRenderThumbnailPoster;

@@ -28,6 +28,7 @@ import {
   tileAspectClass,
   type GridFit,
 } from "./grid-columns";
+import { hasLiveAudioTrack, hasLiveVideoTrack } from "./media-stream-tracks";
 import { TileAvatar } from "./TileParts";
 import {
   FOCUSED_AVATAR_SIZE,
@@ -47,13 +48,6 @@ function getFocusedItemLabel(item: GridItem | undefined) {
   if (item.type !== "screen") return item.name;
   if (item.isLocal) return "Your stream";
   return `${streamOwnerName(item)}'s Stream`;
-}
-
-function hasLiveAudioTrack(stream: MediaStream | null | undefined) {
-  return (
-    stream?.getAudioTracks?.().some((track) => track.readyState === "live") ??
-    false
-  );
 }
 
 /** Stage padding (p-4) on each side, subtracted before fitting tiles. */
@@ -328,13 +322,12 @@ function FocusedStage({
     isFocusedScreen && !isPreviewHidden
       ? streamThumbnails[focusedItem.userId]
       : null;
+  const hasVideo = hasLiveVideoTrack(focusedItem.stream);
   const isStreaming =
-    (isFocusedCamera || isFocusedScreen) &&
-    !!focusedItem.stream &&
-    !isPreviewHidden;
+    (isFocusedCamera || isFocusedScreen) && hasVideo && !isPreviewHidden;
   const isLoadingStream =
     (isFocusedCamera || isFocusedScreen) &&
-    !focusedItem.stream &&
+    !hasVideo &&
     !isPreviewHidden &&
     !focusedThumbnailPoster;
   const focusedLabel = getFocusedItemLabel(focusedItem);
