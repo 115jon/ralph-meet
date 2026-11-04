@@ -109,7 +109,6 @@ export class AudioPipeline {
   private masterGainNode: GainNode | null = null;
   private volumeLevels: Map<string, number> = new Map();
   private trackVolumeLevels: Map<string, number> = new Map();
-  private participantPans: Map<string, number> = new Map();
   private trackPans: Map<string, number> = new Map();
   private masterVolumeLevel = 1;
   private outputDeviceId = "default";
@@ -123,13 +122,6 @@ export class AudioPipeline {
   /** Muted <audio> elements that activate Chrome's remote track media pipeline */
   private activatorElements: Map<string, Map<string, HTMLAudioElement>> =
     new Map();
-  private stereoPipelines = new Map<
-    MediaStream,
-    {
-      source: MediaStreamAudioSourceNode;
-      destination: MediaStreamAudioDestinationNode;
-    }
-  >();
   /**
    * Tracks that were connected while the AudioContext was suspended.
    * Firefox silently drops audio from createMediaStreamSource() on a suspended
@@ -270,28 +262,6 @@ export class AudioPipeline {
     return this.volumeContext;
   }
 
-  setParticipantPan(participantId: string, pan: number): void {
-    const clamped = Math.max(-1, Math.min(pan, 1));
-    this.participantPans.set(participantId, clamped);
-    if (clamped !== 0) {
-      const directTrackNames = [
-        ...(this.directAudioElements.get(participantId)?.keys() ?? []),
-      ];
-      for (const trackName of directTrackNames) {
-        this.promoteDirectTrackWhenRunning(participantId, trackName);
-      }
-    }
-    const panners = this.spatialPanners.get(participantId);
-    if (!panners || !this.volumeContext) return;
-    panners.forEach((node) => {
-      node.pan.setTargetAtTime(
-        clamped,
-        this.volumeContext?.currentTime || 0,
-        0.08,
-      );
-    });
-  }
-
   setTrackPan(participantId: string, trackName: string, pan: number): void {
     const clamped = Math.max(-1, Math.min(pan, 1));
     this.trackPans.set(`${participantId}::${trackName}`, clamped);
@@ -427,11 +397,7 @@ export class AudioPipeline {
   }
 
   private getStoredPan(participantId: string, trackName: string): number {
-    return (
-      this.trackPans.get(`${participantId}::${trackName}`) ??
-      this.participantPans.get(participantId) ??
-      0
-    );
+    return this.trackPans.get(`${participantId}::${trackName}`) ?? 0;
   }
 
   private needsWebAudio(participantId: string, trackName: string): boolean {
@@ -902,43 +868,6 @@ export class AudioPipeline {
     }
   }
 
-  /**
-   * Routes a local microphone track through the AudioContext without connecting it to the
-   * audible destination. This creates a "clean" MediaStream track that loses the internal
-   * "getUserMedia" tag, bypassing aggressive browser APM (Acoustic Processing) for high-fidelity audio.
-   */
-  createTrueStereoStream(track: MediaStreamTrack): MediaStream {
-    if (track.kind !== "audio") {
-      return new MediaStream([track]);
-    }
-
-    if (!this.volumeContext) {
-      this.volumeContext =
-        takePrewarmedAudioContext() ?? createPlaybackAudioContext();
-    }
-    const ctx = this.volumeContext;
-    ctx.resume().catch(() => {});
-
-    const sourceStream = new MediaStream([track]);
-    const source = ctx.createMediaStreamSource(sourceStream);
-    const destination = ctx.createMediaStreamDestination();
-
-    // Connect directly to the destination node (which produces a MediaStream, NOT the speakers)
-    source.connect(destination);
-
-    this.stereoPipelines.set(destination.stream, { source, destination });
-    return destination.stream;
-  }
-
-  /** Dispose one stream created by createTrueStereoStream. */
-  disposeTrueStereoStream(stream: MediaStream): void {
-    const pipeline = this.stereoPipelines.get(stream);
-    if (!pipeline) return;
-    pipeline.source.disconnect();
-    pipeline.destination.disconnect();
-    this.stereoPipelines.delete(stream);
-  }
-
   private startFirstAudibleProbe(
     ctx: AudioContext,
     preLimiter: DynamicsCompressorNode,
@@ -1077,11 +1006,6 @@ export class AudioPipeline {
     }
     this.firstAudibleReported = false;
     this.firstAudibleAttempts = 0;
-    this.stereoPipelines.forEach(({ source, destination }) => {
-      source.disconnect();
-      destination.disconnect();
-    });
-    this.stereoPipelines.clear();
     this.volumeGains.forEach((gains) => gains.forEach((g) => g.disconnect()));
     this.volumeGains.clear();
     this.spatialPanners.forEach((panners) =>
@@ -1094,7 +1018,6 @@ export class AudioPipeline {
     this.volumeSources.clear();
     this.volumeLevels.clear();
     this.trackVolumeLevels.clear();
-    this.participantPans.clear();
     this.trackPans.clear();
     this.activatorElements.forEach((acts) =>
       acts.forEach((a) => {

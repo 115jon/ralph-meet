@@ -312,13 +312,6 @@ export class RoomGateway extends BaseGateway<
     };
   }
 
-  public sendMuteUpdate(isMicOn: boolean, isCameraOn: boolean) {
-    this.send({
-      op: GatewayOp.VoiceStateUpdate,
-      d: { self_mute: !isMicOn, self_video: isCameraOn },
-    });
-  }
-
   public sendVoiceState(state: any) {
     this.send({
       op: GatewayOp.VoiceStateUpdate,

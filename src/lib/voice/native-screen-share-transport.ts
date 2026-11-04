@@ -83,7 +83,6 @@ export class NativeScreenShareTransport {
   private pendingState = false;
   private pendingNegotiation: PendingNegotiation | null = null;
   private previewLoopbackPC: RTCPeerConnection | null = null;
-  private previewLoopbackStream: MediaStream | null = null;
   private previewLoopbackUnlisten: (() => void) | null = null;
   private requestSequence = 0;
   private tracksOffered = false;
@@ -115,10 +114,6 @@ export class NativeScreenShareTransport {
 
   get active(): boolean {
     return this.activeState || this.pendingState;
-  }
-
-  get previewStream(): MediaStream | null {
-    return this.previewLoopbackStream;
   }
 
   async start(options: NativeScreenShareOptions): Promise<void> {
@@ -363,7 +358,6 @@ export class NativeScreenShareTransport {
         }
       }
       this.previewLoopbackPC = pc;
-      this.previewLoopbackStream = stream;
 
       try {
         const { listen } = await import("@tauri-apps/api/event");
@@ -390,7 +384,6 @@ export class NativeScreenShareTransport {
     this.previewLoopbackUnlisten = null;
     this.previewLoopbackPC?.close();
     this.previewLoopbackPC = null;
-    this.previewLoopbackStream = null;
     try {
       await (this.config.invoke ?? defaultInvoke)("stop_preview_loopback");
     } catch {

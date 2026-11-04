@@ -1136,13 +1136,6 @@ export class SFUClient extends TypedEventEmitter<SFUEventMap> {
     return this.partyTracksMedia.connectionState;
   }
 
-  public sendChatMessage(content: string): void {
-    this.roomGW.send({
-      op: GatewayOp.MessageCreate,
-      d: { channel_id: this.roomSlug, content, nonce: String(Math.random()) },
-    });
-  }
-
   public sendDemoChatMessage(payload: Record<string, unknown>): void {
     this.voiceGW.sendAppEvent({ type: "demo.chat.send", ...payload });
   }
@@ -1153,10 +1146,6 @@ export class SFUClient extends TypedEventEmitter<SFUEventMap> {
 
   public sendVoiceState(state: Record<string, unknown>): void {
     this.roomGW.sendVoiceState(state);
-  }
-
-  public sendMuteUpdate(isMicOn: boolean, isCameraOn: boolean): void {
-    this.roomGW.sendMuteUpdate(isMicOn, isCameraOn);
   }
 
   public sendSpeaking(speaking: number): void {
@@ -1175,24 +1164,12 @@ export class SFUClient extends TypedEventEmitter<SFUEventMap> {
     this.audio.setTrackVolume(participantId, trackName, volume);
   }
 
-  public setParticipantPan(participantId: string, pan: number): void {
-    this.audio.setParticipantPan(participantId, pan);
-  }
-
   public setTrackPan(
     participantId: string,
     trackName: string,
     pan: number,
   ): void {
     this.audio.setTrackPan(participantId, trackName, pan);
-  }
-
-  public applyVolumeToTrack(
-    participantId: string,
-    track: MediaStreamTrack,
-    trackName: string,
-  ): MediaStream {
-    return this.audio.applyVolumeToTrack(participantId, track, trackName);
   }
 
   public attachRemoteAudioTrack(
@@ -1308,12 +1285,6 @@ export class SFUClient extends TypedEventEmitter<SFUEventMap> {
 
   public getMicrophoneTrackName(): string | null {
     return this.participantId ? `cam-audio-${this.participantId}` : null;
-  }
-
-  public senderHasLiveTrack(track: MediaStreamTrack): boolean {
-    const pc = this.partyTracksPeerConnection;
-    if (!pc || track.readyState === "ended") return false;
-    return pc.getSenders().some((sender) => sender.track === track);
   }
 
   public async publishTracks(
@@ -1441,10 +1412,6 @@ export class SFUClient extends TypedEventEmitter<SFUEventMap> {
     return this.nativeScreenShare.stopPreview();
   }
 
-  public get previewLoopbackMediaStream(): MediaStream | null {
-    return this.nativeScreenShare.previewStream;
-  }
-
   public async updateSenderEncoding(
     trackName: string,
     encoding: Partial<RTCRtpEncodingParameters>,
@@ -1484,12 +1451,6 @@ export class SFUClient extends TypedEventEmitter<SFUEventMap> {
       participantId: this.participantId ?? "",
       trackNames,
     });
-  }
-
-  public createTrueStereoStream(stream: MediaStream): MediaStream {
-    const audioTrack = stream.getAudioTracks()[0];
-    if (!audioTrack) return stream;
-    return this.audio.createTrueStereoStream(audioTrack);
   }
 
   public getDebugData(): ReturnType<ConnectionStatsMonitor["getDebugData"]> {
