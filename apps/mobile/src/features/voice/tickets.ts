@@ -7,7 +7,7 @@ import {
   type GatewayTicket,
 } from "@/features/realtime/ticket";
 
-import type { IceServer } from "./protocol";
+import { type IceServer, toIceServers } from "./protocol";
 
 // The call sockets' tickets, as src/lib/voice/socket-ticket-client.ts and the
 // two web gateways request them. A "room" ticket also carries the media
@@ -81,7 +81,7 @@ export async function acquireRoomTicket(
       participantId: bootstrap.participant_id,
       voiceToken: bootstrap.voice_token,
       // Empty means "none": the transport falls back to public STUN.
-      iceServers: bootstrap.ice_servers,
+      iceServers: bootstrap.ice_servers && toIceServers(bootstrap.ice_servers),
     },
   };
 }

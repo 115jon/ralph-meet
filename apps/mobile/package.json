@@ -23,6 +23,8 @@
     "@lodev09/react-native-true-sheet": "^4.0.1",
     "@ralph/protocol": "workspace:*",
     "@ralph/realtime": "workspace:*",
+    "@ralph/voice": "workspace:*",
+    "@ralph/voice-media": "workspace:*",
     "effect": "^4.1.1",
     "expo": "58.0.22",
     "expo-asset": "~58.0.16",

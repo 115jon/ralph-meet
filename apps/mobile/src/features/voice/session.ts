@@ -1,24 +1,28 @@
+import type { GatewayOp, MainClientPayload } from "@ralph/protocol";
 import {
-  GatewayCloseCode,
-  GatewayOp,
-  type MainClientPayload,
-  type VoiceClientPayload,
-} from "@ralph/protocol";
+  PublicationReconciler,
+  RemoteReconnectGrace,
+  ScreenShare,
+  VoiceSession,
+  type ScreenCapture,
+  type ScreenShareEvent,
+  type TeardownSteps,
+  type VoiceEndReason,
+  type VoiceTimers,
+} from "@ralph/voice";
 
 import {
-  onGatewayReady,
   sendVoiceChannelJoin,
   sendVoiceChannelLeave,
-  sendVoiceStateUpdate,
 } from "@/features/realtime/gateway";
 import { ApiError } from "@/lib/api";
 
 import {
-  RoomSocket,
-  VoiceSocket,
-  type MediaCredentials,
-  type SocketGiveUp,
-} from "./gateways";
+  CallConnection,
+  type ConnectionEvents,
+  type RemoteTrackEvent,
+} from "./connection";
+import type { SocketGiveUp } from "./gateways";
 import {
   type CameraFacing,
   facingOf,
@@ -26,49 +30,37 @@ import {
   streamUrl,
   switchCamera,
 } from "./local-media";
-import { PartyTracksMediaManager } from "./media-manager";
 import {
   SPEAKING_MICROPHONE,
-  type RepublishRequest,
   type TrackInfo,
   type VoiceAppEvent,
   type VoiceState,
 } from "./protocol";
-import { isPullableVideo, RemoteVideo } from "./remote-video";
+import { isPullableVideo, isVideoAlias, RemoteVideo } from "./remote-video";
 import { startSpeakingDetector } from "./speaking";
 import { updateCall, type CallParticipant, type CallStatus } from "./store";
 import type { CallTarget } from "./tickets";
-import { PartyTracksTransport } from "./transport";
 
-// One voice call: the mobile counterpart of the web's SFUClient plus the parts
-// of useVoiceChannel a phone needs. Join, in the web's order:
+// One call, on the voice lifecycle every Yap client shares (@ralph/voice,
+// packages/voice/STATE_MACHINE.md):
 //
-// 1. Room socket ticket. Its media bootstrap (participant id, voice token,
-//    TURN) creates the PartyTracks session and publishes the microphone at
-//    once, and identifies the voice socket (opened in parallel) without
-//    waiting for the room. The push is announced on the voice socket as soon
-//    as the SFU accepts it (queued until VoiceReady).
-// 2. Room Identify → Ready: the roster, our voice state (mute/deafen), and our
-//    presence on the chat socket (VoiceChannelJoin), which puts us in every
-//    member's channel tree.
-// 3. VoiceReady: the room's tracks are pulled (after our publication is
-//    re-announced, so pulls queue behind the push on the shared session) and
-//    the speaking snapshot is applied. Speaking flags flow both ways from then.
+// - VoiceSession holds the phase (connecting, joined, reconnecting,
+//   leaving) and runs the one teardown, whichever way the call ends: a
+//   leave, a socket that gave up (replaced, auth failed, refused) or a
+//   channel that cannot be joined.
+// - PublicationReconciler is the only code that publishes, swaps or
+//   withdraws the microphone, camera and screen share; mute is its
+//   setEnabled. A new media session or a voice room that came back without
+//   our publications republishes them (connection reset).
+// - ScreenShare serializes starting and stopping a share (Android's
+//   MediaProjection capture) and Android's own Stop.
+// - RemoteReconnectGrace keeps a participant whose voice socket reconnects
+//   (VoiceRoom says ClientDisconnect first) for 3 s instead of dropping
+//   their audio; only the room socket decides who left.
 //
-// Audio is always pulled. Camera and screen video are pulled only while the
-// call screen watches (setWatchingVideo); ./remote-video keeps those offers
-// apart so starting and stopping video never touches an audio pull.
-//
-// Camera and screen are published like the web's publishTracks(stream, "cam")
-// and (stream, "screen"): more pushes on the same media manager and session as
-// the microphone, so they are announced the moment the SFU answers (queued
-// until VoiceReady), re-announced on VoiceReady, rebuilt with the media on a
-// new participant id, and republished on a listener's request like any
-// publication. Voice state carries them as self_video and self_stream.
-//
-// Leave says goodbye on both sockets, closes them and the peer connection,
-// stops the microphone, camera and screen, and leaves the channel on the
-// chat socket.
+// The sockets and the PartyTracks media session are CallConnection's.
+// Audio is always pulled; remote video only while the call screen watches
+// (./remote-video).
 
 const log = {
   info: (message: string, ...args: unknown[]) =>
@@ -77,36 +69,23 @@ const log = {
     console.warn(`[Voice] ${message}`, ...args),
 };
 
-/** The web's credential refresh cadence (voice token and TURN). */
-const CREDENTIAL_REFRESH_MS = 45 * 60 * 1000;
-/** Republishes of one track on listeners' request: at most one per this. */
-const REPUBLISH_REQUEST_INTERVAL_MS = 5_000;
-/** useVoiceChannel re-asserts its channel presence this often. */
-const PRESENCE_REASSERT_MS = 30_000;
-/**
- * publishTracks(stream, "cam"): the microphone is `cam-audio-<participant>`,
- * the camera `cam-video-<participant>`.
- */
-const MIC_PREFIX = "cam";
-/** publishTracks(stream, "screen"): `screen-video-<participant>`. */
-const SCREEN_PREFIX = "screen";
-
-/**
- * Sender limits for our video, set once a push is answered (and again on a
- * republish, which is a new sender). The web publishes one camera encoding
- * (no simulcast) and caps screens per quality preset; these suit a phone's
- * uplink.
- */
-const VIDEO_ENCODING = {
-  cam: { maxBitrate: 1_200_000, maxFramerate: 30 },
-  screen: { maxBitrate: 1_500_000, maxFramerate: 15 },
-} as const;
+const timers: VoiceTimers = {
+  setTimeout: (callback, ms) => setTimeout(callback, ms),
+  clearTimeout: (handle) =>
+    clearTimeout(handle as ReturnType<typeof setTimeout>),
+};
 
 const GIVE_UP_MESSAGE: Record<SocketGiveUp, string> = {
   replaced: "You joined this call somewhere else",
   "auth-failed": "Your session ended",
   "admission-rejected": "The call turned you away",
 };
+
+/** A phone shares the whole screen: one source, one quality. */
+type ScreenSource = "screen";
+interface PhoneScreenCapture extends ScreenCapture<MediaStreamTrack> {
+  readonly stream: MediaStream;
+}
 
 export interface SessionIdentity {
   readonly userId: string;
@@ -119,12 +98,17 @@ export interface SessionIdentity {
 /** A voice track's source: their microphone, or their shared screen's audio. */
 export type AudioSource = "voice" | "stream";
 
-/** What the voice room said no to (a soundboard event it did not accept). */
-const APP_EVENT_REJECTED = "Soundboard event was rejected";
-
 export interface SessionEnd {
   readonly reason: "left" | "failed";
   readonly message?: string;
+}
+
+/** How the app captures the screen (the call service owns its permission). */
+export interface ScreenCaptureSource {
+  /** Android's consent dialog, then the capture. Rejects when it cannot. */
+  capture(): Promise<MediaStream>;
+  /** Stops the capture's tracks and drops the service's mediaProjection type. */
+  release(stream: MediaStream): void;
 }
 
 export interface SessionOptions {
@@ -134,6 +118,8 @@ export interface SessionOptions {
   readonly microphone: MediaStream;
   readonly muted: boolean;
   readonly deafened: boolean;
+  /** A DM call: no channel presence of its own beyond the DM channel. */
+  readonly isCall: boolean;
   /** The microphone level (0..1) that counts as speaking, read live. */
   readonly speakingLevel: () => number;
   /**
@@ -141,10 +127,14 @@ export interface SessionOptions {
    * at, read whenever a track arrives and on refreshAudioGains().
    */
   readonly audioGain: (participantId: string, source: AudioSource) => number;
+  readonly screenCapture: ScreenCaptureSource;
+  /** A screen share could not start (declined, or the capture failed). */
+  readonly onScreenShareFailed: (error: unknown) => void;
   /** A voice-session app event (the soundboard), ours echoed back too. */
   readonly onAppEvent: (event: VoiceAppEvent) => void;
   /** The voice room refused an app event we sent. */
   readonly onAppEventRejected: () => void;
+  /** The call is over (the teardown ran); once. */
   readonly onEnd: (end: SessionEnd) => void;
 }
 
@@ -193,66 +183,58 @@ interface RemoteAudio {
   readonly source: AudioSource;
 }
 
-/** Audio publications, always pulled (video goes through RemoteVideo). */
-function pullable(tracks: readonly TrackInfo[]): TrackInfo[] {
-  return tracks.filter(
-    (track) => track.kind === "audio" && Boolean(track.sfu_track_name),
-  );
-}
-
-export class VoiceSession {
+export class CallSession {
   private readonly target: CallTarget;
   private readonly identity: SessionIdentity;
+  private readonly options: SessionOptions;
   private readonly microphone: MediaStream;
-  /** Our camera and screen captures while on; the session owns them. */
+  /** Our camera capture while on; the session owns it. */
   private camera: MediaStream | null = null;
   private cameraFacing: CameraFacing = "front";
-  private screen: MediaStream | null = null;
-  private readonly onEnd: (end: SessionEnd) => void;
-  private readonly audioGain: SessionOptions["audioGain"];
-  private readonly room: RoomSocket;
-  private readonly voice: VoiceSocket;
+  /** Whether our share is on for peers (ScreenShare started → ended). */
+  private sharing = false;
 
-  private transport: PartyTracksTransport | null = null;
-  private media: PartyTracksMediaManager | null = null;
-  private mediaParticipantId: string | null = null;
-  private participantId: string | null = null;
-  /** The room socket admitted `participantId` (MediaReady or Ready). */
-  private roomEstablished = false;
-  /** Our earlier participant ids this call: never pulled (their tracks linger). */
-  private readonly previousParticipantIds = new Set<string>();
-  private readonly deferredRemoteTracks = new Map<string, TrackInfo>();
+  private readonly voice = new VoiceSession<CallConnection>({
+    timers,
+    onStepError: (step, error) => log.warn(`Teardown step ${step}`, error),
+  });
+  private readonly connection: CallConnection;
+  private readonly publication: PublicationReconciler<MediaStreamTrack>;
+  private readonly screenShare: ScreenShare<
+    MediaStreamTrack,
+    ScreenSource,
+    PhoneScreenCapture
+  >;
+  private readonly grace = new RemoteReconnectGrace({
+    timers,
+    expire: (participantId, reoffered) =>
+      this.dropDisconnected(participantId, reoffered),
+  });
+  private readonly video = new RemoteVideo(() => this.connection);
   /** Pulled audio by alias: deafen and each person's gain apply here. */
   private readonly remoteAudio = new Map<string, RemoteAudio>();
-  private readonly lastRepublishRequestAt = new Map<string, number>();
-  private readonly video = new RemoteVideo(() => this.media);
 
   private peerState: RTCPeerConnectionState = "new";
-  private roomReady = false;
-  private voiceReady = false;
+  /** The call's handlers on the connection are live (see start). */
+  private listening = false;
   private everConnected = false;
   private joinedChannel = false;
-  private ended = false;
+  private endMessage: SessionEnd | null = null;
 
   private muted: boolean;
   private deafened: boolean;
   private mutedBeforeDeafen: boolean;
   private localSpeaking = false;
-
   private readonly stopSpeakingDetector: () => void;
-  private stopPresence: (() => void) | null = null;
-  private credentialTimer: ReturnType<typeof setTimeout> | null = null;
 
   constructor(options: SessionOptions) {
+    this.options = options;
     this.target = options.target;
     this.identity = options.identity;
     this.microphone = options.microphone;
-    this.onEnd = options.onEnd;
-    this.audioGain = options.audioGain;
     this.muted = options.muted || options.deafened;
     this.deafened = options.deafened;
     this.mutedBeforeDeafen = options.muted;
-    this.applyMicrophoneGate();
 
     const identify: MainClientPayload<GatewayOp.Identify> = {
       name: this.identity.name,
@@ -262,60 +244,110 @@ export class VoiceSession {
       platform: "mobile",
       supports_voice_state_deltas: true,
     };
-    this.room = new RoomSocket(this.target, identify, {
-      mediaBootstrap: (credentials) => this.onMediaBootstrap(credentials),
-      mediaReady: (credentials) => this.onMediaReady(credentials),
-      ready: (credentials, participants) =>
-        this.onRoomReady(credentials, participants),
-      resumed: (credentials, participants) =>
-        this.onRoomResumed(credentials, participants),
-      voiceStateUpdate: (participant, action) =>
-        this.onVoiceStateUpdate(participant, action),
-      profileUpdate: (update) =>
-        this.updateParticipant(update.participantId, (previous) =>
-          previous
-            ? mergeParticipant(
-                {
-                  id: update.participantId,
-                  name: update.name,
-                  username: update.username,
-                  display_name: update.displayName,
-                  avatar_url: update.avatarUrl,
-                },
-                previous,
-              )
-            : null,
-        ),
-      error: (code, message) => log.warn(`Room error ${code}: ${message}`),
-      ticketFailed: (error) => this.onRoomTicketFailed(error),
-      disconnected: (giveUp) => {
-        this.roomReady = false;
-        this.refreshStatus();
-        if (giveUp) this.failForGiveUp(giveUp);
-      },
+    this.connection = new CallConnection(
+      this.target,
+      identify,
+      this.whileListening({
+        roomReady: (credentials, participants) =>
+          this.onRoomReady(credentials.participantId, participants),
+        roomResumed: (participants) => this.onRoomResumed(participants),
+        voiceStateUpdate: (participant, action) =>
+          this.onVoiceStateUpdate(participant, action),
+        profileUpdate: (update) =>
+          this.updateParticipant(update.participantId, (previous) =>
+            previous
+              ? mergeParticipant(
+                  {
+                    id: update.participantId,
+                    name: update.name,
+                    username: update.username,
+                    display_name: update.displayName,
+                    avatar_url: update.avatarUrl,
+                  },
+                  previous,
+                )
+              : null,
+          ),
+        roomLost: () => {
+          this.voice.connectionLost();
+          this.refreshStatus();
+        },
+        roomTicketFailed: (error) => this.onRoomTicketFailed(error),
+        voiceReady: (tracks, speaking) => this.onVoiceReady(tracks, speaking),
+        voiceLost: () => this.refreshStatus(),
+        trackOffered: (track) => this.onTrackOffered(track),
+        stopTracks: (trackNames) => {
+          for (const trackName of trackNames) this.video.forget(trackName);
+        },
+        speaking: (participantId, flags) =>
+          this.setSpeaking(participantId, flags !== 0),
+        clientDisconnect: (participantId) => {
+          // Their voice socket may only be reconnecting: keep them (and
+          // their audio) through the grace. Speaking stops now.
+          this.grace.disconnected(participantId);
+          this.setSpeaking(participantId, false);
+        },
+        appEvent: (event) => {
+          if (this.voice.isLive) options.onAppEvent(event);
+        },
+        appEventRejected: () => options.onAppEventRejected(),
+        mediaReset: () => {
+          this.publication.connectionReset();
+          this.refreshStatus();
+        },
+        peerState: (state) => this.onPeerState(state),
+        remoteTrack: (event) => this.onRemoteTrack(event),
+        giveUp: (reason) => this.fail(GIVE_UP_MESSAGE[reason]),
+      }),
+    );
+
+    this.publication = new PublicationReconciler<MediaStreamTrack>({
+      media: this.connection.publications,
+      timers,
+      onOpError: (op, error, failures) =>
+        log.warn("Publication operation failed", {
+          op: op.kind,
+          slot: op.slot,
+          failures,
+          error,
+        }),
     });
-    this.voice = new VoiceSocket(this.target, {
-      voiceReady: (tracks, speaking) => this.onVoiceReady(tracks, speaking),
-      trackOffered: (track) => this.onTrackOffered(track),
-      speaking: (participantId, flags) =>
-        this.setSpeaking(participantId, flags !== 0),
-      clientDisconnect: (participantId) =>
-        this.onClientDisconnect(participantId),
-      stopTracks: (trackNames, tracks) => this.onStopTracks(trackNames, tracks),
-      republishRequest: (request) => this.onRepublishRequest(request),
-      appEvent: (event) => {
-        if (!this.ended) options.onAppEvent(event);
+    const micTrack = this.microphone.getAudioTracks()[0] ?? null;
+    if (micTrack) micTrack.enabled = !this.muted;
+    this.publication.setTrack("microphone", micTrack);
+    this.publication.setEnabled("microphone", !this.muted);
+
+    this.screenShare = new ScreenShare({
+      publication: this.publication,
+      sources: {
+        native: null,
+        browser: {
+          capture: async () => {
+            this.connection.prepareVideoKeepalives();
+            const stream = await options.screenCapture.capture();
+            const video = stream.getVideoTracks()[0] ?? null;
+            const capture: PhoneScreenCapture = {
+              path: "browser",
+              video,
+              audio: null,
+              stream,
+            };
+            // Android's own Stop (the status bar chip, the cast tile) ends it.
+            video?.addEventListener("ended", () =>
+              this.screenShare.captureEnded(capture),
+            );
+            return capture;
+          },
+          applyQuality: () => {},
+        },
+        releaseBeforeRestart: () => true,
+        isLive: (capture) => capture.video?.readyState === "live",
+        release: (capture) => options.screenCapture.release(capture.stream),
       },
-      error: (code, message) => {
-        if (message === APP_EVENT_REJECTED) options.onAppEventRejected();
-        else this.onVoiceError(code, message);
-      },
-      disconnected: (giveUp) => {
-        this.voiceReady = false;
-        this.refreshStatus();
-        if (giveUp) this.failForGiveUp(giveUp);
-      },
+      onError: (step, error) => log.warn(`Screen share ${step}`, error),
     });
+    this.screenShare.subscribe((event) => this.onScreenShareEvent(event));
+
     this.stopSpeakingDetector = startSpeakingDetector({
       sender: () => this.microphoneSender(),
       level: options.speakingLevel,
@@ -325,19 +357,37 @@ export class VoiceSession {
 
   /** Opens both sockets; the voice socket identifies once credentials land. */
   start(): void {
-    this.room.connect();
-    this.voice.connect();
+    const lease = this.voice.start(this.connection);
+    if (!lease) return;
+    // Teardown step 3: nothing the connection says during the leave's send
+    // window (a late Ready, a remote track) touches the torn-down call.
+    lease.addCleanup(() => {
+      this.listening = false;
+    });
+    this.listening = true;
+    this.connection.start();
+  }
+
+  /** The connection's events, dropped once the teardown unsubscribed. */
+  private whileListening(events: ConnectionEvents): ConnectionEvents {
+    const guarded = {} as Record<string, (...args: never[]) => void>;
+    for (const [name, handler] of Object.entries(events) as Array<
+      [string, (...args: never[]) => void]
+    >) {
+      guarded[name] = (...args) => {
+        if (this.listening) handler(...args);
+      };
+    }
+    return guarded as unknown as ConnectionEvents;
   }
 
   /** The app is in front again: retry now, or probe the open sockets. */
   wake(): void {
-    if (this.ended) return;
-    this.room.wake();
-    this.voice.wake();
+    if (this.voice.isLive) this.connection.wake();
   }
 
   leave(): void {
-    this.end({ reason: "left" });
+    this.end("user-leave", { reason: "left" });
   }
 
   /**
@@ -345,8 +395,7 @@ export class VoiceSession {
    * while visible with the app in front; audio is unaffected either way.
    */
   setWatchingVideo(watching: boolean): void {
-    if (this.ended) return;
-    this.video.setWatching(watching);
+    if (this.voice.isLive) this.video.setWatching(watching);
   }
 
   /** Re-reads every pulled track's gain (a person's volume or mute changed). */
@@ -360,8 +409,7 @@ export class VoiceSession {
    * us included.
    */
   sendAppEvent(d: Readonly<Record<string, unknown>>): void {
-    if (this.ended) return;
-    this.voice.send({ op: GatewayOp.VoiceAppEvent, d });
+    if (this.voice.isLive) this.connection.sendAppEvent(d);
   }
 
   /** As the web's setIsMuted: unmuting while deafened undeafens too. */
@@ -383,27 +431,34 @@ export class VoiceSession {
   }
 
   /**
-   * Publishes `stream` (one video track) as our camera, replacing the one on
-   * air, or stops the camera with null. The session owns the stream from
-   * here and stops it when it is replaced, turned off or the call ends.
+   * Publishes `stream` (one video track) as our camera, swapping the one on
+   * air, or withdraws the camera with null (its SFU track stays alive on a
+   * keepalive, so turning it back on reaches viewers at once). The session
+   * owns the stream from here and stops it when it is replaced, turned off
+   * or the call ends.
    */
   setCamera(stream: MediaStream | null): void {
-    if (this.ended) {
+    if (!this.voice.isLive) {
       if (stream) stopStream(stream);
       return;
     }
     const previous = this.camera;
     if (previous === stream) return;
     this.camera = stream;
-    if (stream) this.cameraFacing = facingOf(stream);
     if (stream) {
-      // An existing publication swaps its source track: no new SFU track.
-      this.media?.publishStream(stream, MIC_PREFIX);
-    } else {
-      this.unpublishOwn(MIC_PREFIX);
+      this.cameraFacing = facingOf(stream);
+      this.connection.prepareVideoKeepalives();
     }
-    if (previous) stopStream(previous);
+    this.publication.setTrack("camera", stream?.getVideoTracks()[0] ?? null);
     this.syncLocalMedia();
+    if (!previous) {
+      void this.reconcile();
+      return;
+    }
+    // The old capture is stopped once the sender no longer holds it.
+    void this.reconcile().finally(() => {
+      if (this.camera !== previous) stopStream(previous);
+    });
   }
 
   /**
@@ -412,7 +467,7 @@ export class VoiceSession {
    */
   async flipCamera(): Promise<void> {
     const camera = this.camera;
-    if (this.ended || !camera) return;
+    if (!this.voice.isLive || !camera) return;
     const facing = await switchCamera(camera);
     if (this.camera !== camera) return;
     this.cameraFacing = facing;
@@ -427,224 +482,45 @@ export class VoiceSession {
     return this.cameraFacing;
   }
 
-  /** Publishes a screen capture, or stops sharing with null. Owned as above. */
-  setScreen(stream: MediaStream | null): void {
-    if (this.ended) {
-      if (stream) stopStream(stream);
+  /** Starts sharing the screen, or stops a share that is on or starting. */
+  toggleScreenShare(): void {
+    if (!this.voice.isLive) return;
+    if (this.screenShare.wanted) {
+      this.screenShare.stop();
       return;
     }
-    const previous = this.screen;
-    if (previous === stream) return;
-    this.screen = stream;
-    if (stream) this.media?.publishStream(stream, SCREEN_PREFIX);
-    else this.unpublishOwn(SCREEN_PREFIX);
-    if (previous) stopStream(previous);
-    this.syncLocalMedia();
+    this.screenShare.start({
+      source: "screen",
+      sourceKey: null,
+      quality: "phone",
+      audio: false,
+      preferNative: false,
+    });
   }
 
+  stopScreenShare(): void {
+    this.screenShare.stop();
+  }
+
+  /** On for peers, or on its way. */
   get sharingScreen(): boolean {
-    return this.screen !== null;
+    return this.screenShare.wanted !== null;
   }
 
-  isScreen(stream: MediaStream): boolean {
-    return this.screen === stream;
-  }
+  // ── Publication ──────────────────────────────────────────────────────────
 
-  // ── Credentials and media ────────────────────────────────────────────────
-
-  private onMediaBootstrap(credentials: MediaCredentials): void {
-    if (this.ended) return;
-    // A reconnect's ticket names a new participant; the room resumes the old
-    // one, so a bootstrap for anyone else is stale once the room admitted us.
-    if (
-      this.roomEstablished &&
-      this.participantId !== credentials.participantId
-    ) {
-      return;
-    }
-    this.adoptCredentials(credentials);
-  }
-
-  private onMediaReady(credentials: MediaCredentials): void {
-    if (this.ended) return;
-    this.roomEstablished = true;
-    this.adoptCredentials(credentials);
-  }
-
-  private adoptCredentials(credentials: MediaCredentials): void {
-    if (
-      this.participantId !== null &&
-      this.participantId !== credentials.participantId
-    ) {
-      log.warn("The room gave us a new participant id; rebuilding media");
-      this.previousParticipantIds.add(this.participantId);
-      this.disposeMedia();
-    }
-    this.participantId = credentials.participantId;
-    this.ensureMedia(credentials);
-    this.voice.updateVoiceToken(credentials.voiceToken);
-    this.voice.connectVoice(credentials.participantId, credentials.voiceToken);
-  }
-
-  private ensureMedia(credentials: MediaCredentials): void {
-    if (
-      this.media &&
-      this.transport &&
-      this.mediaParticipantId === credentials.participantId
-    ) {
-      this.transport.updateVoiceToken(credentials.voiceToken);
-      return;
-    }
-    this.disposeMedia();
-    const participantId = credentials.participantId;
-    const transport = new PartyTracksTransport({
-      roomSlug: this.target.roomSlug,
-      participantId,
-      voiceToken: credentials.voiceToken,
-      iceServers: credentials.iceServers,
-    });
-    const media = new PartyTracksMediaManager(transport, participantId, {
-      onPublicationMetadata: (track) => {
-        if (track.kind === "video") void this.limitVideoSender(track);
-        const d: VoiceClientPayload<GatewayOp.Video> = {
-          tracks: [
-            {
-              participant_id: track.participant_id,
-              track_name: track.track_name,
-              sfu_track_name: track.sfu_track_name,
-              session_id: track.session_id,
-              kind: track.kind === "video" ? "video" : "audio",
-            },
-          ],
-        };
-        log.info("Announcing publication", track.track_name);
-        this.voice.send({ op: GatewayOp.Video, d });
-      },
-      onPublicationStopped: (trackName) =>
-        this.voice.send({
-          op: GatewayOp.StopTracks,
-          d: { track_names: [trackName] },
-        }),
-      onRemoteTrack: ({ action, track, trackInfo }) => {
-        if (track.kind === "video") {
-          this.video.onTrack(action, track, trackInfo);
-          return;
-        }
-        if (track.kind !== "audio") return;
-        if (action === "add") {
-          // Remote audio plays through WebRTC's own audio device; deafen
-          // silences it by disabling the track, a person's volume by gain.
-          const audio: RemoteAudio = {
-            track,
-            participantId: trackInfo.participant_id,
-            source: trackInfo.track_name.startsWith(`${SCREEN_PREFIX}-`)
-              ? "stream"
-              : "voice",
-          };
-          this.remoteAudio.set(trackInfo.track_name, audio);
-          this.applyGain(audio);
-          log.info("Remote audio", trackInfo.track_name);
-        } else if (
-          this.remoteAudio.get(trackInfo.track_name)?.track === track
-        ) {
-          this.remoteAudio.delete(trackInfo.track_name);
-        }
-      },
-      onConnectionState: (state) => {
-        log.info(`Peer connection ${state}`);
-        this.peerState = state;
-        this.refreshStatus();
-      },
-      onError: (error) => log.warn("PartyTracks media error", error),
-      onTrackUnavailable: (event) => {
-        log.warn(
-          "SFU keeps not finding a pulled track; asking for a republish",
-          {
-            trackName: event.track_name,
-            notFoundCount: event.notFoundCount,
-            report: event.report,
-          },
-        );
-        this.voice.send({
-          op: GatewayOp.TrackUnavailable,
-          d: {
-            participant_id: event.participant_id,
-            track_name: event.track_name,
-            sfu_track_name: event.sfu_track_name,
-            session_id: event.session_id,
-          },
-        });
-      },
-    });
-    this.transport = transport;
-    this.media = media;
-    this.mediaParticipantId = participantId;
-    this.peerState = "new";
-    media.publishStream(this.microphone, MIC_PREFIX);
-    if (this.camera) media.publishStream(this.camera, MIC_PREFIX);
-    if (this.screen) media.publishStream(this.screen, SCREEN_PREFIX);
-    if (this.deferredRemoteTracks.size > 0) {
-      const deferred = [...this.deferredRemoteTracks.values()];
-      this.deferredRemoteTracks.clear();
-      media.offerTracks(deferred);
-    }
-    const video = this.video.pullable();
-    if (video.length > 0) media.offerTracks(video);
-    this.refreshStatus();
-  }
-
-  private disposeMedia(): void {
-    this.media?.dispose();
-    this.transport?.dispose();
-    this.media = null;
-    this.transport = null;
-    this.mediaParticipantId = null;
-    this.remoteAudio.clear();
-    this.video.clearStreams();
-  }
-
-  /** Stops our `<prefix>-video-<participant>` publication, if any. */
-  private unpublishOwn(prefix: string): void {
-    if (!this.media || !this.mediaParticipantId) return;
-    this.media.unpublishTrack(`${prefix}-video-${this.mediaParticipantId}`);
-  }
-
-  /**
-   * Caps a video sender's bitrate and frame rate (see VIDEO_ENCODING). Runs
-   * when the push is answered, so the sender exists; a failure only leaves
-   * WebRTC's own rate control in charge.
-   */
-  private async limitVideoSender(track: TrackInfo): Promise<void> {
-    const limits = track.track_name.startsWith(`${SCREEN_PREFIX}-`)
-      ? VIDEO_ENCODING.screen
-      : VIDEO_ENCODING.cam;
-    const source = this.media?.getPublishedTrack(track.track_name);
-    const sender = source
-      ? this.transport?.peerConnection
-          ?.getSenders()
-          .find((candidate) => candidate.track?.id === source.id)
-      : undefined;
-    if (!sender) return;
-    try {
-      const parameters = sender.getParameters();
-      // react-native-webrtc's encodings are classes with setters (and toJSON
-      // over private fields), so set them in place rather than spreading.
-      if (!parameters.encodings?.length) {
-        parameters.encodings = [{ active: true }];
-      }
-      for (const encoding of parameters.encodings) {
-        encoding.maxBitrate = limits.maxBitrate;
-        encoding.maxFramerate = limits.maxFramerate;
-      }
-      await sender.setParameters(parameters);
-    } catch (error) {
-      log.warn("Could not limit the video sender", track.track_name, error);
+  /** Runs the reconciler once the media session exists (it publishes then). */
+  private async reconcile(): Promise<void> {
+    if (!this.connection.media) return;
+    const result = await this.publication.reconcile();
+    if (result.status === "failed") {
+      log.warn("Publication did not converge", result.failedSlots);
     }
   }
 
   private microphoneSender(): RTCRtpSender | null {
     const track = this.microphone.getAudioTracks()[0];
-    const peerConnection = this.transport?.peerConnection;
+    const peerConnection = this.connection.peerConnection;
     if (!track || !peerConnection || this.muted) return null;
     return (
       peerConnection
@@ -653,51 +529,60 @@ export class VoiceSession {
     );
   }
 
+  private onScreenShareEvent(
+    event: ScreenShareEvent<ScreenSource, PhoneScreenCapture>,
+  ): void {
+    if (event.type === "started") {
+      this.sharing = true;
+      this.syncLocalMedia();
+    } else if (event.type === "ended") {
+      this.sharing = false;
+      this.syncLocalMedia();
+      if (event.reason === "failed") {
+        this.options.onScreenShareFailed(event.error);
+      }
+    }
+  }
+
   // ── Room socket ──────────────────────────────────────────────────────────
 
   private onRoomReady(
-    credentials: MediaCredentials,
+    participantId: string,
     participants: readonly VoiceState[],
   ): void {
-    if (this.ended) return;
-    this.roomEstablished = true;
-    this.adoptCredentials(credentials);
-    this.roomReady = true;
+    const joined = this.voice.markJoined();
+    if (!joined) return;
     // The roster leaves us out: Ready is built before our session is stored.
     const self: CallParticipant = {
-      id: credentials.participantId,
+      id: participantId,
       userId: this.identity.userId,
       name: (this.identity.displayName ?? this.identity.name).trim(),
       avatarUrl: this.identity.avatarUrl,
       muted: this.muted,
       deafened: this.deafened,
       camera: this.camera !== null,
-      sharing: this.screen !== null,
+      sharing: this.sharing,
       username: this.identity.username,
     };
     this.replaceParticipants(participants, self);
-    // The room starts us muted; tell it (and the channel) where we are.
+    // The room starts us muted; tell it where we are.
     this.sendVoiceState();
-    this.joinChannelPresence();
-    this.scheduleCredentialRefresh();
+    // Our channel presence, on the first Ready and again on a re-Ready (the
+    // room session was new: STATE_MACHINE "Transitions", note 1). The room
+    // is the roster's authority (realtime/VOICE_ROSTER.md); this names the
+    // channel for the chat socket, once, with no 30 s re-send.
+    this.joinedChannel = true;
+    sendVoiceChannelJoin({
+      channel_id: this.target.channelId,
+      self_mute: this.muted,
+    });
     this.refreshStatus();
   }
 
-  private onRoomResumed(
-    credentials: Partial<MediaCredentials>,
-    participants?: readonly VoiceState[],
-  ): void {
-    if (this.ended) return;
-    if (credentials.voiceToken) {
-      this.transport?.updateVoiceToken(credentials.voiceToken);
-      this.voice.updateVoiceToken(credentials.voiceToken);
-    }
-    this.roomReady = true;
-    if (participants && this.participantId) {
+  private onRoomResumed(participants?: readonly VoiceState[]): void {
+    this.voice.connectionRestored();
+    if (participants && this.connection.participantId) {
       this.replaceParticipants(participants, null);
-    }
-    if (!this.voice.isReady && this.participantId && credentials.voiceToken) {
-      this.voice.connectVoice(this.participantId, credentials.voiceToken);
     }
     this.refreshStatus();
   }
@@ -707,20 +592,18 @@ export class VoiceSession {
     // (no permission, not a voice channel) will not change by retrying.
     if (
       !this.everConnected &&
-      !this.roomReady &&
+      !this.voice.isJoined &&
       error instanceof ApiError &&
       error.status >= 400 &&
       error.status < 500 &&
       error.status !== 401 &&
       error.status !== 429
     ) {
-      this.end({
-        reason: "failed",
-        message:
-          error.status === 403
-            ? "You can't connect to this channel"
-            : "This channel can't be joined",
-      });
+      this.fail(
+        error.status === 403
+          ? "You can't connect to this channel"
+          : "This channel can't be joined",
+      );
     }
   }
 
@@ -729,8 +612,9 @@ export class VoiceSession {
     action: "join" | "leave" | "update",
   ): void {
     if (action === "leave") {
-      this.video.forgetParticipant(participant.id);
-      this.media?.removeParticipant(participant.id);
+      // The room decides who left: no grace for a real leave.
+      this.grace.left(participant.id);
+      this.connection.dropParticipant(participant.id);
       updateCall((call) => {
         if (!call.participants[participant.id]) return call;
         const participants = { ...call.participants };
@@ -742,7 +626,11 @@ export class VoiceSession {
       return;
     }
     this.updateParticipant(participant.id, (previous) =>
-      mergeParticipant(participant, previous ?? undefined),
+      // A delta for someone we have no row for cannot be shown (no name):
+      // the next full state creates the row.
+      previous || participant.name !== undefined
+        ? mergeParticipant(participant, previous ?? undefined)
+        : null,
     );
   }
 
@@ -753,7 +641,8 @@ export class VoiceSession {
     updateCall((call) => {
       const participants: Record<string, CallParticipant> = {};
       for (const state of states) {
-        if (this.previousParticipantIds.has(state.id)) continue;
+        // Our earlier participant ids linger in a roster after a rebuild.
+        if (this.connection.isPreviousParticipant(state.id)) continue;
         participants[state.id] = mergeParticipant(
           state,
           call.participants[state.id],
@@ -777,38 +666,20 @@ export class VoiceSession {
     });
   }
 
-  private scheduleCredentialRefresh(): void {
-    if (this.credentialTimer) clearTimeout(this.credentialTimer);
-    this.credentialTimer = setTimeout(() => {
-      this.credentialTimer = null;
-      if (this.ended) return;
-      this.room.requestCredentialRefresh();
-      this.scheduleCredentialRefresh();
-    }, CREDENTIAL_REFRESH_MS);
-  }
+  // ── Voice socket and media ───────────────────────────────────────────────
 
-  // ── Voice socket ─────────────────────────────────────────────────────────
-
-  private isOwnTrack(track: TrackInfo): boolean {
-    return (
-      track.participant_id === this.participantId ||
-      track.session_id === this.participantId ||
-      this.previousParticipantIds.has(track.participant_id)
-    );
+  private noteOffer(track: TrackInfo): void {
+    this.grace.offered(track.participant_id, track.track_name);
+    if (isPullableVideo(track) && isVideoAlias(track.track_name)) {
+      this.video.noteOffer(track.track_name);
+    }
   }
 
   private onVoiceReady(
     tracks: readonly TrackInfo[],
     speaking: Readonly<Record<string, number>>,
   ): void {
-    if (this.ended) return;
-    this.voiceReady = true;
-    const seen = new Set<string>();
-    const remote = tracks.filter((track) => {
-      if (this.isOwnTrack(track) || seen.has(track.track_name)) return false;
-      seen.add(track.track_name);
-      return true;
-    });
+    for (const track of tracks) this.noteOffer(track);
     updateCall((call) => {
       const next: Record<string, true> = {};
       for (const [id, flags] of Object.entries(speaking)) {
@@ -817,113 +688,53 @@ export class VoiceSession {
       if (call.selfId && this.localSpeaking) next[call.selfId] = true;
       return { ...call, speaking: next };
     });
-    this.video.replaceOffers(remote.filter(isPullableVideo));
-    if (this.media) {
-      // Announce our publication before the replayed pulls queue their
-      // negotiation behind it on the shared session.
-      this.media.reannouncePublications();
-      this.media.syncRemoteTracks([
-        ...pullable(remote),
-        ...this.video.pullable(),
-      ]);
-    } else {
-      for (const track of pullable(remote)) {
-        this.deferredRemoteTracks.set(track.track_name, track);
-      }
-    }
-    if (this.localSpeaking) this.voice.sendSpeaking(SPEAKING_MICROPHONE);
+    if (this.localSpeaking) this.connection.sendSpeaking(SPEAKING_MICROPHONE);
+    this.voice.connectionRestored();
     this.refreshStatus();
   }
 
   private onTrackOffered(track: TrackInfo): void {
-    if (this.isOwnTrack(track)) return;
-    if (isPullableVideo(track)) {
-      this.video.offer(track);
-      return;
-    }
-    const tracks = pullable([track]);
-    if (tracks.length === 0) return;
-    if (this.media) this.media.offerTracks(tracks);
-    else this.deferredRemoteTracks.set(track.track_name, track);
+    this.noteOffer(track);
   }
 
-  private onStopTracks(
-    trackNames: readonly string[],
-    tracks?: readonly TrackInfo[],
+  /** Their grace ran out: drop what they did not offer again. */
+  private dropDisconnected(
+    participantId: string,
+    reoffered: ReadonlySet<string>,
   ): void {
-    for (const trackName of trackNames) {
-      this.deferredRemoteTracks.delete(trackName);
-    }
-    this.video.forget(trackNames);
-    const stopped = trackNames.filter(
-      (trackName) =>
-        tracks?.some(
-          (track) =>
-            track.track_name === trackName && Boolean(track.sfu_track_name),
-        ) || this.media?.hasRemoteOffer(trackName),
-    );
-    if (stopped.length > 0) this.media?.stopRemoteTracks(stopped);
+    if (!this.voice.isLive) return;
+    this.connection.dropParticipant(participantId, reoffered);
   }
 
-  private onClientDisconnect(participantId: string): void {
-    for (const [trackName, track] of this.deferredRemoteTracks) {
-      if (track.participant_id === participantId) {
-        this.deferredRemoteTracks.delete(trackName);
-      }
+  private onPeerState(state: RTCPeerConnectionState): void {
+    this.peerState = state;
+    if (state === "connected") this.voice.connectionRestored();
+    else if (state === "disconnected" || state === "failed") {
+      this.voice.connectionLost();
     }
-    this.video.forgetParticipant(participantId);
-    this.media?.removeParticipant(participantId);
-    this.setSpeaking(participantId, false);
+    this.refreshStatus();
   }
 
-  /**
-   * A listener could not pull one of our publications and the voice room
-   * checked it is our current one: push it again under a new SFU track. Only
-   * for the SFU track we still announce, at most once per 5 s per track
-   * (sfu-client.ts handleRepublishRequest).
-   */
-  private onRepublishRequest(request: RepublishRequest): void {
-    if (this.ended || !this.media) return;
-    const current = this.media.getPublicationMetadata(request.track_name);
-    if (!current) return;
-    if (
-      (request.sfu_track_name !== undefined &&
-        request.sfu_track_name !== current.sfu_track_name) ||
-      (request.session_id !== undefined &&
-        request.session_id !== current.session_id)
-    ) {
+  private onRemoteTrack({ action, track, trackInfo }: RemoteTrackEvent): void {
+    if (track.kind === "video") {
+      this.video.onTrack(action, track, trackInfo);
       return;
     }
-    const now = Date.now();
-    const lastAt = this.lastRepublishRequestAt.get(request.track_name);
-    if (lastAt !== undefined && now - lastAt < REPUBLISH_REQUEST_INTERVAL_MS) {
-      return;
+    if (track.kind !== "audio") return;
+    if (action === "add") {
+      // Remote audio plays through WebRTC's own audio device; deafen
+      // silences it by disabling the track, a person's volume by gain.
+      const audio: RemoteAudio = {
+        track,
+        participantId: trackInfo.participant_id,
+        source: trackInfo.track_name.startsWith("screen-") ? "stream" : "voice",
+      };
+      this.remoteAudio.set(trackInfo.track_name, audio);
+      this.applyGain(audio);
+      log.info("Remote audio", trackInfo.track_name);
+    } else if (this.remoteAudio.get(trackInfo.track_name)?.track === track) {
+      this.remoteAudio.delete(trackInfo.track_name);
     }
-    this.lastRepublishRequestAt.set(request.track_name, now);
-    log.info("Republishing on a listener's request", request.track_name);
-    this.media.republishTrack(request.track_name);
-  }
-
-  private onVoiceError(code: number, message: string): void {
-    if (
-      code === GatewayCloseCode.UnknownOpcode &&
-      message.endsWith(`opcode: ${GatewayOp.TrackUnavailable}`)
-    ) {
-      return; // A voice room older than the track-unavailable report.
-    }
-    if (
-      code === GatewayCloseCode.AuthenticationFailed ||
-      message === "Voice token expired"
-    ) {
-      log.warn("Voice token refused; asking the room for fresh credentials");
-      this.room.requestCredentialRefresh();
-      return;
-    }
-    log.warn(`Voice error ${code}: ${message}`);
-  }
-
-  private failForGiveUp(giveUp: SocketGiveUp): void {
-    this.end({ reason: "failed", message: GIVE_UP_MESSAGE[giveUp] });
   }
 
   // ── Speaking ─────────────────────────────────────────────────────────────
@@ -941,9 +752,9 @@ export class VoiceSession {
   }
 
   private onLocalSpeaking(speaking: boolean): void {
-    if (this.ended) return;
+    if (!this.voice.isLive) return;
     this.localSpeaking = speaking;
-    this.voice.sendSpeaking(speaking ? SPEAKING_MICROPHONE : 0);
+    this.connection.sendSpeaking(speaking ? SPEAKING_MICROPHONE : 0);
     updateCall((call) => {
       if (!call.selfId) return call;
       const next = { ...call.speaking };
@@ -957,22 +768,20 @@ export class VoiceSession {
 
   /** Deafen silences everyone; otherwise their gain, where 0 also disables. */
   private applyGain(audio: RemoteAudio): void {
-    const gain = this.audioGain(audio.participantId, audio.source);
+    const gain = this.options.audioGain(audio.participantId, audio.source);
     audio.track.enabled = !this.deafened && gain > 0;
     if (gain > 0) setTrackGain(audio.track, gain);
   }
 
-  private applyMicrophoneGate(): void {
-    for (const track of this.microphone.getAudioTracks()) {
-      track.enabled = !this.muted;
-    }
-  }
-
   private setLocalState(muted: boolean, deafened: boolean): void {
-    if (this.ended) return;
+    if (!this.voice.isLive) return;
     this.muted = muted;
     this.deafened = deafened;
-    this.applyMicrophoneGate();
+    // Mute moves no publication: the reconciler applies it to the
+    // published microphone at once, or after a publish in flight lands.
+    this.publication.setEnabled("microphone", !muted);
+    const micTrack = this.microphone.getAudioTracks()[0];
+    if (micTrack && !this.connection.media) micTrack.enabled = !muted;
     for (const audio of this.remoteAudio.values()) this.applyGain(audio);
     updateCall((call) => {
       const self = call.selfId ? call.participants[call.selfId] : undefined;
@@ -985,7 +794,7 @@ export class VoiceSession {
           : call.participants,
       };
     });
-    if (this.roomReady || this.everConnected) this.sendVoiceState();
+    if (this.voice.isJoined) this.sendVoiceState();
   }
 
   private voiceStatePayload(): MainClientPayload<GatewayOp.VoiceStateUpdate> {
@@ -993,7 +802,7 @@ export class VoiceSession {
       self_mute: this.muted,
       self_deaf: this.deafened,
       self_video: this.camera !== null,
-      self_stream: this.screen !== null,
+      self_stream: this.sharing,
       self_stream_audio: false,
     };
   }
@@ -1001,7 +810,7 @@ export class VoiceSession {
   /** Our camera and share into the store and voice state. */
   private syncLocalMedia(): void {
     const camera = this.camera ? streamUrl(this.camera) : null;
-    const sharing = this.screen !== null;
+    const sharing = this.sharing;
     const mirror = this.cameraFacing === "front";
     updateCall((call) => {
       const self = call.selfId ? call.participants[call.selfId] : undefined;
@@ -1016,71 +825,80 @@ export class VoiceSession {
           : call.participants,
       };
     });
-    if (this.roomReady || this.everConnected) this.sendVoiceState();
+    if (this.voice.isJoined) this.sendVoiceState();
   }
 
-  /** The room roster and the channel tree both carry mute and deafen. */
+  /**
+   * The room roster carries mute, deafen, camera and share (room op 15).
+   * The chat socket's copy is gone: the room pushes the roster to it
+   * (realtime/VOICE_ROSTER.md).
+   */
   private sendVoiceState(): void {
-    const d = this.voiceStatePayload();
-    this.room.sendVoiceState(d);
-    if (this.joinedChannel) sendVoiceStateUpdate(d);
+    this.connection.sendRoomVoiceState(this.voiceStatePayload());
   }
 
-  private joinChannelPresence(): void {
-    if (this.joinedChannel) return;
-    this.joinedChannel = true;
-    const assert = () => {
-      if (this.ended) return;
-      sendVoiceChannelJoin({
-        channel_id: this.target.channelId,
-        self_mute: this.muted,
-      });
-      sendVoiceStateUpdate(this.voiceStatePayload());
-    };
-    assert();
-    const offReady = onGatewayReady(assert);
-    const timer = setInterval(assert, PRESENCE_REASSERT_MS);
-    this.stopPresence = () => {
-      offReady();
-      clearInterval(timer);
-    };
-  }
-
+  /**
+   * The phase says whether we are in the call; the label also waits for the
+   * voice socket and the peer connection, as before.
+   */
   private refreshStatus(): void {
-    if (this.ended) return;
+    if (!this.voice.isLive) return;
+    const media = this.connection.media;
     const mediaConnected =
-      this.media !== null &&
-      (this.peerState === "connected" || !this.media.hasPublications);
+      media !== null &&
+      (this.peerState === "connected" || !media.hasPublications);
     let status: CallStatus;
-    if (this.roomReady && this.voiceReady && mediaConnected) {
+    if (
+      this.voice.phase === "joined" &&
+      this.connection.voiceReady &&
+      mediaConnected
+    ) {
       status = "connected";
       this.everConnected = true;
     } else {
-      status = this.everConnected ? "reconnecting" : "joining";
+      status =
+        this.everConnected || this.voice.phase === "reconnecting"
+          ? "reconnecting"
+          : "joining";
     }
     updateCall((call) => (call.status === status ? call : { ...call, status }));
   }
 
-  private end(end: SessionEnd): void {
-    if (this.ended) return;
-    this.ended = true;
+  // ── Teardown ─────────────────────────────────────────────────────────────
+
+  private fail(message: string): void {
+    this.end("forced-disconnect", { reason: "failed", message });
+  }
+
+  /** The one teardown (STATE_MACHINE "Teardown"); a second call does nothing. */
+  private end(reason: VoiceEndReason, end: SessionEnd): void {
+    if (!this.voice.isLive) return;
+    this.endMessage = end;
     log.info(`Leaving (${end.reason})`, end.message ?? "");
-    this.stopSpeakingDetector();
-    this.stopPresence?.();
-    this.stopPresence = null;
-    if (this.credentialTimer) clearTimeout(this.credentialTimer);
-    this.credentialTimer = null;
-    this.room.stop();
-    this.voice.stop();
-    this.disposeMedia();
-    this.deferredRemoteTracks.clear();
-    this.video.clear();
-    stopStream(this.microphone);
-    if (this.camera) stopStream(this.camera);
-    if (this.screen) stopStream(this.screen);
-    this.camera = null;
-    this.screen = null;
-    if (this.joinedChannel) sendVoiceChannelLeave(this.target.channelId);
-    this.onEnd(end);
+    const steps: TeardownSteps<CallConnection> = {
+      // No local leave sound or automatic soundboard trigger on a phone.
+      releaseLocalMedia: () => {
+        this.screenShare.dispose();
+        this.publication.dispose();
+        this.stopSpeakingDetector();
+        stopStream(this.microphone);
+        if (this.camera) stopStream(this.camera);
+        this.camera = null;
+        this.sharing = false;
+      },
+      clearSessionState: ({ plan }) => {
+        this.grace.dispose();
+        this.remoteAudio.clear();
+        this.video.clear();
+        if (plan.clearPresence && this.joinedChannel) {
+          sendVoiceChannelLeave(this.target.channelId);
+        }
+        this.joinedChannel = false;
+        // The app's own reset (store, call service, toasts): every end,
+        // whatever the plan says about `left`, so nothing of the call stays.
+        this.options.onEnd(this.endMessage ?? end);
+      },
+    };
+    this.voice.end(reason, steps, { isCall: this.options.isCall });
   }
 }

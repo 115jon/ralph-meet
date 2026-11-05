@@ -318,6 +318,12 @@ importers:
       '@ralph/realtime':
         specifier: workspace:*
         version: link:../../packages/realtime
+      '@ralph/voice':
+        specifier: workspace:*
+        version: link:../../packages/voice
+      '@ralph/voice-media':
+        specifier: workspace:*
+        version: link:../../packages/voice-media
       effect:
         specifier: ^4.1.1
         version: 4.1.1
