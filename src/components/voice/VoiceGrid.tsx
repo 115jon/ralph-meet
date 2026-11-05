@@ -29,7 +29,8 @@ import {
   type GridFit,
 } from "./grid-columns";
 import { hasLiveAudioTrack, hasLiveVideoTrack } from "./media-stream-tracks";
-import { TileAvatar } from "./TileParts";
+import { CameraUnavailableBadge, TileAvatar } from "./TileParts";
+import { useCameraTileVideo } from "./useCameraTileVideo";
 import {
   FOCUSED_AVATAR_SIZE,
   streamOwnerName,
@@ -323,13 +324,28 @@ function FocusedStage({
       ? streamThumbnails[focusedItem.userId]
       : null;
   const hasVideo = hasLiveVideoTrack(focusedItem.stream);
+  const isMeasuredCamera = isFocusedCamera && !focusedItem.isLocal;
+  // See ParticipantCard: a remote camera that is not playing shows the
+  // loading state or "Video unavailable", never a black or frozen frame.
+  const cameraVideo = useCameraTileVideo({
+    sfu: voiceActions?.sfu,
+    stream: focusedItem.stream,
+    enabled: isMeasuredCamera,
+  });
   const isStreaming =
-    (isFocusedCamera || isFocusedScreen) && hasVideo && !isPreviewHidden;
-  const isLoadingStream =
     (isFocusedCamera || isFocusedScreen) &&
-    !hasVideo &&
+    hasVideo &&
     !isPreviewHidden &&
-    !focusedThumbnailPoster;
+    cameraVideo === "video";
+  // Kept mounted, hidden, while it is not playing (measured on screen).
+  const isHiddenCameraVideo = isMeasuredCamera && hasVideo && !isStreaming;
+  const isCameraUnavailable = isMeasuredCamera && cameraVideo === "unavailable";
+  const isLoadingStream = isMeasuredCamera
+    ? cameraVideo === "connecting"
+    : (isFocusedCamera || isFocusedScreen) &&
+      !hasVideo &&
+      !isPreviewHidden &&
+      !focusedThumbnailPoster;
   const focusedLabel = getFocusedItemLabel(focusedItem);
   const showFocusedVolume =
     !focusedItem.isLocal &&
@@ -401,6 +417,14 @@ function FocusedStage({
               TILE_SURFACE,
             )}
           >
+            {isHiddenCameraVideo && (
+              <VideoPlayer
+                stream={focusedItem.stream}
+                label={focusedItem.name}
+                muted
+                className="pointer-events-none absolute inset-0 h-full w-full object-contain opacity-0"
+              />
+            )}
             {focusedItem.avatar ? (
               <Avatar
                 name={focusedItem.name}
@@ -416,6 +440,7 @@ function FocusedStage({
             <p className="max-w-[80%] truncate font-display [font-optical-sizing:auto] text-[18px] leading-6 font-bold text-ink-1">
               <InlineEmojiText text={focusedItem.name} />
             </p>
+            {isCameraUnavailable && <CameraUnavailableBadge />}
             {isLoadingStream && (
               <StreamLoadingIndicator
                 name={streamOwnerName(focusedItem)}

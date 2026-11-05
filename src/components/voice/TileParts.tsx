@@ -7,6 +7,7 @@ import { Led } from "@/components/ui/led";
 import type { AvatarDisplay } from "@/lib/avatar-display";
 import { getAuthAssetUrl } from "@/lib/platform";
 import { cn } from "@/lib/utils";
+import { CAMERA_UNAVAILABLE_LABEL } from "@ralph/voice-media/video-flow";
 import { TILE_AVATAR_SIZE } from "./tile-utils";
 
 /**
@@ -181,5 +182,40 @@ export function TileNameplate({
       ) : null}
       {meta}
     </div>
+  );
+}
+
+/**
+ * A remote camera announced on that shows nothing (it never arrived, or
+ * stopped decoding after one fresh re-pull): over the avatar, so the tile
+ * is never a black or frozen frame. Static; it goes when frames come back.
+ * `compact` (a tray tile) keeps only the glyph.
+ */
+export function CameraUnavailableBadge({
+  compact = false,
+  className,
+}: {
+  compact?: boolean;
+  className?: string;
+}) {
+  return (
+    <span
+      role="status"
+      data-camera-unavailable=""
+      className={cn(
+        "pointer-events-none flex h-5 items-center gap-1 rounded-xs bg-tint-2 px-1.5 text-ui-xs font-medium text-ink-2",
+        compact && "px-1",
+        className,
+      )}
+    >
+      <Icon
+        name="camera"
+        state="off"
+        size="xs"
+        className="shrink-0 text-ink-3"
+        label={compact ? CAMERA_UNAVAILABLE_LABEL : undefined}
+      />
+      {compact ? null : <span>{CAMERA_UNAVAILABLE_LABEL}</span>}
+    </span>
   );
 }

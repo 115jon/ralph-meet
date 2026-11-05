@@ -10,6 +10,12 @@ import type {
   RalphPushOptions,
 } from "./partytracks-transport";
 import { PUBLICATION_STALE_AFTER_MS } from "./publication-liveness";
+import {
+  RemoteVideoHealth,
+  type ReadVideoFrames,
+  type RemoteVideoHealthOptions,
+  type RemoteVideoHealthSource,
+} from "./remote-video-health";
 import type { TrackInfo } from "./track-info";
 import {
   CAMERA_SIMULCAST_ENCODINGS,
@@ -144,6 +150,21 @@ export interface PartyTracksMediaManagerOptions {
    * call screen is up.
    */
   readonly optInTrackPrefixes?: readonly string[];
+  /**
+   * Reads a pulled track's decoded frames (the platform's stats). With it,
+   * remote cameras on screen are measured (videoHealth), and one that
+   * stalls is pulled again on a fresh path (recoverRemoteVideo).
+   */
+  readonly readVideoFrames?: ReadVideoFrames;
+  readonly videoHealthTiming?: Pick<
+    RemoteVideoHealthOptions,
+    | "intervalMs"
+    | "firstFrameTimeoutMs"
+    | "recoveredFirstFrameTimeoutMs"
+    | "stallAfterMs"
+    | "now"
+    | "schedule"
+  >;
 }
 
 // PartyTracks retries a failing pull itself (100 ms doubling to 10 s) and
@@ -160,6 +181,8 @@ const DEFAULT_LAYER_UPGRADE_DELAY_MS = 150;
 const DEFAULT_LAYER_DOWNGRADE_DELAY_MS = 1_000;
 /** Remote tracks pulled only once subscribed (see isSubscribed). */
 const DEFAULT_OPT_IN_TRACK_PREFIXES: readonly string[] = ["screen-video-"];
+/** Remote cameras, which videoHealth measures (a share may sit still). */
+const CAMERA_VIDEO_PREFIX = "cam-video-";
 /** Until something renders a pulled camera, it is pulled at the low layer. */
 const INITIAL_VIDEO_LAYER: VideoLayerQuality = "low";
 
@@ -252,6 +275,14 @@ export class PartyTracksMediaManager {
   private readonly offers = new Map<string, TrackInfo>();
   private readonly pulls = new Map<string, RemotePull>();
   private readonly pullRetries = new Map<string, PullRetry>();
+  /**
+   * Video aliases whose pull closed (recovered, retargeted, dropped,
+   * unsubscribed, withdrawn before it produced a track) and that no fresh
+   * pull has brought back yet: every pull of one asks for a fresh path (see
+   * startPull), whichever path starts it. Pulled again on the connection
+   * that closed it, the SFU can recycle the closed m-line's MID.
+   */
+  private readonly freshPullAliases = new Set<string>();
   private readonly unsubscribedTrackNames = new Set<string>();
   /** Opt-in tracks (screen video) the viewer has asked for. */
   private readonly subscribedTrackNames = new Set<string>();
@@ -278,6 +309,12 @@ export class PartyTracksMediaManager {
     | readonly RTCRtpEncodingParameters[]
     | null;
   private readonly optInTrackPrefixes: readonly string[];
+  private readonly health: RemoteVideoHealth | null;
+  /**
+   * The remote cameras on screen and whether they play (tiles read it);
+   * measures nothing without the readVideoFrames option.
+   */
+  readonly videoHealth: RemoteVideoHealthSource;
 
   constructor(
     private readonly transport: PartyTracksMediaTransport,
@@ -314,6 +351,15 @@ export class PartyTracksMediaManager {
     this.optInTrackPrefixes =
       options.optInTrackPrefixes ?? DEFAULT_OPT_IN_TRACK_PREFIXES;
     this.videoRenderDemand = options.videoRenderDemand ?? videoRenderDemand;
+    this.health = options.readVideoFrames
+      ? new RemoteVideoHealth({
+          ...options.videoHealthTiming,
+          readFrames: options.readVideoFrames,
+          recover: (trackName) => this.recoverRemoteVideo(trackName),
+          renderDemand: this.videoRenderDemand,
+        })
+      : null;
+    this.videoHealth = this.health ?? UNMEASURED_VIDEO;
     this.unsubscribeVideoRenderDemand = this.videoRenderDemand.subscribe(() =>
       this.refreshVideoLayers(),
     );
@@ -698,6 +744,9 @@ export class PartyTracksMediaManager {
       this.stopPull(trackName);
       this.clearPullRetry(trackName);
       this.notFound.delete(trackName);
+      // Their connection goes with them: the next pull is on a new one
+      // anyway, and one fresh pull each would open a connection each.
+      this.freshPullAliases.delete(trackName);
     }
   }
 
@@ -721,6 +770,7 @@ export class PartyTracksMediaManager {
       this.offers.delete(trackName);
       this.clearPullRetry(trackName);
       this.notFound.delete(trackName);
+      this.health?.forget(trackName);
       this.parkPull(trackName, pull);
     }
   }
@@ -731,7 +781,29 @@ export class PartyTracksMediaManager {
       this.stopPull(trackName);
       this.clearPullRetry(trackName);
       this.notFound.delete(trackName);
+      this.health?.forget(trackName);
     }
+  }
+
+  /**
+   * Pulls a shown remote video alias again on a fresh path (a new video
+   * session, see SplitVideoTransport) because its track decodes nothing
+   * (see RemoteVideoHealth). False when there is nothing to recover: no
+   * offer, a parked pull, or a pull with no track yet (one already being
+   * pulled again).
+   */
+  recoverRemoteVideo(trackName: string): boolean {
+    if (this.disposed) return false;
+    const offer = this.offers.get(trackName);
+    const pull = this.pulls.get(trackName);
+    if (offer?.kind !== "video" || !pull?.currentTrack || pull.parked) {
+      return false;
+    }
+    if (!this.isSubscribed(trackName)) return false;
+    this.stopPull(trackName);
+    this.clearPullRetry(trackName);
+    this.startPull(offer, true, pull.layer);
+    return true;
   }
 
   /** Stops a participant's tracks, except the ones named in `keep`. */
@@ -777,7 +849,7 @@ export class PartyTracksMediaManager {
     if (this.disposed) return;
     for (const [trackName, pull] of this.pulls) {
       if (!pull.currentTrack || pull.parked) continue;
-      this.callbacks.onRemoteTrack({
+      this.emitRemoteTrack({
         action: "add",
         track: pull.currentTrack,
         trackInfo: this.offers.get(trackName) ?? pull.metadata$.value,
@@ -806,37 +878,58 @@ export class PartyTracksMediaManager {
       this.clearPullRetry(trackName);
     }
     this.offers.clear();
+    this.freshPullAliases.clear();
     this.unsubscribedTrackNames.clear();
     this.subscribedTrackNames.clear();
     this.notFound.clear();
     this.unsubscribeVideoRenderDemand();
+    this.health?.dispose();
     this.pullErrorSubscription?.unsubscribe();
     this.stateSubscription.unsubscribe();
   }
 
-  private startPull(track: TrackInfo): void {
+  /**
+   * `fresh` pulls on a peer connection with no closed m-line (honoured by
+   * SplitVideoTransport): for a video alias pulled again after its pull
+   * closed, failed or stalled (freshPullAliases, so every caller asks for
+   * it). Pulled again on the connection that closed it, the SFU can hand
+   * back the recycled MID with other RTP header extension IDs, which
+   * libwebrtc rejects, and the video never arrives.
+   */
+  private startPull(
+    track: TrackInfo,
+    fresh = false,
+    layer: VideoLayerQuality = INITIAL_VIDEO_LAYER,
+  ): void {
+    if (track.kind === "video" && this.freshPullAliases.has(track.track_name)) {
+      fresh = true;
+    }
     const metadata$ = new BehaviorSubject(track);
     const pull: RemotePull = {
       metadata$,
       subscription: new Subscription(),
-      layer: INITIAL_VIDEO_LAYER,
+      // A re-pull asks for the layer its alias was shown at.
+      layer,
       preferredRid$: new BehaviorSubject(
-        selectSimulcastRid(INITIAL_VIDEO_LAYER, track.simulcast_rids),
+        selectSimulcastRid(layer, track.simulcast_rids),
       ),
     };
     this.pulls.set(track.track_name, pull);
     this.armPullWatchdog(track.track_name, pull);
     this.callbacks.onPullStarted?.(track.track_name);
-    const pullOptions =
-      track.kind === "video"
-        ? { preferredRid$: pull.preferredRid$.asObservable() }
-        : undefined;
+    let pullOptions: RalphPullOptions | undefined;
+    if (track.kind === "video") {
+      pullOptions = { preferredRid$: pull.preferredRid$.asObservable() };
+      if (fresh) pullOptions.fresh = true;
+    }
     pull.subscription = this.transport.pull(metadata$, pullOptions).subscribe({
       next: (remoteTrack) => {
         pull.cancelWatchdog?.();
         pull.cancelWatchdog = undefined;
         this.pullRetries.delete(track.track_name);
         this.notFound.delete(track.track_name);
+        // Back on a path with no closed m-line of it.
+        if (fresh) this.freshPullAliases.delete(track.track_name);
         const offer = this.offers.get(track.track_name);
         // PartyTracks re-emits a track it already produced.
         if (pull.currentTrack === remoteTrack) {
@@ -845,7 +938,7 @@ export class PartyTracksMediaManager {
         }
         if (pull.currentTrack) {
           if (!pull.parked) {
-            this.callbacks.onRemoteTrack({
+            this.emitRemoteTrack({
               action: "remove",
               track: pull.currentTrack,
               trackInfo: offer ?? pull.metadata$.value,
@@ -860,7 +953,7 @@ export class PartyTracksMediaManager {
           !offer ||
           (pull.parked === true && !this.isSubscribed(track.track_name));
         if (pull.parked || !offer) return;
-        this.callbacks.onRemoteTrack({
+        this.emitRemoteTrack({
           action: "add",
           track: remoteTrack,
           trackInfo: offer,
@@ -877,11 +970,14 @@ export class PartyTracksMediaManager {
   /**
    * Points a pull at `offer`, its alias's current publication. The same SFU
    * track (a camera turned back on, see unpublishTrack) just shows the
-   * pulled track again, with no request. Another SFU track (an older
-   * publisher, or one whose session was rebuilt) is pulled afresh by
-   * PartyTracks, which closes the old transceiver; the watchdog covers that
-   * pull. The SFU cannot move a pull to another track in place: tracks/update
-   * answers success for a new trackName but keeps the closed one.
+   * pulled track again, with no request. Another SFU track (a publisher
+   * with no keepalive, such as an iPhone, turning its camera back on; or
+   * one whose session was rebuilt) is pulled afresh, as the SFU cannot move
+   * a pull to another track in place (tracks/update answers success for a
+   * new trackName but keeps the closed one). Video is pulled again on a
+   * fresh path (see startPull); audio by PartyTracks on the same
+   * subscription, which closes the old transceiver. The watchdog covers
+   * either pull.
    */
   private retargetPull(
     trackName: string,
@@ -889,6 +985,11 @@ export class PartyTracksMediaManager {
     offer: TrackInfo,
   ): void {
     const pulled = pull.metadata$.value;
+    if (offer.kind === "video" && !sameSfuTrack(pulled, offer)) {
+      this.stopPull(trackName);
+      this.startPull(offer, true, pull.layer);
+      return;
+    }
     // Before the metadata, so the move (or a re-pull) asks for this offer's
     // RID.
     pull.preferredRid$.next(
@@ -915,7 +1016,7 @@ export class PartyTracksMediaManager {
     pull.cancelWatchdog = undefined;
     pull.pendingLayer?.cancel();
     pull.pendingLayer = undefined;
-    this.callbacks.onRemoteTrack({
+    this.emitRemoteTrack({
       action: "remove",
       track: pull.currentTrack,
       trackInfo: pull.metadata$.value,
@@ -927,7 +1028,7 @@ export class PartyTracksMediaManager {
     if (!pull.parked || !pull.currentTrack || !offer) return;
     if (!this.isSubscribed(trackName)) return;
     pull.parked = false;
-    this.callbacks.onRemoteTrack({
+    this.emitRemoteTrack({
       action: "add",
       track: pull.currentTrack,
       trackInfo: offer,
@@ -1030,6 +1131,8 @@ export class PartyTracksMediaManager {
   /** Drops a pull that failed or produced nothing, and pulls again later. */
   private dropPull(trackName: string, pull: RemotePull): void {
     if (this.disposed || this.pulls.get(trackName) !== pull) return;
+    // A dropped video pull may have closed a transceiver on its connection:
+    // stopPull marks the alias, so the re-pull is fresh.
     this.stopPull(trackName);
     const retry = this.pullRetries.get(trackName) ?? { failures: 0 };
     retry.failures += 1;
@@ -1128,6 +1231,22 @@ export class PartyTracksMediaManager {
     };
   }
 
+  /** onRemoteTrack, and the cameras the health monitor watches. */
+  private emitRemoteTrack(event: PartyTracksRemoteTrackEvent): void {
+    if (
+      this.health &&
+      event.track.kind === "video" &&
+      event.trackInfo.track_name.startsWith(CAMERA_VIDEO_PREFIX)
+    ) {
+      if (event.action === "add") {
+        this.health.watch(event.trackInfo.track_name, event.track);
+      } else {
+        this.health.unwatch(event.track);
+      }
+    }
+    this.callbacks.onRemoteTrack(event);
+  }
+
   private stopPull(trackName: string): void {
     const pull = this.pulls.get(trackName);
     if (!pull) return;
@@ -1137,6 +1256,10 @@ export class PartyTracksMediaManager {
     pull.pendingLayer?.cancel();
     pull.pendingLayer = undefined;
     pull.subscription.unsubscribe();
+    // Closing a video pull may close its m-line (see freshPullAliases).
+    if (pull.metadata$.value.kind === "video") {
+      this.freshPullAliases.add(trackName);
+    }
     pull.metadata$.complete();
     pull.preferredRid$.complete();
     if (!pull.currentTrack) return;
@@ -1144,7 +1267,7 @@ export class PartyTracksMediaManager {
       pull.currentTrack.stop();
       return;
     }
-    this.callbacks.onRemoteTrack({
+    this.emitRemoteTrack({
       action: "remove",
       track: pull.currentTrack,
       trackInfo: this.offers.get(trackName) ?? pull.metadata$.value,
@@ -1152,3 +1275,9 @@ export class PartyTracksMediaManager {
     pull.currentTrack.stop();
   }
 }
+
+/** A videoHealth that measures nothing (no readVideoFrames option). */
+const UNMEASURED_VIDEO: RemoteVideoHealthSource = {
+  flowOf: () => undefined,
+  subscribe: () => () => {},
+};

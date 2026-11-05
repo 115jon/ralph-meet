@@ -81,6 +81,8 @@ class LayerTransport implements PartyTracksMediaTransport {
   readonly pullOptions = new Map<string, RalphPullOptions | undefined>();
   /** Per alias: metadata and preferred RIDs as the pull saw them, in order. */
   readonly log = new Map<string, string[]>();
+  /** Every pull's log, in order, with whether it asked for a fresh path. */
+  readonly pulls: Array<{ log: string[]; fresh: boolean }> = [];
   pullCount = 0;
 
   push(
@@ -111,6 +113,7 @@ class LayerTransport implements PartyTracksMediaTransport {
       log.push(`metadata:${track.sfu_track_name}`);
     });
     this.log.set(trackName, log);
+    this.pulls.push({ log, fresh: options?.fresh === true });
     this.pullOptions.set(trackName, options);
     const pulled = new Subject<MediaStreamTrack>();
     this.pulledTracks.set(trackName, pulled);
@@ -349,7 +352,7 @@ describe("PartyTracksMediaManager simulcast layer selection", () => {
     expect(rids()).toEqual(["q", "f", "q"]);
   });
 
-  it("names the new publication's layer before its metadata, so a re-pull asks for it", () => {
+  it("pulls a new publication afresh at the layer its alias was shown at", () => {
     const { transport, manager, arrive, render, timers } = setup();
     manager.offerTracks([cameraOffer]);
     arrive();
@@ -369,16 +372,16 @@ describe("PartyTracksMediaManager simulcast layer selection", () => {
       { ...cameraOffer, sfu_track_name: "opaque-camera-3" },
     ]);
 
-    expect(transport.log.get(cameraOffer.track_name)).toEqual([
-      "rid:q",
-      "metadata:opaque-camera",
-      "rid:f",
-      "rid:undefined",
-      "metadata:opaque-camera-2",
-      "rid:f",
-      "metadata:opaque-camera-3",
+    // Each SFU track is pulled on a fresh path, asking for the layer the
+    // tile needed before its metadata.
+    expect(transport.pulls).toEqual([
+      {
+        log: ["rid:q", "metadata:opaque-camera", "rid:f"],
+        fresh: false,
+      },
+      { log: ["rid:undefined", "metadata:opaque-camera-2"], fresh: true },
+      { log: ["rid:f", "metadata:opaque-camera-3"], fresh: true },
     ]);
-    expect(transport.pullCount).toBe(1);
   });
 
   it("cancels a pending layer change when the pull stops", () => {

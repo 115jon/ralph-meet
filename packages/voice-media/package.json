@@ -6,7 +6,8 @@
   "description": "Yap voice media over one PartyTracks session: publications, pulls, simulcast layers and keepalives, for the web and the Expo app. WebRTC is the platform's (browser or react-native-webrtc).",
   "exports": {
     ".": "./src/index.ts",
-    "./video-render-demand": "./src/video-render-demand.ts"
+    "./video-render-demand": "./src/video-render-demand.ts",
+    "./video-flow": "./src/video-flow.ts"
   },
   "dependencies": {
     "@ralph/realtime": "workspace:*",

@@ -153,6 +153,7 @@ export async function joinVoiceChannel(target: JoinTarget): Promise<void> {
       participants: {},
       speaking: {},
       videos: {},
+      cameraFlows: {},
       local: NO_LOCAL_MEDIA,
     },
   });

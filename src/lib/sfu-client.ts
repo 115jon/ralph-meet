@@ -30,9 +30,14 @@ import {
 import {
   PartyTracksMediaManager,
   PartyTracksTransport,
+  readReceiverFrames,
+  SplitVideoTransport,
   type PartyTracksMediaTransport,
   type PartyTracksTransportCredentials,
+  type VideoFlow,
+  type VideoFrameReading,
 } from "@ralph/voice-media";
+import { readMainSessionVideoFrames } from "./voice/main-session-video-frames";
 import { opusPtimeConfigurator } from "./voice/opus-ptime";
 import { createVideoKeepalive } from "./voice/video-keepalive";
 import { StatsHub } from "./voice/stats-hub";
@@ -65,6 +70,8 @@ export type SFUDisconnectReason =
 
 export interface PartyTracksClientTransport extends PartyTracksMediaTransport {
   readonly peerConnection$: Observable<RTCPeerConnection>;
+  /** The current peer connection (PartyTracksTransport has it). */
+  readonly peerConnection?: RTCPeerConnection | null;
   readonly session$?: Observable<{
     peerConnection: RTCPeerConnection;
     sessionId: string;
@@ -138,8 +145,21 @@ export class SFUClient extends TypedEventEmitter<SFUEventMap> {
    * it: screen video is pulled only once subscribed.
    */
   private readonly remoteTrackSubscriptions = new Map<string, boolean>();
-  private partyTracksTransport: PartyTracksClientTransport | null = null;
+  /**
+   * The call's PartyTracks session, with video pulled again after a close or
+   * a stall moved to a session of its own (SplitVideoTransport, "fresh").
+   */
+  private partyTracksTransport: SplitVideoTransport | null = null;
   private partyTracksMedia: PartyTracksMediaManager | null = null;
+  /** What a recovery video session is opened with: the latest credentials. */
+  private partyTracksCredentials: PartyTracksTransportCredentials | null = null;
+  private readonly remoteVideoFlowListeners = new Set<() => void>();
+  /** When each remote camera was first read (see readRemoteVideoFrames). */
+  private readonly remoteVideoReadSince = new WeakMap<
+    MediaStreamTrack,
+    number
+  >();
+  private remoteVideoHealthSubscription: (() => void) | null = null;
   private partyTracksParticipantId: string | null = null;
   private partyTracksPeerConnection: RTCPeerConnection | null = null;
   private partyTracksPeerConnectionSubscription: Subscription | null = null;
@@ -487,6 +507,7 @@ export class SFUClient extends TypedEventEmitter<SFUEventMap> {
         this.voiceToken = event.voiceToken;
         this.credentialsReceivedAt = Date.now();
         this.voiceGW.updateVoiceToken(event.voiceToken);
+        this.updatePartyTracksCredentials({ voiceToken: event.voiceToken });
         this.partyTracksTransport?.updateVoiceToken(event.voiceToken);
       }
       this.emit("participants-sync", {
@@ -811,18 +832,34 @@ export class SFUClient extends TypedEventEmitter<SFUEventMap> {
       this.partyTracksTransport &&
       this.partyTracksParticipantId === participantId
     ) {
+      this.updatePartyTracksCredentials({ voiceToken, iceServers });
       this.partyTracksTransport.updateVoiceToken(voiceToken);
       if (iceServers) this.partyTracksTransport.updateIceServers(iceServers);
       return;
     }
 
     this.disposePartyTracksMedia();
-    const transport = this.createPartyTracksTransport({
+    const credentials: PartyTracksTransportCredentials = {
       roomSlug: this.roomSlug,
       participantId,
       voiceToken,
       iceServers,
-    });
+    };
+    this.partyTracksCredentials = credentials;
+    const transport = new SplitVideoTransport(
+      this.createPartyTracksTransport(credentials),
+      {
+        // Pulls stay on the call's session; a camera pulled again (after its
+        // pull closed or stalled) gets a connection with no recycled MID.
+        videoPulls: "fresh",
+        createVideoSession: () =>
+          this.createPartyTracksTransport({
+            ...(this.partyTracksCredentials ?? credentials),
+          }),
+        onVideoSession: (event) =>
+          sfuLog.info(`Recovery video session ${event}`),
+      },
+    );
     this.partyTracksTransport = transport;
     this.partyTracksParticipantId = participantId;
     this.partyTracksPeerConnectionSubscription =
@@ -924,8 +961,15 @@ export class SFUClient extends TypedEventEmitter<SFUEventMap> {
           });
         },
       },
-      { createVideoKeepalive },
+      {
+        createVideoKeepalive,
+        readVideoFrames: (track) => this.readRemoteVideoFrames(track),
+      },
     );
+    this.remoteVideoHealthSubscription =
+      this.partyTracksMedia.videoHealth.subscribe(() =>
+        this.notifyRemoteVideoFlow(),
+      );
     for (const [trackName, subscribe] of this.remoteTrackSubscriptions) {
       this.partyTracksMedia.setRemoteTrackSubscription(trackName, subscribe);
     }
@@ -941,6 +985,8 @@ export class SFUClient extends TypedEventEmitter<SFUEventMap> {
   }
 
   private disposePartyTracksMedia(): void {
+    this.remoteVideoHealthSubscription?.();
+    this.remoteVideoHealthSubscription = null;
     this.partyTracksPeerConnectionSubscription?.unsubscribe();
     this.partyTracksPeerConnectionSubscription = null;
     this.partyTracksSessionSubscription?.unsubscribe();
@@ -949,7 +995,9 @@ export class SFUClient extends TypedEventEmitter<SFUEventMap> {
     this.partyTracksMedia?.dispose();
     this.partyTracksTransport?.dispose();
     this.partyTracksMedia = null;
+    this.notifyRemoteVideoFlow();
     this.partyTracksTransport = null;
+    this.partyTracksCredentials = null;
     this.partyTracksParticipantId = null;
     this.statsHub.stop();
     this.audioSentinel.stop();
@@ -960,7 +1008,47 @@ export class SFUClient extends TypedEventEmitter<SFUEventMap> {
 
   private applyIceServers(iceServers: IceServer[]): void {
     this.iceServers = iceServers;
+    this.updatePartyTracksCredentials({ iceServers });
     this.partyTracksTransport?.updateIceServers(iceServers);
+  }
+
+  private updatePartyTracksCredentials(update: {
+    voiceToken?: string;
+    iceServers?: IceServer[];
+  }): void {
+    if (!this.partyTracksCredentials) return;
+    const next = { ...this.partyTracksCredentials };
+    if (update.voiceToken) next.voiceToken = update.voiceToken;
+    if (update.iceServers) next.iceServers = [...update.iceServers];
+    this.partyTracksCredentials = next;
+  }
+
+  /**
+   * A pulled camera's decoded frames, for the media manager's video health.
+   * On the call's session it is read from the StatsHub's latest snapshot
+   * where the hub has one (see readMainSessionVideoFrames); a recovery
+   * session's receiver is read directly (rare, and only while it pulls).
+   */
+  private async readRemoteVideoFrames(
+    track: MediaStreamTrack,
+  ): Promise<VideoFrameReading | null> {
+    const transport = this.partyTracksTransport;
+    if (!transport) return null;
+    const receiver = transport.receiverFor(track);
+    if (transport.isOnMainSession(track)) {
+      const since = this.remoteVideoReadSince.get(track) ?? Date.now();
+      this.remoteVideoReadSince.set(track, since);
+      const pulled = this.partyTracksMedia
+        ?.getRemoteTracksForDiagnostics()
+        .find((info) => info.track === track);
+      const stats = pulled ? this.stats.getTrackStats(pulled.track_name) : null;
+      return readMainSessionVideoFrames(stats, since, receiver);
+    }
+    return receiver ? readReceiverFrames(receiver) : null;
+  }
+
+  private notifyRemoteVideoFlow(): void {
+    for (const listener of [...this.remoteVideoFlowListeners]) listener();
   }
 
   /**
@@ -1619,6 +1707,23 @@ export class SFUClient extends TypedEventEmitter<SFUEventMap> {
 
   public deleteUserMapping(participantId: string): void {
     this.stats.deleteUserMapping(participantId);
+  }
+
+  /**
+   * Whether a remote camera track on screen is playing, waiting for its
+   * first frame, or stalled (see @ralph/voice-media RemoteVideoHealth);
+   * undefined when nothing measures it.
+   */
+  public getRemoteVideoFlow(track: MediaStreamTrack): VideoFlow | undefined {
+    return this.partyTracksMedia?.videoHealth.flowOf(track);
+  }
+
+  /** Notified when any remote camera's flow changes. */
+  public subscribeRemoteVideoFlow(listener: () => void): () => void {
+    this.remoteVideoFlowListeners.add(listener);
+    return () => {
+      this.remoteVideoFlowListeners.delete(listener);
+    };
   }
 
   /** Notified after every stats snapshot; then read getStatsByUserId(). */

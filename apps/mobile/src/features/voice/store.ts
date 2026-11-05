@@ -1,3 +1,4 @@
+import type { VideoFlow } from "@ralph/voice-media/video-flow";
 import { useMemo } from "react";
 import { create } from "zustand";
 import { useShallow } from "zustand/react/shallow";
@@ -66,6 +67,11 @@ export interface ActiveCall {
   readonly speaking: Readonly<Record<string, true>>;
   /** Pulled video by participant id; absent when none is pulled. */
   readonly videos: Readonly<Record<string, ParticipantVideo>>;
+  /**
+   * Whether each shown remote camera plays, by participant id (see
+   * @ralph/voice-media RemoteVideoHealth); absent while unmeasured.
+   */
+  readonly cameraFlows: Readonly<Record<string, VideoFlow>>;
   readonly local: LocalMedia;
 }
 
@@ -193,6 +199,23 @@ function tileStream(call: ActiveCall | null, tile: CallTile): string | null {
 
 export function useTileStream(tile: CallTile): string | null {
   return useVoiceStore((s) => tileStream(s.call, tile));
+}
+
+/**
+ * A remote camera tile announced on (self_video), and its shown track's
+ * flow; null for anything else (our own tile, a screen, a camera off).
+ */
+export function useRemoteCamera(
+  tile: CallTile,
+): { readonly flow: VideoFlow | undefined } | null {
+  const on = useVoiceStore(
+    (s) =>
+      tile.kind === "person" &&
+      s.call?.selfId !== tile.participantId &&
+      s.call?.participants[tile.participantId]?.camera === true,
+  );
+  const flow = useVoiceStore((s) => s.call?.cameraFlows[tile.participantId]);
+  return useMemo(() => (on ? { flow } : null), [on, flow]);
 }
 
 /**

@@ -298,6 +298,10 @@ export class CallSession {
         },
         peerState: (state) => this.onPeerState(state),
         remoteTrack: (event) => this.onRemoteTrack(event),
+        videoFlow: () =>
+          this.video.refreshFlows((track) =>
+            this.connection.videoFlowOf(track),
+          ),
         giveUp: (reason) => this.fail(GIVE_UP_MESSAGE[reason]),
       }),
     );

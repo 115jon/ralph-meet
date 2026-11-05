@@ -1,4 +1,4 @@
-import type { TrackInfo } from "@ralph/voice-media";
+import type { TrackInfo, VideoFlow } from "@ralph/voice-media";
 import {
   MediaStream as NativeMediaStream,
   type MediaStreamTrack as NativeMediaStreamTrack,
@@ -22,7 +22,7 @@ import { updateCall, type ParticipantVideo } from "./store";
 //
 // In the background (not PiP) every video pull closes, so a phone in a
 // pocket receives no video at all. Video pulls run on their own PartyTracks
-// session (./split-transport), which goes once they have closed; back in
+// session (SplitVideoTransport), which goes once they have closed; back in
 // front, watching pulls them on a new session, where no closed m-line is
 // recycled.
 //
@@ -47,6 +47,8 @@ export interface VideoSubscriber {
   setRemoteTrackSubscription(trackName: string, subscribe: boolean): void;
   /** Closes every video pull nobody subscribes to, kept ones included. */
   releaseUnwatchedVideo(): void;
+  /** A shown remote camera's flow (the media manager's videoHealth). */
+  videoFlowOf(track: MediaStreamTrack): VideoFlow | undefined;
 }
 
 /** A video publication the PartyTracks transport can pull. */
@@ -66,6 +68,16 @@ export function isVideoAlias(trackName: string): boolean {
 
 function slotOf(trackName: string): Slot {
   return trackName.startsWith("screen-") ? "screen" : "camera";
+}
+
+function setCameraFlow(participantId: string, flow: VideoFlow | undefined) {
+  updateCall((call) => {
+    if (call.cameraFlows[participantId] === flow) return call;
+    const cameraFlows = { ...call.cameraFlows };
+    if (flow === undefined) delete cameraFlows[participantId];
+    else cameraFlows[participantId] = flow;
+    return { ...call, cameraFlows };
+  });
 }
 
 function setVideo(participantId: string, slot: Slot, url: string | null) {
@@ -181,7 +193,24 @@ export class RemoteVideo {
     this.shown.set(trackName, shown);
     console.log(`[Voice] Remote video ${trackName}`);
     registerRenderStream(url, stream as unknown as MediaStream);
+    // The health monitor took the track before this (and said so while it
+    // was not shown yet): seed its flow first, so a re-pulled camera's tile
+    // shows the loading state, not black video, until it decodes.
+    if (shown.slot === "camera") {
+      setCameraFlow(shown.participantId, this.subscriber()?.videoFlowOf(track));
+    }
     if (this.subscribed) setVideo(shown.participantId, shown.slot, url);
+  }
+
+  /**
+   * The media manager's camera flows changed (RemoteVideoHealth): the store
+   * mirrors each shown camera's, so its tile can say when it does not play.
+   */
+  refreshFlows(flowOf: (track: MediaStreamTrack) => VideoFlow | undefined) {
+    for (const shown of this.shown.values()) {
+      if (shown.slot !== "camera") continue;
+      setCameraFlow(shown.participantId, flowOf(shown.track));
+    }
   }
 
   /** Drops every rendered stream (the media is going away). */
@@ -202,5 +231,6 @@ export class RemoteVideo {
     // The wrapper only: the media manager owns and stops the track itself.
     shown.stream.release(false);
     setVideo(shown.participantId, shown.slot, null);
+    if (shown.slot === "camera") setCameraFlow(shown.participantId, undefined);
   }
 }

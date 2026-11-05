@@ -23,7 +23,8 @@ import { GridItem, VoiceActions } from "./types";
 import { VideoPlayer } from "./VideoPlayer";
 import { StickerReactionsOverlay } from "./StickerReactionsOverlay";
 import { hasLiveVideoTrack } from "./media-stream-tracks";
-import { TileAvatar, TileNameplate } from "./TileParts";
+import { CameraUnavailableBadge, TileAvatar, TileNameplate } from "./TileParts";
+import { useCameraTileVideo } from "./useCameraTileVideo";
 import {
   cardPropsEqual,
   ROW_TILE_AVATAR_BOX,
@@ -109,21 +110,33 @@ function ParticipantCardImpl({
   const shouldShowWatchers =
     !isTray && streamWatchers.length > 0 && isEffectivelyWatchingStream;
   const hasVideo = hasLiveVideoTrack(item.stream);
+  // A remote camera that is not playing (no frames yet, stalled, or never
+  // arriving) shows the loading state or "Video unavailable" over its
+  // avatar, not a black or frozen frame.
+  const cameraVideo = useCameraTileVideo({
+    sfu: voiceActions?.sfu,
+    stream: item.stream,
+    enabled: isCamera && !item.isLocal && !suppressVideo,
+  });
   const shouldShowWatchPrompt =
     isScreen && !item.isLocal && !isEffectivelyWatchingStream;
   // An unwatched share shows its still under the Watch prompt, never video
   // (its video may still be pulled from an earlier watch).
-  const shouldRenderVideo =
+  const shouldMountVideo =
     hasVideo && !suppressVideo && !isPreviewHidden && !shouldShowWatchPrompt;
+  const shouldRenderVideo = shouldMountVideo && cameraVideo === "video";
+  const isCameraUnavailable = isCamera && cameraVideo === "unavailable";
   const shouldRenderThumbnailPoster =
     isScreen &&
     !shouldRenderVideo &&
     !!streamThumbnails[item.userId] &&
     !shouldShowWatchPrompt &&
     !isPreviewHidden;
+  const isMeasuredCamera = isCamera && !item.isLocal && !suppressVideo;
   const isLoadingStream =
-    (isCamera || isScreen) &&
-    !hasVideo &&
+    (isMeasuredCamera
+      ? cameraVideo === "connecting"
+      : (isCamera || isScreen) && !hasVideo) &&
     !shouldShowWatchPrompt &&
     !isPreviewHidden &&
     !shouldRenderThumbnailPoster;
@@ -182,8 +195,15 @@ function ParticipantCardImpl({
             senderUserId={item.userId}
           />
 
-          {shouldRenderVideo && (isCamera || isScreen) && (
-            <div className="pointer-events-none absolute inset-0 z-10 bg-black">
+          {shouldMountVideo && (isCamera || isScreen) && (
+            <div
+              className={cn(
+                "pointer-events-none absolute inset-0 z-10 bg-black",
+                // Kept mounted, hidden: it is measured while on screen, and
+                // shows at once when frames come back.
+                !shouldRenderVideo && "opacity-0",
+              )}
+            >
               <VideoPlayer
                 stream={item.stream}
                 label={item.name}
@@ -284,6 +304,16 @@ function ParticipantCardImpl({
             </div>
           )}
 
+          {isCameraUnavailable && (
+            <CameraUnavailableBadge
+              compact={isTray}
+              className={cn(
+                "absolute z-10",
+                isTray ? "top-1 right-1" : "top-2 left-2",
+              )}
+            />
+          )}
+
           {shouldShowWatchers && (
             <div className="pointer-events-none absolute top-2 right-2 z-10 max-w-[75%]">
               <StreamWatcherList watchers={streamWatchers} />
@@ -309,7 +339,7 @@ function ParticipantCardImpl({
                 <LedLabel state="idle" size={6} className="shrink-0">
                   Ringing
                 </LedLabel>
-              ) : isCamera && !isTray ? (
+              ) : isCamera && !isTray && cameraVideo === "video" ? (
                 <span
                   className={cn(
                     "shrink-0 rounded-xs px-1 text-num-xs",

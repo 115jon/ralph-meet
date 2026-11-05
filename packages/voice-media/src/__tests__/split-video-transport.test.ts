@@ -1,11 +1,12 @@
-import type { PartyTracksPullError, TrackInfo } from "@ralph/voice-media";
+import type { PartyTracksPullError } from "../partytracks-pull-errors";
+import type { TrackInfo } from "../track-info";
 import { BehaviorSubject, Observable, Subject, type Subscription } from "rxjs";
 import { describe, expect, it, vi } from "vitest";
 
 import {
   SplitVideoTransport,
   type SplitTransportSession,
-} from "./split-transport";
+} from "../split-video-transport";
 
 class FakeSession implements SplitTransportSession {
   readonly peerConnectionState$ = new Subject<RTCPeerConnectionState>();
@@ -19,6 +20,12 @@ class FakeSession implements SplitTransportSession {
 
   push = vi.fn(() => new Observable<TrackInfo>());
 
+  /** The tracks this session pulled, as its receivers. */
+  readonly receivers: RTCRtpReceiver[] = [];
+  readonly peerConnection = {
+    getReceivers: () => this.receivers,
+  } as unknown as RTCPeerConnection;
+
   pull(track$: Observable<TrackInfo>): Observable<MediaStreamTrack> {
     return new Observable<MediaStreamTrack>((subscriber) => {
       let trackName = "";
@@ -26,9 +33,11 @@ class FakeSession implements SplitTransportSession {
         trackName = track.track_name;
       });
       this.pulls.push(trackName);
-      subscriber.next({
+      const track = {
         id: `${this.name}:${trackName}`,
-      } as unknown as MediaStreamTrack);
+      } as unknown as MediaStreamTrack;
+      this.receivers.push({ track } as RTCRtpReceiver);
+      subscriber.next(track);
       return () => {
         metadata.unsubscribe();
         this.closed.push(trackName);
@@ -57,11 +66,12 @@ function info(trackName: string, kind: "audio" | "video"): TrackInfo {
   };
 }
 
-function setup() {
+function setup(videoPulls?: "all" | "fresh") {
   const main = new FakeSession("main");
   const videos: FakeSession[] = [];
   const timers: Array<{ run: () => void; cancelled: boolean }> = [];
   const transport = new SplitVideoTransport(main, {
+    videoPulls,
     createVideoSession: () => {
       const session = new FakeSession(`video${videos.length + 1}`);
       videos.push(session);
@@ -78,12 +88,20 @@ function setup() {
   const runTimers = () => {
     for (const timer of timers.splice(0)) if (!timer.cancelled) timer.run();
   };
-  const pull = (trackName: string, kind: "audio" | "video") => {
+  const pull = (
+    trackName: string,
+    kind: "audio" | "video",
+    fresh?: boolean,
+  ) => {
     const tracks: string[] = [];
+    const pulled: MediaStreamTrack[] = [];
     const subscription: Subscription = transport
-      .pull(new BehaviorSubject(info(trackName, kind)))
-      .subscribe((track) => tracks.push(track.id));
-    return { tracks, subscription };
+      .pull(new BehaviorSubject(info(trackName, kind)), { fresh })
+      .subscribe((track) => {
+        tracks.push(track.id);
+        pulled.push(track);
+      });
+    return { tracks, pulled, subscription };
   };
   return { main, videos, transport, runTimers, pull };
 }
@@ -169,5 +187,70 @@ describe("SplitVideoTransport", () => {
     main.pullErrors$.next(error("audio-sfu"));
     videos[0]?.pullErrors$.next(error("video-sfu"));
     expect(errors).toEqual(["audio-sfu", "video-sfu"]);
+  });
+
+  it("on a fresh pull starts a new video session and retires the current one", () => {
+    const { videos, transport, runTimers, pull } = setup();
+    const camera = pull("cam-video-a", "video");
+    // A stalled camera pulled again: the old session keeps its own pulls.
+    const again = pull("cam-video-b", "video", true);
+    expect(camera.tracks).toEqual(["video1:cam-video-a"]);
+    expect(again.tracks).toEqual(["video2:cam-video-b"]);
+    // New plain pulls join the fresh session, not the retired one.
+    expect(pull("screen-video-a", "video").tracks).toEqual([
+      "video2:screen-video-a",
+    ]);
+    expect(transport.videoSessionCount).toBe(2);
+    camera.subscription.unsubscribe();
+    runTimers();
+    expect(videos[0]?.disposed).toBe(true);
+    expect(videos[1]?.disposed).toBe(false);
+  });
+
+  it("in fresh mode pulls video on the main session unless asked for a fresh path", () => {
+    const { main, videos, transport, runTimers, pull } = setup("fresh");
+    expect(pull("cam-video-a", "video").tracks).toEqual(["main:cam-video-a"]);
+    expect(pull("cam-audio-a", "audio", true).tracks).toEqual([
+      "main:cam-audio-a",
+    ]);
+    const recovered = pull("cam-video-b", "video", true);
+    expect(recovered.tracks).toEqual(["video1:cam-video-b"]);
+    expect(main.pulls).toEqual(["cam-video-a", "cam-audio-a"]);
+    // Each recovery gets a connection of its own.
+    expect(pull("cam-video-c", "video", true).tracks).toEqual([
+      "video2:cam-video-c",
+    ]);
+    recovered.subscription.unsubscribe();
+    runTimers();
+    expect(videos[0]?.disposed).toBe(true);
+    expect(transport.videoSessionCount).toBe(1);
+  });
+
+  it("finds a pulled track's receiver on whichever session pulls it", () => {
+    const { transport, pull } = setup("fresh");
+    const onMain = pull("cam-video-a", "video");
+    const onVideo = pull("cam-video-b", "video", true);
+    const mainTrack = onMain.pulled[0] as MediaStreamTrack;
+    const videoTrack = onVideo.pulled[0] as MediaStreamTrack;
+    expect(transport.receiverFor(mainTrack)?.track).toBe(mainTrack);
+    expect(transport.receiverFor(videoTrack)?.track).toBe(videoTrack);
+    expect(transport.isOnMainSession(mainTrack)).toBe(true);
+    expect(transport.isOnMainSession(videoTrack)).toBe(false);
+    expect(
+      transport.receiverFor({ id: "other" } as unknown as MediaStreamTrack),
+    ).toBeNull();
+  });
+
+  it("reports pull errors of a retired video session while it still pulls", () => {
+    const { videos, transport, pull } = setup();
+    const errors: string[] = [];
+    transport.pullErrors$.subscribe((error) => errors.push(error.trackName));
+    pull("cam-video-a", "video");
+    pull("cam-video-b", "video", true);
+    const error = (trackName: string) =>
+      ({ trackName }) as unknown as PartyTracksPullError;
+    videos[0]?.pullErrors$.next(error("retired-sfu"));
+    videos[1]?.pullErrors$.next(error("fresh-sfu"));
+    expect(errors).toEqual(["retired-sfu", "fresh-sfu"]);
   });
 });

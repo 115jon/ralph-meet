@@ -1,10 +1,14 @@
 import type { TrackInfo } from "../track-info";
 import type { PartyTracksPullError } from "../partytracks-pull-errors";
-import type { RalphPublishedTrack } from "../partytracks-transport";
+import type {
+  RalphPublishedTrack,
+  RalphPullOptions,
+} from "../partytracks-transport";
 import { Observable, Subject } from "rxjs";
 import { describe, expect, it, vi } from "vitest";
 import {
   PartyTracksMediaManager,
+  type PartyTracksMediaManagerOptions,
   type PartyTracksMediaTransport,
   type TrackUnavailableEvent,
 } from "../partytracks-media-manager";
@@ -29,6 +33,10 @@ class TestTransport implements PartyTracksMediaTransport {
   readonly pullMetadata = new Map<string, TrackInfo[]>();
   readonly pulledTracks = new Map<string, Subject<MediaStreamTrack>>();
   readonly pullErrors$ = new Subject<PartyTracksPullError>();
+  /** Per pull, in order: its alias and whether it asked for a fresh path. */
+  readonly pulls: Array<{ trackName: string; fresh: boolean }> = [];
+  /** Aliases whose pull subscription closed, in order. */
+  readonly closedPulls: string[] = [];
   pullCount = 0;
   pushCount = 0;
 
@@ -45,7 +53,10 @@ class TestTransport implements PartyTracksMediaTransport {
     return metadata;
   }
 
-  pull(track$: Observable<TrackInfo>): Observable<MediaStreamTrack> {
+  pull(
+    track$: Observable<TrackInfo>,
+    options?: RalphPullOptions,
+  ): Observable<MediaStreamTrack> {
     this.pullCount += 1;
     let trackName = "";
     const metadata: TrackInfo[] = [];
@@ -54,9 +65,16 @@ class TestTransport implements PartyTracksMediaTransport {
       metadata.push(track);
     });
     this.pullMetadata.set(trackName, metadata);
+    this.pulls.push({ trackName, fresh: options?.fresh === true });
     const pulledTrack = new Subject<MediaStreamTrack>();
     this.pulledTracks.set(trackName, pulledTrack);
-    return pulledTrack;
+    return new Observable<MediaStreamTrack>((subscriber) => {
+      const inner = pulledTrack.subscribe(subscriber);
+      return () => {
+        inner.unsubscribe();
+        this.closedPulls.push(trackName);
+      };
+    });
   }
 }
 
@@ -259,11 +277,15 @@ describe("PartyTracksMediaManager", () => {
     expect(transport.pullMetadata.get("screen-video-sharer")).toEqual([
       share("share-1"),
     ]);
-    // Watching again points the same pull at the new share.
+    // Watching again pulls the new share on a fresh path (a new video
+    // session), closing the kept pull.
     viewer.setRemoteTrackSubscription("screen-video-sharer", true);
-    expect(transport.pullCount).toBe(1);
+    expect(transport.closedPulls).toEqual(["screen-video-sharer"]);
+    expect(transport.pulls).toEqual([
+      { trackName: "screen-video-sharer", fresh: false },
+      { trackName: "screen-video-sharer", fresh: true },
+    ]);
     expect(transport.pullMetadata.get("screen-video-sharer")).toEqual([
-      share("share-1"),
       share("share-2"),
     ]);
     viewer.dispose();
@@ -329,9 +351,14 @@ describe("PartyTracksMediaManager", () => {
     expect(events).toEqual(["remove:screen-video-peer"]);
     expect(viewer.hasRemoteOffer("screen-video-peer")).toBe(true);
 
-    // Watching again pulls the share afresh.
+    // Watching again pulls the share afresh, on the new connection the
+    // released ones left for (not one fresh connection per alias).
     viewer.setRemoteTrackSubscription("screen-video-peer", true);
     expect(transport.pullCount).toBe(4);
+    expect(transport.pulls.at(-1)).toEqual({
+      trackName: "screen-video-peer",
+      fresh: false,
+    });
     viewer.dispose();
   });
 
@@ -1101,22 +1128,28 @@ describe("PartyTracksMediaManager withdrawn remote tracks", () => {
     manager.dispose();
   });
 
-  it("pulls another SFU track into a withdrawn pull and shows what it produces", () => {
+  it("pulls another SFU track for a withdrawn pull on a fresh path and shows it", () => {
     const { transport, events, manager } = setup();
     manager.offerTracks([camera("sfu-camera-1")]);
     const first = mediaTrack("video", "remote-camera-1");
     transport.pulledTracks.get("cam-video-remote")?.next(first);
     manager.withdrawRemoteTracks(["cam-video-remote"]);
 
-    // An older publisher pushes each camera as a new SFU track.
+    // A publisher with no keepalive (an iPhone) pushes each camera as a new
+    // SFU track. Pulling it into the parked pull's connection can get the
+    // recycled MID back, which Chrome rejects: it is pulled on a fresh path.
     manager.offerTracks([camera("sfu-camera-2")]);
+    expect(first.stop).toHaveBeenCalledOnce();
+    expect(transport.closedPulls).toEqual(["cam-video-remote"]);
+    expect(transport.pulls).toEqual([
+      { trackName: "cam-video-remote", fresh: false },
+      { trackName: "cam-video-remote", fresh: true },
+    ]);
     expect(transport.pullMetadata.get("cam-video-remote")).toEqual([
-      camera("sfu-camera-1"),
       camera("sfu-camera-2"),
     ]);
     const second = mediaTrack("video", "remote-camera-2");
     transport.pulledTracks.get("cam-video-remote")?.next(second);
-    expect(first.stop).toHaveBeenCalledOnce();
     expect(events).toEqual([
       "add remote-camera-1 sfu-camera-1",
       "remove remote-camera-1 sfu-camera-1",
@@ -1187,6 +1220,247 @@ describe("PartyTracksMediaManager withdrawn remote tracks", () => {
     expect(manager.hasRemotePulls).toBe(false);
     manager.offerTracks([camera("sfu-camera")]);
     expect(transport.pullCount).toBe(2);
+    manager.dispose();
+  });
+});
+
+describe("PartyTracksMediaManager remote video recovery", () => {
+  const camera: TrackInfo = {
+    participant_id: "remote",
+    track_name: "cam-video-remote",
+    sfu_track_name: "sfu-camera",
+    session_id: "remote-session",
+    kind: "video",
+  };
+  const microphone: TrackInfo = {
+    ...camera,
+    track_name: "cam-audio-remote",
+    sfu_track_name: "sfu-mic",
+    kind: "audio",
+  };
+
+  function setup(withHealth = false) {
+    const transport = new TestTransport();
+    const events: string[] = [];
+    let now = 0;
+    const frames = new Map<MediaStreamTrack, number>();
+    const timers: Array<{ at: number; run: () => void; live: boolean }> = [];
+    const schedule = (run: () => void, ms: number) => {
+      const timer = { at: now + ms, run, live: true };
+      timers.push(timer);
+      return () => {
+        timer.live = false;
+      };
+    };
+    /** Runs due timers in order, letting each one's async work settle. */
+    const advance = async (ms: number) => {
+      const end = now + ms;
+      for (;;) {
+        const due = timers
+          .filter((timer) => timer.live && timer.at <= end)
+          .sort((a, b) => a.at - b.at)[0];
+        if (!due) break;
+        due.live = false;
+        now = due.at;
+        due.run();
+        for (let i = 0; i < 5; i += 1) await Promise.resolve();
+      }
+      now = end;
+    };
+    const options: PartyTracksMediaManagerOptions = {
+      schedule,
+      pullWatchdogMs: 10_000,
+      pullRetryBaseMs: 1_000,
+      videoRenderDemand: {
+        // Every track is on screen.
+        largestRenderFor: () => ({ width: 640, height: 360 }),
+        subscribe: () => () => {},
+      },
+    };
+    const health: PartyTracksMediaManagerOptions = {
+      readVideoFrames: (track: MediaStreamTrack) => ({
+        frames: frames.get(track) ?? 0,
+        at: now,
+      }),
+      videoHealthTiming: {
+        schedule,
+        now: () => now,
+        intervalMs: 1_000,
+        firstFrameTimeoutMs: 6_000,
+        stallAfterMs: 5_000,
+      },
+    };
+    const manager = new PartyTracksMediaManager(
+      transport,
+      "viewer",
+      {
+        onPublicationMetadata: vi.fn(),
+        onPublicationStopped: vi.fn(),
+        onRemoteTrack: ({ action, track }) =>
+          events.push(`${action} ${track.id}`),
+      },
+      withHealth ? { ...options, ...health } : options,
+    );
+    return { transport, events, manager, advance, frames };
+  }
+
+  it("pulls a shown camera again on a fresh path, keeping its layer", () => {
+    const { transport, events, manager } = setup();
+    manager.offerTracks([camera]);
+    const first = mediaTrack("video", "first");
+    transport.pulledTracks.get("cam-video-remote")?.next(first);
+
+    expect(manager.recoverRemoteVideo("cam-video-remote")).toBe(true);
+    expect(first.stop).toHaveBeenCalledOnce();
+    expect(transport.closedPulls).toEqual(["cam-video-remote"]);
+    expect(transport.pulls).toEqual([
+      { trackName: "cam-video-remote", fresh: false },
+      { trackName: "cam-video-remote", fresh: true },
+    ]);
+    // Already being pulled again: nothing more to do until it arrives.
+    expect(manager.recoverRemoteVideo("cam-video-remote")).toBe(false);
+    transport.pulledTracks
+      .get("cam-video-remote")
+      ?.next(mediaTrack("video", "second"));
+    expect(events).toEqual(["add first", "remove first", "add second"]);
+    manager.dispose();
+  });
+
+  it("pulls a recovered camera fresh again when its fresh pull was lost to a withdrawal", () => {
+    const { transport, events, manager } = setup();
+    manager.offerTracks([camera]);
+    transport.pulledTracks
+      .get("cam-video-remote")
+      ?.next(mediaTrack("video", "first"));
+    // Recovered: the main-session pull closes, a fresh one is on its way.
+    expect(manager.recoverRemoteVideo("cam-video-remote")).toBe(true);
+    // The publisher turns its camera off before the fresh pull lands (it had
+    // no track, so it is closed, not parked), then on again.
+    manager.withdrawRemoteTracks(["cam-video-remote"]);
+    manager.offerTracks([camera]);
+    expect(transport.pulls).toEqual([
+      { trackName: "cam-video-remote", fresh: false },
+      { trackName: "cam-video-remote", fresh: true },
+      { trackName: "cam-video-remote", fresh: true },
+    ]);
+    // Once a fresh pull has brought it back, a later pull is ordinary again.
+    transport.pulledTracks
+      .get("cam-video-remote")
+      ?.next(mediaTrack("video", "second"));
+    expect(events).toEqual(["add first", "remove first", "add second"]);
+    manager.dispose();
+  });
+
+  it("pulls dropped video fresh when a new offer cuts its backoff short", async () => {
+    const { transport, manager, advance } = setup();
+    manager.offerTracks([camera]);
+    // No track: the watchdog drops the pull, which waits out its backoff.
+    await advance(10_000);
+    // The publisher republishes meanwhile: the new offer is pulled now.
+    manager.offerTracks([{ ...camera, sfu_track_name: "sfu-camera-2" }]);
+    expect(transport.pulls).toEqual([
+      { trackName: "cam-video-remote", fresh: false },
+      { trackName: "cam-video-remote", fresh: true },
+    ]);
+    manager.dispose();
+  });
+
+  it("pulls a camera ordinarily once a fresh pull has brought it back", () => {
+    const { transport, manager } = setup();
+    manager.offerTracks([camera]);
+    transport.pulledTracks
+      .get("cam-video-remote")
+      ?.next(mediaTrack("video", "first"));
+    manager.recoverRemoteVideo("cam-video-remote");
+    transport.pulledTracks
+      .get("cam-video-remote")
+      ?.next(mediaTrack("video", "second"));
+    // It plays on its fresh session; the publisher withdraws it (parked).
+    manager.withdrawRemoteTracks(["cam-video-remote"]);
+    // Back with the same SFU track: the parked pull just shows it again.
+    manager.offerTracks([camera]);
+    expect(transport.pullCount).toBe(2);
+    manager.dispose();
+  });
+
+  it("recovers nothing that is not shown video", () => {
+    const { transport, manager } = setup();
+    expect(manager.recoverRemoteVideo("cam-video-remote")).toBe(false);
+    manager.offerTracks([camera, microphone]);
+    transport.pulledTracks
+      .get("cam-audio-remote")
+      ?.next(mediaTrack("audio", "mic"));
+    expect(manager.recoverRemoteVideo("cam-audio-remote")).toBe(false);
+    transport.pulledTracks
+      .get("cam-video-remote")
+      ?.next(mediaTrack("video", "camera"));
+    manager.withdrawRemoteTracks(["cam-video-remote"]);
+    expect(manager.recoverRemoteVideo("cam-video-remote")).toBe(false);
+    expect(transport.pullCount).toBe(2);
+    manager.dispose();
+  });
+
+  it("pulls dropped video again on a fresh path, and dropped audio on the same one", async () => {
+    const { transport, manager, advance } = setup();
+    manager.offerTracks([camera, microphone]);
+    // Neither produces a track: the watchdog drops both, then they retry.
+    await advance(10_000);
+    await advance(1_000);
+    expect(transport.pulls).toEqual([
+      { trackName: "cam-video-remote", fresh: false },
+      { trackName: "cam-audio-remote", fresh: false },
+      { trackName: "cam-video-remote", fresh: true },
+      { trackName: "cam-audio-remote", fresh: false },
+    ]);
+    manager.dispose();
+  });
+
+  it("re-pulls a shown camera that decodes nothing once, then leaves it stalled", async () => {
+    const { transport, events, manager, advance, frames } = setup(true);
+    manager.offerTracks([camera]);
+    const first = mediaTrack("video", "first");
+    transport.pulledTracks.get("cam-video-remote")?.next(first);
+    await advance(1_000);
+    expect(manager.videoHealth.flowOf(first)).toBe("waiting");
+
+    // No frame in time: pulled again on a fresh path.
+    await advance(6_000);
+    expect(transport.pulls.at(-1)).toEqual({
+      trackName: "cam-video-remote",
+      fresh: true,
+    });
+    expect(manager.videoHealth.flowOf(first)).toBeUndefined();
+    const second = mediaTrack("video", "second");
+    transport.pulledTracks.get("cam-video-remote")?.next(second);
+    // The re-pull's new connection gets longer for its first frame.
+    await advance(8_000);
+    expect(manager.videoHealth.flowOf(second)).toBe("waiting");
+    await advance(3_000);
+    expect(manager.videoHealth.flowOf(second)).toBe("stalled");
+    expect(transport.pullCount).toBe(2);
+
+    // Frames come back: it plays.
+    frames.set(second, 25);
+    await advance(1_000);
+    expect(manager.videoHealth.flowOf(second)).toBe("playing");
+    expect(events).toEqual(["add first", "remove first", "add second"]);
+    manager.dispose();
+  });
+
+  it("measures cameras only, not shares or audio", async () => {
+    const { transport, manager, advance } = setup(true);
+    const share: TrackInfo = {
+      ...camera,
+      track_name: "screen-video-remote",
+      sfu_track_name: "sfu-share",
+    };
+    manager.setRemoteTrackSubscription("screen-video-remote", true);
+    manager.offerTracks([share]);
+    const shared = mediaTrack("video", "share");
+    transport.pulledTracks.get("screen-video-remote")?.next(shared);
+    await advance(30_000);
+    expect(manager.videoHealth.flowOf(shared)).toBeUndefined();
+    expect(transport.pullCount).toBe(1);
     manager.dispose();
   });
 });
