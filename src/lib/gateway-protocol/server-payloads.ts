@@ -71,8 +71,12 @@ const MediaReadyPayload = Schema.Struct({
 
 const ReadyPayload = Schema.Struct({
   participant_id: Schema.String,
-  ice_servers: IceServers,
-  voice_token: Schema.String,
+  /**
+   * Absent when the room ticket came from /api/voice/admission with media
+   * (the admission response carried them); see realtime/ADMISSION.md.
+   */
+  ice_servers: Schema.optional(IceServers),
+  voice_token: Schema.optional(Schema.String),
   participants: Schema.optional(VoiceStates),
   heartbeat_interval: Schema.optional(Schema.Unknown),
   spatial_audio_state: Schema.optional(SpatialAudioStateObject),

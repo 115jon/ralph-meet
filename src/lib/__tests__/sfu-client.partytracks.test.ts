@@ -684,6 +684,116 @@ describe("SFUClient PartyTracks facade", () => {
     }
   });
 
+  it("keeps the admission's credentials when Ready carries none", () => {
+    vi.useFakeTimers();
+    const transport = new TestPartyTracksTransport();
+    const createPartyTracksTransport = vi.fn(() => transport);
+    const client = new SFUClient("test-room", { createPartyTracksTransport });
+    vi.spyOn(client.roomGW, "isReady", "get").mockReturnValue(true);
+    const connectVoice = vi
+      .spyOn(client.voiceGW, "connectVoice")
+      .mockImplementation(() => {});
+    const requestCredentialRefresh = vi
+      .spyOn(client.roomGW, "requestCredentialRefresh")
+      .mockImplementation(() => {});
+    const joined = vi.fn();
+    client.on("joined", joined);
+
+    try {
+      client.roomGW.emit("media-bootstrap", {
+        participantId: "local-participant",
+        voiceToken: "admission-token",
+        iceServers: FIRST_ICE_SERVERS,
+      });
+      client.roomGW.emit("ready", {
+        participantId: "local-participant",
+        sessionId: "local-participant",
+        tracksToQueue: [],
+        participants: [],
+      });
+
+      // One PartyTracks session, on the admission's token and TURN.
+      expect(createPartyTracksTransport).toHaveBeenCalledOnce();
+      expect(transport.updateVoiceToken).toHaveBeenCalledWith(
+        "admission-token",
+      );
+      expect(connectVoice).toHaveBeenLastCalledWith(
+        "local-participant",
+        "admission-token",
+        "test-room",
+        expect.any(Function),
+        expect.any(Object),
+      );
+      expect(joined).toHaveBeenCalledWith(
+        expect.objectContaining({ iceServers: FIRST_ICE_SERVERS }),
+      );
+      expect(requestCredentialRefresh).not.toHaveBeenCalled();
+
+      // Refreshed 45 minutes after the admission's token arrived.
+      vi.advanceTimersByTime(45 * 60 * 1000);
+      expect(requestCredentialRefresh).toHaveBeenCalledOnce();
+    } finally {
+      client.disconnect("component-unmount");
+      vi.useRealTimers();
+    }
+  });
+
+  it("refreshes an overdue token once a credential-less Resume lands, without reconnecting", () => {
+    vi.useFakeTimers();
+    const transport = new TestPartyTracksTransport();
+    const client = new SFUClient("test-room", {
+      createPartyTracksTransport: vi.fn(() => transport),
+    });
+    let roomReady = true;
+    vi.spyOn(client.roomGW, "isReady", "get").mockImplementation(
+      () => roomReady,
+    );
+    vi.spyOn(client.voiceGW, "connectVoice").mockImplementation(() => {});
+    const forceReconnect = vi
+      .spyOn(client.roomGW, "forceReconnect")
+      .mockImplementation(() => {});
+    const requestCredentialRefresh = vi
+      .spyOn(client.roomGW, "requestCredentialRefresh")
+      .mockImplementation(() => {});
+
+    try {
+      client.roomGW.emit("media-bootstrap", {
+        participantId: "local-participant",
+        voiceToken: "admission-token",
+      });
+      client.roomGW.emit("ready", {
+        participantId: "local-participant",
+        sessionId: "local-participant",
+        tracksToQueue: [],
+        participants: [],
+      });
+
+      // The room socket is reconnecting when the refresh falls due: wait.
+      roomReady = false;
+      vi.advanceTimersByTime(60 * 60 * 1000);
+      expect(requestCredentialRefresh).not.toHaveBeenCalled();
+      expect(forceReconnect).not.toHaveBeenCalled();
+
+      // Its Resumed brings no token (the admission's is kept): refresh now.
+      roomReady = true;
+      client.roomGW.emit("resumed", { participants: [] });
+      vi.advanceTimersByTime(0);
+      expect(requestCredentialRefresh).toHaveBeenCalledOnce();
+
+      // The op 40 reply resets the clock.
+      client.roomGW.emit("resumed", {
+        voiceToken: "refreshed-token",
+        participants: [],
+      });
+      vi.advanceTimersByTime(45 * 60 * 1000 - 1);
+      expect(requestCredentialRefresh).toHaveBeenCalledOnce();
+      expect(forceReconnect).not.toHaveBeenCalled();
+    } finally {
+      client.disconnect("component-unmount");
+      vi.useRealTimers();
+    }
+  });
+
   describe("remote reconnect grace", () => {
     const remoteAudio: TrackInfo = {
       participant_id: "remote-participant",

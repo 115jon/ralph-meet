@@ -10,7 +10,7 @@ import {
   shouldShowVoiceMemberStreamState,
 } from "@/lib/voice-presence";
 import { resolveVoiceIdentity } from "@/lib/voice-identity";
-import { prefetchVoiceChannelJoin } from "@/lib/voice/socket-ticket-client";
+import { prefetchVoiceChannelJoin } from "@/lib/voice/voice-admission-client";
 import { prewarmWebRtc } from "@/lib/voice/webrtc-prewarm";
 import type {
   Category,

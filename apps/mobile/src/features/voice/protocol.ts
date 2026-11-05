@@ -112,8 +112,9 @@ const MediaReadyPayload = Schema.Struct({
 
 const ReadyPayload = Schema.Struct({
   participant_id: Schema.String,
-  ice_servers: IceServers,
-  voice_token: Schema.String,
+  // Absent when the join's admission already carried them (ADMISSION.md).
+  ice_servers: Schema.optional(IceServers),
+  voice_token: Schema.optional(Schema.String),
   participants: Schema.optional(VoiceStates),
 });
 

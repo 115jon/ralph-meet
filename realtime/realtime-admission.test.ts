@@ -57,6 +57,38 @@ describe("realtime admission", () => {
     expect((context as { participantId?: string }).participantId).toBe(nonce);
   });
 
+  it("forwards the admission's media and bound-participant claims", async () => {
+    const context = await createRealtimeAdmissionContext({
+      ...claims,
+      participant: "participant-123456",
+    });
+    expect(context.boundParticipantId).toBe("participant-123456");
+    const room = await createRealtimeAdmissionContext({
+      ...claims,
+      audience: "room",
+      media: "held",
+    });
+    expect(
+      getRealtimeAdmissionFromHeaders(
+        appendRealtimeAdmissionHeaders(new Headers(), context),
+      ),
+    ).toMatchObject({ boundParticipantId: "participant-123456" });
+    expect(
+      getRealtimeAdmissionFromHeaders(
+        appendRealtimeAdmissionHeaders(new Headers(), room),
+      ),
+    ).toMatchObject({ media: "held" });
+    // Deprecated two-request tickets carry neither.
+    const legacy = getRealtimeAdmissionFromHeaders(
+      appendRealtimeAdmissionHeaders(
+        new Headers(),
+        await createRealtimeAdmissionContext(claims),
+      ),
+    );
+    expect(legacy).not.toHaveProperty("media");
+    expect(legacy).not.toHaveProperty("boundParticipantId");
+  });
+
   it("strips forged admission headers from incoming requests", () => {
     const headers = stripRealtimeAdmissionHeaders(
       new Headers({

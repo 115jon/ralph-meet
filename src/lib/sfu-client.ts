@@ -41,7 +41,10 @@ import { VoiceActivityDetector } from "./voice/vad";
 import type { Observable, Subscription } from "rxjs";
 
 const sfuLog = clog("SFU");
+/** Voice tokens last an hour; op 40 replaces them at this age. */
 const CREDENTIAL_REFRESH_MS = 45 * 60 * 1000;
+/** An op 40 whose reply did not arrive is sent again after this. */
+const CREDENTIAL_REFRESH_RETRY_MS = 60_000;
 /** Republishes of one track on listeners' request: at most one per this. */
 const REPUBLISH_REQUEST_INTERVAL_MS = 5_000;
 /**
@@ -150,6 +153,12 @@ export class SFUClient extends TypedEventEmitter<SFUEventMap> {
     return this.moved;
   }
   private credentialRefreshTimer: ReturnType<typeof setTimeout> | null = null;
+  /**
+   * When the voice token in use arrived. A Resume no longer brings a new
+   * one (the admission's credentials are kept), so the op 40 refresh is
+   * timed from this, not from the last Ready or Resumed.
+   */
+  private credentialsReceivedAt = 0;
   /** Unsubscribes this client's sockets from page wake (set while connected). */
   private stopPageWake: (() => void) | null = null;
   private voiceReadyPromise: Promise<void> = Promise.resolve();
@@ -389,15 +398,18 @@ export class SFUClient extends TypedEventEmitter<SFUEventMap> {
       }
       this.participantId = event.participantId;
       this.voiceToken = event.voiceToken;
+      this.credentialsReceivedAt = Date.now();
+      if (event.iceServers) this.applyIceServers(event.iceServers);
       this.ensurePartyTracksMedia(
         event.participantId,
         event.voiceToken,
         event.iceServers,
       );
-      // The ticket's bootstrap already carries this participant's voice
-      // token, so identify on the voice socket now instead of after the room
-      // socket's Identify round trip: VoiceReady (the room's track list) and
-      // our track announcement no longer wait on MediaReady.
+      // The admission already carries this participant's voice token (the
+      // room's Identify mints none then), so identify on the voice socket
+      // now instead of after the room socket's Identify round trip:
+      // VoiceReady (the room's track list) and our track announcement no
+      // longer wait on Ready.
       this.connectVoice();
     });
 
@@ -411,6 +423,7 @@ export class SFUClient extends TypedEventEmitter<SFUEventMap> {
       this.roomParticipantEstablished = true;
       this.applyIceServers(event.iceServers);
       this.voiceToken = event.voiceToken;
+      this.credentialsReceivedAt = Date.now();
       this.ensurePartyTracksMedia(
         event.participantId,
         event.voiceToken,
@@ -434,13 +447,24 @@ export class SFUClient extends TypedEventEmitter<SFUEventMap> {
 
       this.participantId = event.participantId;
       this.roomParticipantEstablished = true;
-      this.applyIceServers(event.iceServers);
-      this.voiceToken = event.voiceToken;
-      this.ensurePartyTracksMedia(
-        event.participantId,
-        event.voiceToken,
-        event.iceServers,
-      );
+      // A Ready without credentials: the admission's media bootstrap (for
+      // this same participant) already supplied them.
+      if (event.iceServers) this.applyIceServers(event.iceServers);
+      if (event.voiceToken) {
+        this.voiceToken = event.voiceToken;
+        this.credentialsReceivedAt = Date.now();
+      }
+      if (this.voiceToken) {
+        this.ensurePartyTracksMedia(
+          event.participantId,
+          this.voiceToken,
+          event.iceServers ?? this.iceServers,
+        );
+      } else {
+        // No credentials from either: ask the room for them (op 40).
+        sfuLog.warn("Ready without voice credentials; requesting them");
+        this.roomGW.requestCredentialRefresh();
+      }
       this.scheduleCredentialRefresh();
       this.markLatency("roomGatewayReadyAt", {
         source: "RoomGW ready",
@@ -448,7 +472,7 @@ export class SFUClient extends TypedEventEmitter<SFUEventMap> {
       });
       this.joinedSnapshot = {
         participantId: event.participantId,
-        iceServers: event.iceServers,
+        iceServers: this.iceServers,
         participants: event.participants,
         spatialAudioState: event.spatialAudioState,
       };
@@ -461,6 +485,7 @@ export class SFUClient extends TypedEventEmitter<SFUEventMap> {
       if (event.iceServers?.length) this.applyIceServers(event.iceServers);
       if (event.voiceToken) {
         this.voiceToken = event.voiceToken;
+        this.credentialsReceivedAt = Date.now();
         this.voiceGW.updateVoiceToken(event.voiceToken);
         this.partyTracksTransport?.updateVoiceToken(event.voiceToken);
       }
@@ -937,19 +962,30 @@ export class SFUClient extends TypedEventEmitter<SFUEventMap> {
     this.partyTracksTransport?.updateIceServers(iceServers);
   }
 
+  /**
+   * Refreshes the voice token and TURN with op 40 before the token's hour
+   * runs out, timed from when the token arrived. A Resume keeps the
+   * credentials the client holds, so while the room socket reconnects this
+   * waits: its Resumed reschedules, and an overdue refresh goes out then.
+   */
   private scheduleCredentialRefresh(): void {
     this.clearCredentialRefreshTimer();
     if (this.isLeaving) return;
-    this.credentialRefreshTimer = setTimeout(() => {
-      this.credentialRefreshTimer = null;
-      if (this.isLeaving) return;
-      if (this.roomGW.isReady) {
+    const dueIn =
+      this.credentialsReceivedAt + CREDENTIAL_REFRESH_MS - Date.now();
+    this.credentialRefreshTimer = setTimeout(
+      () => {
+        this.credentialRefreshTimer = null;
+        if (this.isLeaving || !this.roomGW.isReady) return;
         this.roomGW.requestCredentialRefresh();
-      } else {
-        this.roomGW.forceReconnect();
-      }
-      this.scheduleCredentialRefresh();
-    }, CREDENTIAL_REFRESH_MS);
+        // Its Resumed reschedules; this only fires if that never arrives.
+        this.credentialRefreshTimer = setTimeout(
+          () => this.scheduleCredentialRefresh(),
+          CREDENTIAL_REFRESH_RETRY_MS,
+        );
+      },
+      Math.max(0, dueIn),
+    );
   }
 
   private clearCredentialRefreshTimer(): void {
@@ -1083,6 +1119,9 @@ export class SFUClient extends TypedEventEmitter<SFUEventMap> {
       this.roomGW.requestCredentialRefresh();
       return;
     }
+    // A Resume brings no credentials: mark them overdue, so the Resumed
+    // after this reconnect sends op 40 (scheduleCredentialRefresh).
+    this.credentialsReceivedAt = 0;
     this.roomGW.forceReconnect();
   }
 
@@ -1198,6 +1237,7 @@ export class SFUClient extends TypedEventEmitter<SFUEventMap> {
     this.participantId = null;
     this.previousParticipantIds.clear();
     this.voiceToken = null;
+    this.credentialsReceivedAt = 0;
     this.iceServers = [];
     this.connectArgs = null;
     this.standby = false;

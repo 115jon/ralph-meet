@@ -248,8 +248,8 @@ export class CallSession {
       this.target,
       identify,
       this.whileListening({
-        roomReady: (credentials, participants) =>
-          this.onRoomReady(credentials.participantId, participants),
+        roomReady: (participantId, participants) =>
+          this.onRoomReady(participantId, participants),
         roomResumed: (participants) => this.onRoomResumed(participants),
         voiceStateUpdate: (participant, action) =>
           this.onVoiceStateUpdate(participant, action),

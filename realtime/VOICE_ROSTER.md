@@ -11,8 +11,9 @@ parsing) and the "Voice rosters" sections of `meeting-room.ts`.
 ## Event flow
 
 1. A room learns its channel id when it admits a room socket: the socket
-   ticket's `channelId` claim (set by `/api/voice/socket-ticket` after its
-   channel checks), or, for a server voice slug, the slug minus
+   ticket's `channelId` claim (set by `/api/voice/admission`, or the
+   deprecated room audience of `/api/voice/socket-ticket`, after its channel
+   checks), or, for a server voice slug, the slug minus
    `voice-<serverId>-`. It keeps it in storage (`vc:roster`).
 2. The roster is computed from the room's own sessions: one member per user,
    from live non-standby authenticated sessions (`connected`) and sessions held
@@ -43,7 +44,8 @@ parsing) and the "Voice rosters" sections of `meeting-room.ts`.
 
 A moderator move (`POST /api/voice/move`) is now two calls with one effect: the
 route records the move grant on the gateway (must precede the client's next
-ticket), then the source room ends the user's sessions. That room's roster push
+admission, which spends it once for the join), then the source room ends the
+user's sessions. That room's roster push
 takes them off the sidebar; the former third call (`/voice-move-out` on the
 gateway) is gone.
 

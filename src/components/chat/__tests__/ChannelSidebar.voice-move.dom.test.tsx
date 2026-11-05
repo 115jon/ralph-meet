@@ -5,7 +5,7 @@ import React from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 const prefetchVoiceChannelJoin = vi.fn();
-vi.mock("@/lib/voice/socket-ticket-client", () => ({
+vi.mock("@/lib/voice/voice-admission-client", () => ({
   prefetchVoiceChannelJoin: (...args: unknown[]) =>
     prefetchVoiceChannelJoin(...args),
 }));

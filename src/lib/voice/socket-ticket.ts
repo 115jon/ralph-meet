@@ -8,6 +8,20 @@ const roomSlugPattern = /^[A-Za-z0-9][A-Za-z0-9_-]{0,199}$/;
 
 export type RealtimeAccessMode = "authenticated" | "public-demo";
 export type SocketTicketAudience = "global" | "room" | "voice";
+/**
+ * Where a room ticket's participant gets its voice credentials (voice token
+ * and TURN). Only `/api/voice/admission` sets it (realtime/ADMISSION.md):
+ *
+ * - `issued`: the admission response carried them, minted for this ticket's
+ *   nonce. Identify sends neither MediaReady nor credentials in Ready.
+ * - `held`: the client holds credentials from an earlier participant of this
+ *   join (a reconnect). Resume sends none; an Identify (a new participant)
+ *   mints them as before, in MediaReady and Ready.
+ *
+ * Absent (the deprecated two-request flow on `/api/voice/socket-ticket`):
+ * Identify and Resume mint as they always did.
+ */
+export type SocketTicketMedia = "issued" | "held";
 
 export interface SocketTicketClaims {
   accessMode: RealtimeAccessMode;
@@ -22,6 +36,14 @@ export interface SocketTicketClaims {
    */
   channelId?: string;
   subject: string;
+  /** Room tickets from `/api/voice/admission`; see {@link SocketTicketMedia}. */
+  media?: SocketTicketMedia;
+  /**
+   * Voice tickets from `/api/voice/admission`: the room participant this
+   * socket must identify as. The VoiceRoom closes a socket whose
+   * VoiceIdentify names another participant (1013, retryable).
+   */
+  participant?: string;
 }
 
 export interface SocketTicketVerificationContext {
@@ -216,7 +238,25 @@ function isValidClaims(value: SocketTicketClaims): boolean {
         roomSlugPattern.test(value.serverId))) &&
     (value.channelId === undefined ||
       (typeof value.channelId === "string" &&
-        roomSlugPattern.test(value.channelId)))
+        roomSlugPattern.test(value.channelId))) &&
+    (value.media === undefined ||
+      (value.audience === "room" && isSocketTicketMedia(value.media))) &&
+    (value.participant === undefined ||
+      (value.audience === "voice" && isParticipantId(value.participant)))
+  );
+}
+
+function isSocketTicketMedia(value: unknown): value is SocketTicketMedia {
+  return value === "issued" || value === "held";
+}
+
+/** A participant id as tickets mint them (a nonce): URL-safe, 8–200 chars. */
+export function isParticipantId(value: unknown): value is string {
+  return (
+    typeof value === "string" &&
+    value.length >= 8 &&
+    value.length <= 200 &&
+    ticketTokenPattern.test(value)
   );
 }
 
@@ -238,6 +278,12 @@ function parseClaims(bytes: Uint8Array): SocketTicketClaims | null {
         ? { channelId: value.channelId as string }
         : {}),
       subject: value.subject as string,
+      ...(value.media !== undefined
+        ? { media: value.media as SocketTicketMedia }
+        : {}),
+      ...(value.participant !== undefined
+        ? { participant: value.participant as string }
+        : {}),
     };
 
     return isValidClaims(claims) ? claims : null;

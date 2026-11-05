@@ -6,6 +6,7 @@ import { generateEmojiBodySchema } from "../emojis";
 import { listenTogetherResolveBodySchema } from "../listen-together/resolve";
 import { myInstantsFavoriteBodySchema } from "../myinstants/favorites";
 import { socketTicketRequestBodySchema } from "@/server/routes/socket-ticket";
+import { voiceAdmissionRequestBodySchema } from "@/server/routes/voice-admission";
 
 function jsonRequest(body: string): Request {
   return new Request("https://meet.test/api/media", {
@@ -30,6 +31,7 @@ describe("media and miscellaneous request body validation", () => {
       { action: "add", sound: "not-an-object" },
     ],
     ["socket tickets", socketTicketRequestBodySchema, null],
+    ["voice admissions", voiceAdmissionRequestBodySchema, null],
   ])(
     "rejects structurally invalid %s bodies with a 400",
     async (_name, schema, body) => {

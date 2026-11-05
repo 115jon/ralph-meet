@@ -12,13 +12,18 @@
 //   RTP → listener's first packet → listener hears you; and you hear them.
 //
 // Scenarios (--scenario, comma separated):
-//   cold     join an occupied channel with warm standby turned off
+//   cold     join an occupied channel with warm standby turned off (the
+//            landing's prefetch is still fresh at the click)
+//   cold-stale  cold, but the landing sits idle for --idle-ms (45 s) first,
+//            past the prefetch window (40 s): the click starts from nothing
 //   warm     the same join, after the standby session has warmed up
 //   warm-idle  warm, but the landing sits idle for --idle-ms (45 s) first:
 //            longer than the SFU keeps a track that sends no media (30 s)
 //   switch   connected in channel 1, click channel 2 (occupied by "other")
 //            in the sidebar, standby off; switch-warm: the same, standby on
 //   drop     connected, go offline for --drop-ms, measure the recovery
+//   room-drop  connected, close the room socket (as a dropped link would),
+//            measure its reconnect: Resume, admission requests, audio
 //   hidden   connected, hide + freeze the tab for --hidden-ms, then resume
 //
 // Network profiles (--profile, comma separated; the joiner's page only, via
@@ -44,6 +49,9 @@
 //
 // Output: a p50/p95 table per scenario × profile on stdout, and every raw run
 // (marks, peer-connection events, getUserMedia calls, RTP firsts) with --json.
+// `admissions` counts the call-socket admission requests (one Kova session
+// check each) from the click on, `admissionsBefore` those in the minute
+// before it (prefetch, standby warm-up).
 
 import fs from "node:fs";
 import os from "node:os";
@@ -181,10 +189,18 @@ function stagesFor({ t0, joiner, listener, joinerPeers }) {
   };
   const result = {};
   for (const stage of STAGES) result[stage] = rel(stages[stage]);
-  // Server-side split of the room ticket (Server-Timing on socket-ticket).
+  result.admissions = (joiner.admissions ?? []).filter(
+    (entry) => entry.t >= t0 - 5,
+  ).length;
+  result.admissionsBefore = (joiner.admissions ?? []).filter(
+    (entry) => entry.t < t0 - 5,
+  ).length;
+  // Server-side split of the room ticket (Server-Timing on the admission,
+  // or on socket-ticket before it).
   const tickets = (joiner.resources ?? []).filter(
     (entry) =>
-      /\/api\/voice\/socket-ticket$/.test(entry.name) && entry.start >= t0 - 5,
+      /\/api\/voice\/(socket-ticket|admission)$/.test(entry.name) &&
+      entry.start >= t0 - 5,
   );
   const timingOf = (entry, name) =>
     entry?.serverTiming?.find((timing) => timing.name === name)?.dur ?? null;
@@ -338,6 +354,10 @@ async function runDisruption(kind, { joiner, listener, opts }) {
     await joiner.setNetwork("none", { offline: true });
     await sleep(opts.dropMs);
     await joiner.setNetwork("none", { offline: false });
+  } else if (kind === "room-drop") {
+    await joiner.page.evaluate(() =>
+      window.__vb.dropSockets("/api/channels/[^/]+/ws"),
+    );
   } else {
     await joiner.page.evaluate(() => window.__vb.setHidden(true));
     await joiner.cdp.send("Page.setWebLifecycleState", { state: "frozen" });
@@ -400,6 +420,8 @@ async function runDisruption(kind, { joiner, listener, opts }) {
     reconnectedSockets: j.marks.filter(
       (m) => /:ws-open$/.test(m.name) && m.t >= before,
     ).length,
+    admissions: (j.admissions ?? []).filter((entry) => entry.t >= before)
+      .length,
     connectedTextFlaps: j.connectedText.filter((e) => e.t >= before).length,
   };
   await joiner.leave();
@@ -460,11 +482,12 @@ async function main() {
           const throttle = () => joiner.setNetwork(profile);
           if (
             scenario === "cold" ||
+            scenario === "cold-stale" ||
             scenario === "warm" ||
             scenario === "warm-idle"
           ) {
             const t = Date.now();
-            await joiner.open(0, { standby: scenario !== "cold" });
+            await joiner.open(0, { standby: !scenario.startsWith("cold") });
             if (opts.verbose) log(`landing ready in ${Date.now() - t} ms`);
             await throttle();
             result = await runColdOrWarmLoaded(scenario, ctx);
@@ -473,7 +496,11 @@ async function main() {
               ...ctx,
               standby: scenario === "switch-warm",
             });
-          } else if (scenario === "drop" || scenario === "hidden") {
+          } else if (
+            scenario === "drop" ||
+            scenario === "room-drop" ||
+            scenario === "hidden"
+          ) {
             result = await runDisruption(scenario, ctx);
           } else {
             throw new Error(`Unknown scenario ${scenario}`);
@@ -508,8 +535,10 @@ async function main() {
 }
 
 async function runColdOrWarmLoaded(kind, { joiner, listener, opts }) {
-  if (kind !== "cold") await waitForStandbyWarm(joiner, 0);
-  await sleep(kind === "warm-idle" ? opts.idleMs : opts.settleMs);
+  if (!kind.startsWith("cold")) await waitForStandbyWarm(joiner, 0);
+  await sleep(
+    kind === "warm-idle" || kind === "cold-stale" ? opts.idleMs : opts.settleMs,
+  );
   const result = await measureJoin({
     joiner,
     listener,

@@ -118,4 +118,46 @@ describe("socket tickets", () => {
       ),
     ).toEqual({ ok: false, reason: "invalid" });
   });
+
+  it("carries the admission's media and participant claims, each on its own audience", async () => {
+    const room = await issueSocketTicket(
+      { ...claims, media: "issued" },
+      secret,
+    );
+    await expect(
+      verifySocketTicket(room, secret, {
+        audience: "room",
+        now: claims.expiresAt - 1,
+        roomSlug: claims.roomSlug,
+      }),
+    ).resolves.toMatchObject({ ok: true, claims: { media: "issued" } });
+
+    const voice = await issueSocketTicket(
+      {
+        ...claims,
+        audience: "voice",
+        participant: "11111111-2222-3333-4444-555555555555",
+      },
+      secret,
+    );
+    await expect(
+      verifySocketTicket(voice, secret, {
+        audience: "voice",
+        now: claims.expiresAt - 1,
+        roomSlug: claims.roomSlug,
+      }),
+    ).resolves.toMatchObject({
+      ok: true,
+      claims: { participant: "11111111-2222-3333-4444-555555555555" },
+    });
+
+    for (const invalid of [
+      { ...claims, audience: "voice" as const, media: "issued" as const },
+      { ...claims, participant: "11111111-2222-3333-4444-555555555555" },
+      { ...claims, media: "minted" as never },
+      { ...claims, audience: "voice" as const, participant: "short" },
+    ]) {
+      await expect(issueSocketTicket(invalid, secret)).rejects.toThrow();
+    }
+  });
 });

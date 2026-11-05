@@ -3,12 +3,16 @@ import { GatewayCloseCode, GatewayOp } from "@/lib/gateway-protocol";
 
 const mocks = vi.hoisted(() => ({
   fetchSocketProtocols: vi.fn(),
-  fetchSocketTicketBundle: vi.fn(),
+  takeRoomSocketTicket: vi.fn(),
+  beginCallAdmission: vi.fn(),
 }));
 
 vi.mock("@/lib/voice/socket-ticket-client", () => ({
   fetchSocketProtocols: mocks.fetchSocketProtocols,
-  fetchSocketTicketBundle: mocks.fetchSocketTicketBundle,
+}));
+vi.mock("@/lib/voice/voice-admission-client", () => ({
+  beginCallAdmission: mocks.beginCallAdmission,
+  takeRoomSocketTicket: mocks.takeRoomSocketTicket,
 }));
 
 import { RoomGateway } from "./room-gateway";
@@ -64,12 +68,12 @@ describe("RoomGateway", () => {
   beforeEach(() => {
     TestWebSocket.instances = [];
     mocks.fetchSocketProtocols.mockReset();
-    mocks.fetchSocketTicketBundle.mockReset();
+    mocks.takeRoomSocketTicket.mockReset();
     mocks.fetchSocketProtocols.mockResolvedValue([
       "ralph.realtime.v1",
       "ralph.ticket.test",
     ]);
-    mocks.fetchSocketTicketBundle.mockResolvedValue({
+    mocks.takeRoomSocketTicket.mockResolvedValue({
       protocols: ["ralph.realtime.v1", "ralph.ticket.test"],
     });
     vi.stubGlobal("WebSocket", TestWebSocket);
@@ -80,7 +84,7 @@ describe("RoomGateway", () => {
       mediaBootstrap: { participantId: string; voiceToken: string };
       protocols: string[];
     }>();
-    mocks.fetchSocketTicketBundle.mockReturnValue(ticket.promise);
+    mocks.takeRoomSocketTicket.mockReturnValue(ticket.promise);
     const gateway = new RoomGateway();
     const constructionCounts: number[] = [];
     const onBootstrap = vi.fn(() => {
@@ -122,7 +126,7 @@ describe("RoomGateway", () => {
       mediaBootstrap: { participantId: string; voiceToken: string };
       protocols: string[];
     }>();
-    mocks.fetchSocketTicketBundle
+    mocks.takeRoomSocketTicket
       .mockReturnValueOnce(first.promise)
       .mockReturnValueOnce(second.promise);
     const gateway = new RoomGateway();
@@ -156,7 +160,7 @@ describe("RoomGateway", () => {
       participantId: "current",
       voiceToken: "fresh-token",
     });
-    expect(mocks.fetchSocketTicketBundle).toHaveBeenCalledTimes(2);
+    expect(mocks.takeRoomSocketTicket).toHaveBeenCalledTimes(2);
     expect(TestWebSocket.instances).toHaveLength(1);
     expect(TestWebSocket.instances[0]?.url).toBe(
       "ws://meet.test/api/channels/voice-second/ws?v=1",
@@ -399,8 +403,8 @@ describe("RoomGateway", () => {
 describe("RoomGateway frame decoding", () => {
   beforeEach(() => {
     TestWebSocket.instances = [];
-    mocks.fetchSocketTicketBundle.mockReset();
-    mocks.fetchSocketTicketBundle.mockResolvedValue({
+    mocks.takeRoomSocketTicket.mockReset();
+    mocks.takeRoomSocketTicket.mockResolvedValue({
       protocols: ["ralph.realtime.v1", "ralph.ticket.test"],
     });
     vi.stubGlobal("WebSocket", TestWebSocket);
@@ -554,8 +558,8 @@ describe("RoomGateway frame decoding", () => {
 describe("RoomGateway lifecycle", () => {
   beforeEach(() => {
     TestWebSocket.instances = [];
-    mocks.fetchSocketTicketBundle.mockReset();
-    mocks.fetchSocketTicketBundle.mockResolvedValue({
+    mocks.takeRoomSocketTicket.mockReset();
+    mocks.takeRoomSocketTicket.mockResolvedValue({
       protocols: ["ralph.realtime.v1", "ralph.ticket.test"],
     });
     vi.stubGlobal("WebSocket", TestWebSocket);
@@ -664,7 +668,7 @@ describe("RoomGateway lifecycle", () => {
     const { SocketTicketError } = await vi.importActual<
       typeof import("@/lib/voice/socket-ticket-client")
     >("@/lib/voice/socket-ticket-client");
-    mocks.fetchSocketTicketBundle.mockRejectedValue(new SocketTicketError(503));
+    mocks.takeRoomSocketTicket.mockRejectedValue(new SocketTicketError(503));
     const gateway = new RoomGateway();
     const authFailed = vi.fn();
     const errors = vi.fn();
@@ -676,20 +680,20 @@ describe("RoomGateway lifecycle", () => {
       wsUrlGenerator: (path) => `ws://meet.test${path}`,
     });
     await vi.advanceTimersByTimeAsync(5_000);
-    expect(
-      mocks.fetchSocketTicketBundle.mock.calls.length,
-    ).toBeGreaterThanOrEqual(4);
+    expect(mocks.takeRoomSocketTicket.mock.calls.length).toBeGreaterThanOrEqual(
+      4,
+    );
     expect(authFailed).not.toHaveBeenCalled();
     expect(errors).toHaveBeenCalledWith({
       message: "Could not open room socket",
     });
 
-    mocks.fetchSocketTicketBundle.mockRejectedValue(new SocketTicketError(401));
+    mocks.takeRoomSocketTicket.mockRejectedValue(new SocketTicketError(401));
     await vi.advanceTimersByTimeAsync(30_000);
     expect(authFailed).toHaveBeenCalledOnce();
-    const afterRefusal = mocks.fetchSocketTicketBundle.mock.calls.length;
+    const afterRefusal = mocks.takeRoomSocketTicket.mock.calls.length;
     await vi.advanceTimersByTimeAsync(120_000);
-    expect(mocks.fetchSocketTicketBundle).toHaveBeenCalledTimes(afterRefusal);
+    expect(mocks.takeRoomSocketTicket).toHaveBeenCalledTimes(afterRefusal);
     gateway.disconnect();
   });
 });

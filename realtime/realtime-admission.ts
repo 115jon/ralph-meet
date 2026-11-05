@@ -1,7 +1,9 @@
-import type {
-  RealtimeAccessMode,
-  SocketTicketAudience,
-  SocketTicketClaims,
+import {
+  isParticipantId,
+  type RealtimeAccessMode,
+  type SocketTicketAudience,
+  type SocketTicketClaims,
+  type SocketTicketMedia,
 } from "../src/lib/voice/socket-ticket";
 
 const ADMISSION_HEADER_PREFIX = "x-ralph-realtime-";
@@ -17,6 +19,10 @@ export interface RealtimeAdmissionContext {
   serverId?: string;
   channelId?: string;
   subject: string;
+  /** Room sockets admitted by `/api/voice/admission` (SocketTicketMedia). */
+  media?: SocketTicketMedia;
+  /** Voice sockets admitted by `/api/voice/admission`: who must identify. */
+  boundParticipantId?: string;
 }
 
 interface RealtimeAdmissionConfig {
@@ -55,6 +61,8 @@ export async function createRealtimeAdmissionContext(
     ...(claims.serverId ? { serverId: claims.serverId } : {}),
     ...(claims.channelId ? { channelId: claims.channelId } : {}),
     subject: claims.subject,
+    ...(claims.media ? { media: claims.media } : {}),
+    ...(claims.participant ? { boundParticipantId: claims.participant } : {}),
   };
 }
 
@@ -85,6 +93,15 @@ export function appendRealtimeAdmissionHeaders(
     next.set(`${ADMISSION_HEADER_PREFIX}channel-id`, context.channelId);
   }
   next.set(`${ADMISSION_HEADER_PREFIX}subject`, context.subject);
+  if (context.media) {
+    next.set(`${ADMISSION_HEADER_PREFIX}media`, context.media);
+  }
+  if (context.boundParticipantId) {
+    next.set(
+      `${ADMISSION_HEADER_PREFIX}bound-participant`,
+      context.boundParticipantId,
+    );
+  }
   return next;
 }
 
@@ -109,6 +126,10 @@ export function getRealtimeAdmissionFromHeaders(
   const serverId = headers.get(`${ADMISSION_HEADER_PREFIX}server-id`);
   const channelId = headers.get(`${ADMISSION_HEADER_PREFIX}channel-id`);
   const subject = headers.get(`${ADMISSION_HEADER_PREFIX}subject`);
+  const media = headers.get(`${ADMISSION_HEADER_PREFIX}media`);
+  const boundParticipantId = headers.get(
+    `${ADMISSION_HEADER_PREFIX}bound-participant`,
+  );
   const expiresAt = Number(expiresAtRaw);
 
   if (accessMode !== "authenticated" && accessMode !== "public-demo")
@@ -134,6 +155,8 @@ export function getRealtimeAdmissionFromHeaders(
     ...(serverId ? { serverId } : {}),
     ...(channelId ? { channelId } : {}),
     subject,
+    ...(media === "issued" || media === "held" ? { media } : {}),
+    ...(isParticipantId(boundParticipantId) ? { boundParticipantId } : {}),
   };
 }
 

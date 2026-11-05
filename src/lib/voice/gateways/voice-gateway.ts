@@ -11,7 +11,7 @@ import {
 } from "@/lib/types";
 import { GatewayCloseCode, GatewayOp } from "@/lib/gateway-protocol";
 import { markVoice } from "@/lib/voice/latency-marks";
-import { fetchSocketProtocols } from "@/lib/voice/socket-ticket-client";
+import { takeVoiceSocketTicket } from "@/lib/voice/voice-admission-client";
 import { BaseGateway, type BaseGatewayEvents } from "./base-gateway";
 
 export interface VoiceGatewayEvents extends BaseGatewayEvents {
@@ -114,12 +114,20 @@ export class VoiceGateway extends BaseGateway<
     const target = this.target;
     if (!target) throw new Error("Voice socket has no room to connect to");
     markVoice("VoiceGW:ticket-start", { roomSlug: target.roomSlug });
-    const protocols = await fetchSocketProtocols({
-      audience: "voice",
-      channelId: target.ticketContext.channelId,
-      roomSlug: target.roomSlug,
-      serverId: target.ticketContext.serverId,
-    });
+    // Bound to the participant this socket will identify as, when known
+    // (the voice room closes 1013 on a mismatch and this asks again).
+    const protocols = await takeVoiceSocketTicket(
+      {
+        roomSlug: target.roomSlug,
+        ...(target.ticketContext.channelId
+          ? { channelId: target.ticketContext.channelId }
+          : {}),
+        ...(target.ticketContext.serverId
+          ? { serverId: target.ticketContext.serverId }
+          : {}),
+      },
+      this.participantId,
+    );
     return {
       url: target.wsUrlGenerator(`/api/channels/${target.roomSlug}/voice?v=1`),
       protocols,

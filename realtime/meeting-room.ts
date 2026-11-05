@@ -97,7 +97,8 @@ import {
 import { resolveMeetingProfile } from "./meeting-room/profile-resolver";
 import { ProfileRequestCoordinator } from "./meeting-room/profile-request-coordinator";
 import { getCachedTurnCredentials as resolveTurnCredentials } from "./meeting-room/turn-credentials";
-import { issueVoiceToken } from "./voice-token";
+import { mintVoiceMedia, type VoiceMedia } from "./voice-media";
+import type { SocketTicketMedia } from "../src/lib/voice/socket-ticket";
 import {
   VOICE_JOIN_GRANT_CHECK_PATH,
   VOICE_JOIN_GRANT_PATH,
@@ -225,6 +226,12 @@ interface WsAttachment {
     accessMode: "authenticated" | "public-demo";
     participantId: string;
     subject: string;
+    /**
+     * Where this socket's participant gets voice credentials: set by
+     * /api/voice/admission tickets (SocketTicketMedia), absent for the
+     * deprecated two-request flow, whose Identify and Resume mint them.
+     */
+    media?: SocketTicketMedia;
   };
   id: string;
   name: string;
@@ -868,6 +875,7 @@ export class MeetingRoom extends DurableObject<Env> {
             accessMode: admission.accessMode,
             participantId: admission.participantId,
             subject: admission.subject,
+            ...(admission.media ? { media: admission.media } : {}),
           },
         },
         gatewayVersion,
@@ -3142,27 +3150,32 @@ export class MeetingRoom extends DurableObject<Env> {
     );
   }
 
-  // ── Voice token generation ─────────────────────────────────────────────
-  // HMAC-signed token: "payload.signature" where payload = "participant_id:room_slug:timestamp"
+  // ── Voice credentials ─────────────────────────────────────────────────
+  // The voice token and TURN for one participant, minted by the shared
+  // realtime/voice-media.ts. Op 40 refreshes them; Identify and Resume mint
+  // only for tickets that did not bring them (WsAttachment.admission.media).
 
-  private async generateVoiceToken(
+  private async mintVoiceMedia(
     participantId: string,
     userId?: string,
-  ): Promise<string> {
+  ): Promise<VoiceMedia> {
+    const secret = this.env.CALLS_APP_SECRET;
+    const turn = () => this.generateTurnCredentials();
     try {
-      if (!this.env.CALLS_APP_SECRET) {
+      if (!secret) {
         meetingLog.warn("CALLS_APP_SECRET not set, skipping voice token");
-        return "";
+        return { participantId, voiceToken: "", iceServers: await turn() };
       }
-      return await issueVoiceToken({
+      return await mintVoiceMedia({
         participantId,
         roomSlug: this.roomSlug ?? "unknown",
         subject: userId,
-        secret: this.env.CALLS_APP_SECRET,
+        callsSecret: secret,
+        turn,
       });
     } catch (err) {
-      meetingLog.error("Voice token generation failed:", err);
-      return "";
+      meetingLog.error("Voice credential minting failed:", err);
+      return { participantId, voiceToken: "", iceServers: await turn() };
     }
   }
 
@@ -3421,11 +3434,22 @@ export class MeetingRoom extends DurableObject<Env> {
         ? this.profileRequestCoordinator.begin(admittedUserId)
         : null;
 
+      // The admission already handed this participant its voice token and
+      // TURN (one request per join): mint nothing, send no MediaReady, and
+      // leave both out of Ready. Otherwise (deprecated two-request clients,
+      // or a reconnect's new participant) mint them here, as before.
+      // DEPRECATED for tickets without a media claim (desktop up to v3.12.0,
+      // mobile up to mobile-v0.5.1): delete that case after v3.14.0, with
+      // the room audience of /api/voice/socket-ticket.
+      const mintsMedia = admission.media !== "issued";
+
       // Run all async sub-tasks in parallel to reduce time-to-Ready.
       // Previously these ran sequentially, adding the SUM of their latencies.
       // Now total latency = max(single call) instead of sum(all calls).
-      const [iceServers, profile, userRow, voiceToken] = await Promise.all([
-        this.generateTurnCredentials(),
+      const [media, profile, userRow] = await Promise.all([
+        mintsMedia
+          ? this.mintVoiceMedia(participantId, admission.subject)
+          : null,
         admittedUserId ? this.fetchProfile(admittedUserId) : null,
         admittedUserId
           ? this.env.DB.prepare("SELECT status FROM users WHERE id = ?")
@@ -3436,18 +3460,19 @@ export class MeetingRoom extends DurableObject<Env> {
                 return null;
               })
           : null,
-        this.generateVoiceToken(participantId, admission.subject),
       ]);
       if (this.abandonStaleIdentify(ws, voiceJoin)) return;
 
-      this.sendTo(ws, {
-        op: Op.MediaReady,
-        d: {
-          participant_id: participantId,
-          ice_servers: iceServers,
-          voice_token: voiceToken,
-        },
-      });
+      if (media) {
+        this.sendTo(ws, {
+          op: Op.MediaReady,
+          d: {
+            participant_id: participantId,
+            ice_servers: media.iceServers,
+            voice_token: media.voiceToken,
+          },
+        });
+      }
 
       // Prefer the stored profile (D1) over the identity the client sent
       let resolvedName = d.name;
@@ -3553,15 +3578,16 @@ export class MeetingRoom extends DurableObject<Env> {
         });
       }
 
-      // Op 2: Ready — includes voice_token for Voice Gateway connection
+      // Op 2: Ready — with the voice credentials when Identify minted them
       this.sendTo(ws, {
         op: Op.Ready,
         d: {
           participant_id: participantId,
-          ice_servers: iceServers,
+          ...(media
+            ? { ice_servers: media.iceServers, voice_token: media.voiceToken }
+            : {}),
           participants,
           heartbeat_interval: HEARTBEAT_INTERVAL_MS,
-          voice_token: voiceToken,
           spatial_audio_state: this.spatialAudioStates.get(
             attachment.voice_channel_id || this.roomSlug,
           ),
@@ -3884,16 +3910,18 @@ export class MeetingRoom extends DurableObject<Env> {
         replayedSeqs.add(entry.seq);
       }
 
-      // Generate a fresh voice token so that the client can re-authenticate
-      // on the Voice Gateway. Without this, the client reuses the stale token
-      // from the initial Identify, which will eventually expire (1h TTL).
-      const [freshVoiceToken, freshIceServers] = await Promise.all([
-        this.generateVoiceToken(
-          resumedAttachment.id,
-          resumedAttachment.admission?.subject,
-        ),
-        this.generateTurnCredentials(),
-      ]);
+      // DEPRECATED: two-request clients (no media claim on this socket's
+      // ticket; desktop up to v3.12.0, mobile up to mobile-v0.5.1) take a
+      // fresh voice token and TURN from every Resumed; delete after v3.14.0.
+      // Clients admitted by /api/voice/admission keep theirs and refresh
+      // with op 40.
+      const freshMedia =
+        admission?.media === undefined
+          ? await this.mintVoiceMedia(
+              resumedAttachment.id,
+              resumedAttachment.admission?.subject,
+            )
+          : null;
 
       if (this.resumeOverflowedSockets.has(ws)) {
         throw new Error("Resume continuity buffer exceeded");
@@ -3912,8 +3940,12 @@ export class MeetingRoom extends DurableObject<Env> {
       this.sendTo(ws, {
         op: Op.Resumed,
         d: {
-          voice_token: freshVoiceToken,
-          ice_servers: freshIceServers,
+          ...(freshMedia
+            ? {
+                voice_token: freshMedia.voiceToken,
+                ice_servers: freshMedia.iceServers,
+              }
+            : {}),
           participants,
           spatial_audio_state: this.spatialAudioStates.get(
             resumedAttachment.voice_channel_id || this.roomSlug,
@@ -3978,10 +4010,10 @@ export class MeetingRoom extends DurableObject<Env> {
     const session = this.requireSession(ws);
     if (!session) return;
 
-    const [freshVoiceToken, freshIceServers] = await Promise.all([
-      this.generateVoiceToken(session.id, session.admission?.subject),
-      this.generateTurnCredentials(),
-    ]);
+    const fresh = await this.mintVoiceMedia(
+      session.id,
+      session.admission?.subject,
+    );
 
     // Clients take this Resumed's roster as the participant list, like any.
     const participants = this.buildRoomRoster();
@@ -3989,8 +4021,8 @@ export class MeetingRoom extends DurableObject<Env> {
     this.sendTo(ws, {
       op: Op.Resumed,
       d: {
-        voice_token: freshVoiceToken,
-        ice_servers: freshIceServers,
+        voice_token: fresh.voiceToken,
+        ice_servers: fresh.iceServers,
         participants,
       },
     });
