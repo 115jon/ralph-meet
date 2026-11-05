@@ -386,9 +386,9 @@ export class CallSession {
     return guarded as unknown as ConnectionEvents;
   }
 
-  /** The app is in front again: retry now, or probe the open sockets. */
-  wake(): void {
-    if (this.voice.isLive) this.connection.wake();
+  /** The app is in front again (or the network is back): see CallConnection.wake. */
+  wake(options: { readonly networkChanged?: boolean } = {}): void {
+    if (this.voice.isLive) this.connection.wake(options);
   }
 
   leave(): void {

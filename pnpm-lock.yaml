@@ -13,7 +13,7 @@ patchedDependencies:
     hash: 0256b70ee75d1f18a83383e695d79820ee5e4e92c0dafe0122127f78924156be
     path: patches/partytracks@0.0.56.patch
   react-native-webrtc@155.0.1:
-    hash: 4be0547dac99fda889b91c7be85964e1324ec4a393836206c57676b38c6bde67
+    hash: a2a276290133c4b8f5d8d39249054fa62550a313aea1da891843feb5a2d4e9be
     path: patches/react-native-webrtc@155.0.1.patch
 
 importers:
@@ -434,7 +434,7 @@ importers:
         version: 15.16.0(react-native@0.88.1(@babel/core@7.29.7)(@react-native/metro-config@0.88.1(@babel/core@7.29.7)(bufferutil@4.1.0))(@types/react@19.3.0)(bufferutil@4.1.0)(react@19.3.0))(react@19.3.0)
       react-native-webrtc:
         specifier: 155.0.1
-        version: 155.0.1(patch_hash=4be0547dac99fda889b91c7be85964e1324ec4a393836206c57676b38c6bde67)(react-native@0.88.1(@babel/core@7.29.7)(@react-native/metro-config@0.88.1(@babel/core@7.29.7)(bufferutil@4.1.0))(@types/react@19.3.0)(bufferutil@4.1.0)(react@19.3.0))
+        version: 155.0.1(patch_hash=a2a276290133c4b8f5d8d39249054fa62550a313aea1da891843feb5a2d4e9be)(react-native@0.88.1(@babel/core@7.29.7)(@react-native/metro-config@0.88.1(@babel/core@7.29.7)(bufferutil@4.1.0))(@types/react@19.3.0)(bufferutil@4.1.0)(react@19.3.0))
       react-native-worklets:
         specifier: 0.13.0
         version: 0.13.0(@babel/core@7.29.7)(@react-native/metro-config@0.88.1(@babel/core@7.29.7)(bufferutil@4.1.0))(react-native@0.88.1(@babel/core@7.29.7)(@react-native/metro-config@0.88.1(@babel/core@7.29.7)(bufferutil@4.1.0))(@types/react@19.3.0)(bufferutil@4.1.0)(react@19.3.0))(react@19.3.0)
@@ -18900,7 +18900,7 @@ snapshots:
       react: 19.3.0
       react-native: 0.88.1(@babel/core@7.29.7)(@react-native/metro-config@0.88.1(@babel/core@7.29.7)(bufferutil@4.1.0))(@types/react@19.3.0)(bufferutil@4.1.0)(react@19.3.0)
 
-  react-native-webrtc@155.0.1(patch_hash=4be0547dac99fda889b91c7be85964e1324ec4a393836206c57676b38c6bde67)(react-native@0.88.1(@babel/core@7.29.7)(@react-native/metro-config@0.88.1(@babel/core@7.29.7)(bufferutil@4.1.0))(@types/react@19.3.0)(bufferutil@4.1.0)(react@19.3.0)):
+  react-native-webrtc@155.0.1(patch_hash=a2a276290133c4b8f5d8d39249054fa62550a313aea1da891843feb5a2d4e9be)(react-native@0.88.1(@babel/core@7.29.7)(@react-native/metro-config@0.88.1(@babel/core@7.29.7)(bufferutil@4.1.0))(@types/react@19.3.0)(bufferutil@4.1.0)(react@19.3.0)):
     dependencies:
       base64-js: 1.5.1
       debug: 4.3.4

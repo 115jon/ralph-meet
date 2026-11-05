@@ -117,6 +117,31 @@ describe("RoomGateway", () => {
     gateway.disconnect();
   });
 
+  it("aborts the ticket request of an attempt it drops", () => {
+    mocks.takeRoomSocketTicket.mockReturnValue(new Promise(() => {}));
+    mocks.fetchSocketProtocols.mockReturnValue(new Promise(() => {}));
+    const gateway = new RoomGateway();
+    const wsUrlGenerator = (path: string) => `ws://meet.test${path}`;
+
+    gateway.connectRoom({ name: "Room", roomSlug: "voice-a", wsUrlGenerator });
+    const roomSignal = mocks.takeRoomSocketTicket.mock.calls[0]?.[1];
+    expect(roomSignal).toBeInstanceOf(AbortSignal);
+    expect((roomSignal as AbortSignal).aborted).toBe(false);
+
+    // A fresh connect replaces the attempt: its request stops.
+    gateway.connectRoom({
+      name: "Global",
+      roomSlug: "global-gateway",
+      wsUrlGenerator,
+    });
+    expect((roomSignal as AbortSignal).aborted).toBe(true);
+    const globalSignal = mocks.fetchSocketProtocols.mock.calls[0]?.[1];
+    expect(globalSignal).toBeInstanceOf(AbortSignal);
+
+    gateway.disconnect();
+    expect((globalSignal as AbortSignal).aborted).toBe(true);
+  });
+
   it("suppresses bootstrap from a stale ticket fetch generation", async () => {
     const first = deferred<{
       mediaBootstrap: { participantId: string; voiceToken: string };
@@ -656,8 +681,20 @@ describe("RoomGateway lifecycle", () => {
 
   it("keeps an answering socket on wake", async () => {
     const { gateway, socket } = await connectedGateway();
+    socket.onopen?.({} as Event);
+    socket.message({ op: GatewayOp.Hello, d: { heartbeat_interval: 45_000 } });
+    socket.message({
+      op: GatewayOp.Ready,
+      d: {
+        participant_id: "session-1",
+        ice_servers: [],
+        participants: [],
+        voice_token: "voice-token",
+      },
+    });
     gateway.wake();
     socket.message({ op: GatewayOp.HeartbeatACK, d: { seq: 1 } });
+    // Past the probe window and every connect deadline.
     await vi.advanceTimersByTimeAsync(10_000);
     expect(TestWebSocket.instances).toHaveLength(1);
     expect(socket.readyState).toBe(TestWebSocket.OPEN);

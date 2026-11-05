@@ -72,6 +72,21 @@ describe("VoiceGateway", () => {
     gateway.disconnect();
   });
 
+  it("aborts the ticket request of an attempt it drops", () => {
+    mocks.takeVoiceSocketTicket.mockReturnValue(new Promise(() => {}));
+    const gateway = new VoiceGateway();
+    gateway.prepareVoice(
+      "voice-server-channel",
+      (path) => `ws://meet.test${path}`,
+      { channelId: "channel", serverId: "server" },
+    );
+    const signal = mocks.takeVoiceSocketTicket.mock.calls[0]?.[2];
+    expect(signal).toBeInstanceOf(AbortSignal);
+    expect((signal as AbortSignal).aborted).toBe(false);
+    gateway.disconnect();
+    expect((signal as AbortSignal).aborted).toBe(true);
+  });
+
   it("prepares without credentials and identifies once when credentials arrive after Hello", async () => {
     mocks.takeVoiceSocketTicket.mockResolvedValue([
       "ralph.realtime.v1",

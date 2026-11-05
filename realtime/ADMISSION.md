@@ -123,7 +123,12 @@ anyone to tracks.
 3. **Room socket reconnect**: `sockets: ["room"]`, `media: false`. Resume
    with the session id; if the room answers 4006 SessionInvalid, Identify on
    the same socket and take the `MediaReady`/`Ready` credentials for the new
-   participant.
+   participant. The Resume also works while the old socket is still live
+   on the server (a network change whose close never arrived): the room
+   moves the session to the new socket and keeps the participant id (see
+   SOCKET_CORE.md). After a network change, send the voice socket's
+   VoiceIdentify only once the room answered: `Resumed` keeps the
+   participant, a 4006 and a new `Ready` name a new one.
 4. **Voice socket reconnect**: `sockets: ["voice"]`, `media: false`,
    `participantId: <current participant>`.
 5. **Standby promotion**: no request. The standby's voice socket was opened

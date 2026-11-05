@@ -213,6 +213,8 @@ export class CallConnection implements VoiceSessionClient {
             this.voice.connectVoice(this.participant, credentials.voiceToken);
           }
         }
+        // Still the same participant: a held identify can go now.
+        this.voice.releaseIdentify();
         if (credentials.iceServers?.length) {
           this.latestIceServers = [...credentials.iceServers];
           this.mediaTransport?.updateIceServers([...credentials.iceServers]);
@@ -269,11 +271,16 @@ export class CallConnection implements VoiceSessionClient {
     this.voice.connect();
   }
 
-  /** The app is in front again: retry now, or probe the open sockets. */
-  wake(): void {
+  /**
+   * The app is in front again: retry now, or probe the open sockets. After a
+   * network change both sockets reconnect at once and resume.
+   */
+  wake(options: { readonly networkChanged?: boolean } = {}): void {
     if (this.disconnected) return;
-    this.room.wake();
-    this.voice.wake();
+    // The voice socket identifies once the room says who we are now.
+    if (options.networkChanged && this.participant) this.voice.holdIdentify();
+    this.room.wake(options);
+    this.voice.wake(options);
   }
 
   get participantId(): string | null {

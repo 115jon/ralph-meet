@@ -50,7 +50,7 @@ export abstract class BaseGateway<
       label,
       policy: CALL_SOCKET_POLICY,
       decode: decodeFrame,
-      acquireTicket: () => this.acquireTicket(),
+      acquireTicket: (signal) => this.acquireTicket(signal),
       hooks: {
         ticketReady: (ticket) => this.onTicket(ticket),
         ticketFailed: (error) => this.onTicketFailed(error),
@@ -77,7 +77,12 @@ export abstract class BaseGateway<
   }
 
   /** Requests a ticket and names the socket URL for one connection attempt. */
-  protected abstract acquireTicket(): Promise<Ticket>;
+  /**
+   * One attempt's ticket. `signal` aborts when the attempt times out or is
+   * dropped: pass it to the request, so a stalled one stops (and stops
+   * counting against the ticket rate limit) instead of finishing for nobody.
+   */
+  protected abstract acquireTicket(signal: AbortSignal): Promise<Ticket>;
 
   /** The current attempt has its ticket; the socket opens right after. */
   protected onTicket(_ticket: Ticket): void {}

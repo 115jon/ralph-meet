@@ -207,3 +207,9 @@ constructor used to re-check every session's subscriptions against D1 inside
 `blockConcurrencyWhile` on each wake, one query per subscription per session,
 which blocks every message meanwhile and can run into the 30 s limit (reset).
 That check now runs only for a resuming session.
+
+A Resume of a session that is still live on another socket (the client
+changed networks and its old socket's close never arrived) takes the session
+over instead: the member stays `connected` throughout, with no leave and no
+`reconnecting` step. See "Resume of a session still live on another socket"
+in [SOCKET_CORE.md](./SOCKET_CORE.md).

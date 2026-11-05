@@ -141,6 +141,62 @@ move the pull when its `session_id` or `sfu_track_name` differs; none
 needs an op 11 before a re-offer. All of them re-announce their
 publications after `VoiceReady` on a voice reconnect.
 
+## Resume of a session still live on another socket
+
+Global and room sockets (`MeetingRoom`). A client that changes networks
+(Wi-Fi to mobile data, a new address) loses its old socket without a close
+reaching the server: the TCP connection is half open, so the session stays
+live (not held for resume) until the zombie alarm ends it 90 s later.
+
+A `Resume` (op 7) whose `session_id` names a session that is live on
+another socket of this object is handled like a Resume of a held session,
+with the same checks:
+
+- **Subject.** The resuming socket's admission subject must equal the
+  session's. Otherwise: `Error {code: 4008, message: "Resume subject
+mismatch"}` and close `4008`. The live session and its socket are not
+  touched. (Participant ids are visible to the room, so the id alone proves
+  nothing.)
+- **Replay cursor** (`seq_ack`), as for a held session. If continuity is
+  lost: `Error {code: 4006}`, and the live session is left as it is. The
+  client's Identify that follows replaces it (one voice session per user),
+  or the zombie alarm ends it.
+- No resume grace applies: the session never closed.
+
+If both pass, the session moves to the resuming socket:
+
+- The old socket's attachment forgets the session, and the old socket is
+  closed with `4006 "Session resumed on another connection"`
+  (`RESUMED_ELSEWHERE_REASON` in `@ralph/protocol`). No Error frame is sent
+  on it.
+- Nothing a close would do happens: no `PRESENCE_UPDATE`, no call cleanup,
+  no voice-grant change, no `VoiceStateUpdate` leave, and the room's roster
+  never shows the member as reconnecting.
+- The participant id, voice state and voice join order are kept. The new
+  socket gets the replay and `Resumed` (op 9) as for any resume, and the
+  room hears a `VoiceStateUpdate` `update` for the participant, as for any
+  resume.
+
+A socket mid-resume (its own Resume has not finished) is not taken over;
+the second Resume gets `4006 "Session not found for resume"`.
+
+**Before** (up to v3.13.0): such a Resume got
+`Error {code: 4006, message: "Session not found for resume"}`. The client
+Identified as a new participant and rebuilt its call, and the old session
+stayed on the roster until the zombie alarm or the new Identify replaced
+it.
+
+**Old clients.** A client only resumes on a new socket after it has left
+the old one, so it never reads the old socket's close. No shipped client
+(web and desktop up to v3.13.0, mobile up to mobile-v0.5.1) acts on close
+code 4006 or on its reason: a client that did hear it would retry and
+resume as after any drop. The native client treats a 4006 close as
+SessionInvalid and Identifies fresh; that is only reachable when another
+device of the same user resumed its session id, and the fresh Identify
+then replaces that device (4010). Clients act on close
+codes 4008 and 4010, and on `1000 "Replaced by new connection"` (the voice
+socket's), which this close is none of.
+
 ## Opcode tables (client → server)
 
 | Op  | Name                    | global | room | voice |

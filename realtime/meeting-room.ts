@@ -19,6 +19,7 @@ import {
   decodeMainGatewayClientFrame,
   GatewayCloseCode as CloseCode,
   GatewayOp as Op,
+  RESUMED_ELSEWHERE_REASON,
   VOICE_MOVED_CLOSE_REASON,
   type CallRecord,
   type MainClientPayload,
@@ -3744,7 +3745,7 @@ export class MeetingRoom extends DurableObject<Env> {
   // ── Op 7: Resume ──────────────────────────────────────────────────────
 
   private async handleResume(ws: WebSocket, d: MainClientPayload<Op.Resume>) {
-    const oldAttachment = this.resumableSessions.get(d.session_id);
+    let oldAttachment = this.resumableSessions.get(d.session_id);
     const admission = this.getSessionAdmission(ws);
     const move = this.movedVoiceSessions.get(d.session_id);
     if (
@@ -3775,6 +3776,10 @@ export class MeetingRoom extends DurableObject<Env> {
       } catch {}
       return;
     }
+    // Still live on another socket: the client lost that one without its
+    // close reaching us (see takeOverLiveSession). Checked like a held one.
+    const liveSocket = oldAttachment ? undefined : this.liveResumeSocket(ws, d);
+    if (liveSocket) oldAttachment = this.getSession(liveSocket);
     if (!oldAttachment) {
       this.sendTo(ws, {
         op: Op.Error,
@@ -3811,6 +3816,18 @@ export class MeetingRoom extends DurableObject<Env> {
       (d.seq_ack === currentSeq ||
         (firstRetainedSeq !== undefined && firstRetainedSeq <= d.seq_ack + 1));
     if (!cursorIsValid) {
+      // A live session is left as it is: the Identify that follows ends it
+      // (one voice session per user), or the zombie alarm does.
+      if (liveSocket) {
+        this.sendTo(ws, {
+          op: Op.Error,
+          d: {
+            code: CloseCode.SessionInvalid,
+            message: "Gateway continuity lost; reconcile from REST",
+          },
+        });
+        return;
+      }
       this.revokeVoiceJoin(oldAttachment);
       this.resumableSessions.delete(d.session_id);
       this.replayBuffers.delete(d.session_id);
@@ -3829,12 +3846,13 @@ export class MeetingRoom extends DurableObject<Env> {
 
     const disconnectedAt = this.resumableSessionExpiry.get(d.session_id);
     if (
-      typeof disconnectedAt !== "number" ||
-      !isReconnectWithinGrace(
-        disconnectedAt,
-        Date.now(),
-        RESUME_GRACE_PERIOD_MS,
-      )
+      !liveSocket &&
+      (typeof disconnectedAt !== "number" ||
+        !isReconnectWithinGrace(
+          disconnectedAt,
+          Date.now(),
+          RESUME_GRACE_PERIOD_MS,
+        ))
     ) {
       this.revokeVoiceJoin(oldAttachment);
       this.resumableSessions.delete(d.session_id);
@@ -3852,8 +3870,22 @@ export class MeetingRoom extends DurableObject<Env> {
       return;
     }
 
+    // A resuming socket that is already closing must not take a live session:
+    // it would leave the session persisted nowhere.
+    if (liveSocket && this.isSocketClosed(ws)) {
+      this.sendTo(ws, {
+        op: Op.Error,
+        d: {
+          code: CloseCode.SessionInvalid,
+          message: "Session not found for resume",
+        },
+      });
+      return;
+    }
+
     // Consume the resumable generation before any await. A second socket must
     // never be able to replay or take over the same disconnected session.
+    if (liveSocket) this.takeOverLiveSession(liveSocket, oldAttachment);
     this.resumableSessions.delete(d.session_id);
     this.resumableSessionExpiry.delete(d.session_id);
     this.replayPersistWrites.delete(d.session_id);
@@ -4003,6 +4035,56 @@ export class MeetingRoom extends DurableObject<Env> {
       this.resumingSockets.delete(ws);
       this.pendingResumeMessages.delete(ws);
       this.resumeOverflowedSockets.delete(ws);
+    }
+  }
+
+  /**
+   * The socket a Resume can take its session over from: one that still holds
+   * the named session, live as far as this object knows. A phone that
+   * changed networks (Wi-Fi to mobile data, a new address) loses its old
+   * TCP connection without a close ever arriving, so the session stays live
+   * here until the zombie alarm (90 s). Without a takeover its Resume would
+   * get "Session not found", and the client would Identify as a new
+   * participant and rebuild its call. Not the resuming socket itself, and
+   * not one that is itself mid-resume.
+   */
+  private liveResumeSocket(
+    ws: WebSocket,
+    d: MainClientPayload<Op.Resume>,
+  ): WebSocket | undefined {
+    const live = this.getSessionSocket(d.session_id);
+    if (!live || live === ws || this.resumingSockets.has(live)) return;
+    return live;
+  }
+
+  /**
+   * Moves a live session off `oldWs`, whose client has resumed it on a new
+   * socket (same admission subject, checked by handleResume). Unlike a close
+   * there is no leave: no presence update, no call cleanup, no roster change
+   * and no voice grant change. The session goes straight to the new socket,
+   * keeping its participant id. The old socket's attachment forgets the
+   * session first (after a restart a lingering socket must not count as
+   * live), then it is closed with SessionInvalid and RESUMED_ELSEWHERE_REASON.
+   * Its client left it already; one that hears the close retries as for any
+   * drop.
+   */
+  private takeOverLiveSession(oldWs: WebSocket, session: WsAttachment): void {
+    meetingLog.info(
+      `Resume took over live session ${session.id} from a lost socket`,
+    );
+    this.closedSockets.add(oldWs);
+    this.cleanupChannelSubscriptions(oldWs);
+    this.cleanupServerSubscriptions(oldWs);
+    this.sessions.delete(oldWs);
+    try {
+      oldWs.serializeAttachment(null);
+    } catch {
+      /* already gone */
+    }
+    try {
+      oldWs.close(CloseCode.SessionInvalid, RESUMED_ELSEWHERE_REASON);
+    } catch {
+      /* already closed */
     }
   }
 

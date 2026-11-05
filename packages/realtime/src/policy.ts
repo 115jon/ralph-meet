@@ -19,6 +19,10 @@
 // "Signed out" clears by itself once the session is back; the call sockets
 // stop and wait for a wake (tab visible, back online) or a new join, and the
 // chat socket's "Signed out" is what the user sees.
+//
+// Every step of an attempt has a deadline (CONNECT_TIMEOUTS): ticket, open,
+// Hello, Ready. A step that runs out drops the attempt and retries on the
+// schedule above, as a close would.
 
 export interface BackoffPolicy {
   readonly baseMs: number;
@@ -29,15 +33,51 @@ export interface BackoffPolicy {
   readonly addJitterMs: number;
 }
 
+/**
+ * How long each step of a connection attempt may take before the attempt is
+ * dropped and retried on the backoff schedule. Without these an attempt
+ * whose request or socket goes down a dead connection waits forever: a
+ * phone's HTTP client has no timeouts of its own.
+ */
+export interface ConnectTimeouts {
+  /** The ticket request (aborted through its signal when it runs out). */
+  readonly ticketMs: number;
+  /** Ticket in hand to the socket's open event. */
+  readonly openMs: number;
+  /** Open to the server's Hello. */
+  readonly helloMs: number;
+  /**
+   * The gateway's Identify or Resume (its first frame after Hello) to
+   * markReady() (Ready, Resumed, VoiceReady).
+   */
+  readonly readyMs: number;
+}
+
 export interface RealtimeSocketPolicy {
   readonly backoff: BackoffPolicy;
+  readonly timeouts: ConnectTimeouts;
   /** Ticket refusals (401) in a row before the socket reports "auth". */
   readonly refusalsToFail: number;
   /** In the auth-failed state, how often to try again; null: only on wake. */
   readonly authRetryMs: number | null;
-  /** After a wake, how long an open socket has to answer the probe. */
+  /**
+   * After a wake, how long an open socket has to answer the probe. A ticket
+   * request older than this is also dropped and asked again on a wake.
+   */
   readonly probeMs: number;
 }
+
+/**
+ * The same for every socket. A ticket is one small POST and the gateway
+ * answers Hello at once; Ready can wait on the server loading state, so it
+ * gets longer.
+ */
+export const CONNECT_TIMEOUTS: ConnectTimeouts = {
+  ticketMs: 10_000,
+  openMs: 10_000,
+  helloMs: 10_000,
+  readyMs: 20_000,
+};
 
 /** The delay before retry `attempt` (0 for the first retry). */
 export function backoffDelay(
@@ -58,6 +98,7 @@ export function backoffDelay(
 /** The chat store's socket to the main gateway (/api/gateway). */
 export const CHAT_SOCKET_POLICY: RealtimeSocketPolicy = {
   backoff: { baseMs: 1000, maxMs: 30_000, scaleJitter: 0, addJitterMs: 500 },
+  timeouts: CONNECT_TIMEOUTS,
   refusalsToFail: 2,
   authRetryMs: 60_000,
   probeMs: 5000,
@@ -66,6 +107,7 @@ export const CHAT_SOCKET_POLICY: RealtimeSocketPolicy = {
 /** RoomGateway and VoiceGateway: the two sockets of a voice call. */
 export const CALL_SOCKET_POLICY: RealtimeSocketPolicy = {
   backoff: { baseMs: 500, maxMs: 10_000, scaleJitter: 0.5, addJitterMs: 0 },
+  timeouts: CONNECT_TIMEOUTS,
   refusalsToFail: 2,
   authRetryMs: null,
   probeMs: 5000,

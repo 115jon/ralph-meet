@@ -17,14 +17,26 @@ reopened.
 - [ ] Jumping to an uncached message briefly flashes the loading skeleton.
 - [ ] Device-code approval page says "DESKTOP SIGN-IN" for the Android app
       (web copy).
-- [ ] After the network drops and comes back (emulator airplane toggle,
-      even 4 s), no socket reconnects: chat, room and voice all wait on
-      ticket requests that never answer, and wake does nothing. RN's HTTP
-      client has no timeouts and keeps the dead pooled connection; a 10 s
-      ticket timeout alone did not help (every retry stalls the same way).
-      `@ralph/realtime` has no timeout on its ticket phase either. Check on a
-      real phone (a real network change may reset the connection). Its own
-      follow-up PR.
+- [ ] After a long drop in a call (about 4 min on the emulator), the room
+      resumed as the same participant but our microphone did not come back:
+      PartyTracks rebuilt its peer connection, a republish against the closed
+      one failed ("Transceiver could not be added") and the re-push on the new
+      one threw `Cannot read property 'id' of null` (react-native-webrtc
+      `addTransceiver`). Incoming audio came back. A 30 s drop in the
+      background resumed the same way and the microphone did come back, so
+      it is intermittent. Needs a repro in `@ralph/voice-media`.
+- [ ] A held voice identify that ends on a new participant still opens on
+      the ticket bound to the old one: one 1013 and a re-ticket (about
+      1.4 s). Restart the voice socket's attempt when the participant changes
+      while held.
+
+- [ ] After a network switch in a call (emulator: mobile data to Wi-Fi,
+      then Android tearing mobile data down 30 s later), the sockets came
+      back as the same participant within 6 s but the peer connection stayed
+      `disconnected` on the old network for 53 s until ICE declared it
+      `failed` and PartyTracks rebuilt it. Restart ICE (or rebuild the peer
+      connection) on a network-change wake instead of waiting for `failed`;
+      lives in `@ralph/voice-media` / PartyTracks.
 
 ## In progress
 
@@ -104,6 +116,23 @@ reopened.
   VoiceRoom holds their tracks for 5 s (no `ClientDisconnect` or
   `StopTracks`), so pulls keep running when they offer the same tracks
   again (realtime/SOCKET_CORE.md, "Voice reconnect hold").
+- Reconnect after a network drop: RN's OkHttp client gets timeouts and a
+  pool reset (in-flight HTTP cancelled, pool emptied) on every default
+  network change, from `modules/ralph-network`; `@ralph/realtime` has a
+  deadline on every connect step (ticket, open, Hello, Ready) and a
+  network-change wake; the call's voice socket waits for the room before it
+  identifies; react-native-webrtc no longer crashes when an SDP answer lands
+  on a closed peer connection. Main never reconnected; with the fix chat is
+  back 1–6 s after Android reports the network, and call audio 4–10 s.
+  Review fixes: a stalled ticket only cancels the ticket requests (an
+  upload on a slow uplink carries on), an app launched offline reports
+  the network when it comes (and then loads the profile and server list it
+  could not load offline), and web/desktop abort a timed-out ticket
+  request. Server: a Resume takes over a session still live on the socket
+  the phone lost in a network change (Wi-Fi to mobile data), so the call
+  keeps its participant instead of rejoining (`realtime/SOCKET_CORE.md`).
+  Needs the real-phone pass (wireless ADB drops with airplane mode, and a
+  Wi-Fi to mobile data switch in a call).
 - Voice on the shared packages: `@ralph/voice` (session phase and one
   teardown, publication reconciler, screen share, reconnect grace) and
   `@ralph/voice-media` (the web's PartyTracks media manager and transport);

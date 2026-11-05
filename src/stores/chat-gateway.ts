@@ -131,9 +131,9 @@ export function createChatGateway(
     label: "ChatGW",
     policy: CHAT_SOCKET_POLICY,
     decode: decodeChatGatewayServerFrame,
-    acquireTicket: async () => ({
+    acquireTicket: async (signal) => ({
       url: wsUrl("/api/gateway"),
-      protocols: await fetchSocketProtocols({ audience: "global" }),
+      protocols: await fetchSocketProtocols({ audience: "global" }, signal),
     }),
     // A desktop session without a user id never identifies: do not retry it.
     shouldRetry: () => Boolean(appUserId),

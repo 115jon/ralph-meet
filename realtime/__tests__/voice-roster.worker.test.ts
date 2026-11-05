@@ -282,6 +282,111 @@ describe("voice roster: the room is the authority", () => {
     resumed.close();
   });
 
+  it("resumes a session still live on a lost socket with no roster flicker", async () => {
+    const userId = `roster-lost-${crypto.randomUUID()}`;
+    const peerId = `roster-lost-peer-${crypto.randomUUID()}`;
+    const observerId = `roster-lost-observer-${crypto.randomUUID()}`;
+    const { channelId, roomSlug } = await dmRoom([userId, peerId, observerId]);
+    const observer = await openGatewaySocket(observerId);
+    await identify(observer);
+
+    const peer = await openRoomSocket(roomSlug, peerId, { channelId });
+    await identify(peer);
+    const lost = await openRoomSocket(roomSlug, userId, { channelId });
+    const ready = await identify(lost);
+    await waitForMember(channelId, userId, { connection_state: "connected" });
+    await settle(peer);
+    const seenByPeer = record(peer);
+    const seen = record(observer);
+
+    // A network change: the phone reconnects and resumes while its old
+    // socket's close never reached the room, so the session is still live.
+    const lostClosed = closeOf(lost);
+    const resumed = await openRoomSocket(roomSlug, userId, { channelId });
+    const resumedReply = nextOp(resumed, 9);
+    resumed.send(
+      JSON.stringify({
+        op: 7,
+        d: { session_id: ready.participant_id, seq_ack: 0 },
+      }),
+    );
+    const reply = (await resumedReply).d as {
+      participants: Array<{ id: string }>;
+    };
+    expect(reply.participants.map((p) => p.id)).toContain(ready.participant_id);
+    await expect(lostClosed).resolves.toMatchObject({ code: 4006 });
+
+    // Same participant, still in the room: its voice state changes reach
+    // the peer under the old id.
+    resumed.send(JSON.stringify({ op: 15, d: { self_mute: true } }));
+    const update = await nextOp(peer, 15);
+    expect(update.d.participant.id).toBe(ready.participant_id);
+    await settle(peer);
+    await settle(observer);
+    await waitForMember(channelId, userId, {
+      connected: true,
+      connection_state: "connected",
+    });
+
+    // No leave, no reconnecting and no empty sidebar on the way.
+    expect(
+      seenByPeer.some(
+        (frame) => frame.op === 15 && frame.d?.action === "leave",
+      ),
+    ).toBe(false);
+    for (const members of sidebarUpdates(seen, channelId)) {
+      const member = members.find((m) => m.user_id === userId);
+      expect(member).toMatchObject({ connection_state: "connected" });
+    }
+    expect(
+      seen.some(
+        (frame) =>
+          frame.op === 19 &&
+          frame.d?.event === "PRESENCE_UPDATE" &&
+          frame.d?.data?.user_id === userId,
+      ),
+    ).toBe(false);
+
+    // The resumed socket owns the session now: closing it holds it for
+    // resume as any abrupt close does.
+    resumed.close();
+    await waitForMember(channelId, userId, {
+      connection_state: "reconnecting",
+    });
+    peer.close();
+    observer.close();
+  });
+
+  it("refuses to hand a live session to another subject", async () => {
+    const userId = `roster-owner-${crypto.randomUUID()}`;
+    const otherId = `roster-thief-${crypto.randomUUID()}`;
+    const { channelId, roomSlug } = await dmRoom([userId, otherId]);
+    const owner = await openRoomSocket(roomSlug, userId, { channelId });
+    const ready = await identify(owner);
+    await waitForMember(channelId, userId, { connection_state: "connected" });
+
+    const thief = await openRoomSocket(roomSlug, otherId, { channelId });
+    const refused = nextOp(thief, 18);
+    const thiefClosed = closeOf(thief);
+    thief.send(
+      JSON.stringify({
+        op: 7,
+        d: { session_id: ready.participant_id, seq_ack: 0 },
+      }),
+    );
+    expect((await refused).d.code).toBe(4008);
+    await expect(thiefClosed).resolves.toMatchObject({ code: 4008 });
+
+    // The owner's socket and session are untouched.
+    await settle(owner);
+    owner.send(JSON.stringify({ op: 15, d: { self_mute: true } }));
+    await waitForMember(channelId, userId, {
+      connection_state: "connected",
+      self_mute: true,
+    });
+    owner.close();
+  });
+
   it("clears a zombie once its resume grace lapses", async () => {
     const userId = `roster-zombie-${crypto.randomUUID()}`;
     const { channelId, roomSlug } = await dmRoom([userId]);

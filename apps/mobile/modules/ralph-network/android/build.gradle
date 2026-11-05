@@ -1,0 +1,21 @@
+plugins {
+  id 'com.android.library'
+  id 'expo-module-gradle-plugin'
+}
+
+group = 'dev.jontitor.ralphnetwork'
+version = '0.0.0'
+
+android {
+  namespace 'expo.modules.ralphnetwork'
+  defaultConfig {
+    versionCode 1
+    versionName '0.0.0'
+  }
+}
+
+dependencies {
+  // OkHttpClientProvider, and the OkHttp that React Native ships with.
+  implementation 'com.facebook.react:react-android'
+  testImplementation 'junit:junit:4.13.2'
+}

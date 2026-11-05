@@ -56,7 +56,11 @@ export interface RoomTicket extends GatewayTicket {
 
 type CallSocket = "room" | "voice";
 
-/** POSTs an admission; a 401 rejects with ApiError (status 401). */
+/**
+ * POSTs an admission; a 401 rejects with ApiError (status 401). A join's
+ * shared request takes no signal: one socket's attempt timing out must not
+ * abort the other socket's half.
+ */
 function requestAdmission(
   target: CallTarget,
   options: {
@@ -64,9 +68,11 @@ function requestAdmission(
     media: boolean;
     participantId?: string;
   },
+  signal?: AbortSignal,
 ): Promise<Admission> {
   return apiJson("/api/voice/admission", AdmissionSchema, {
     method: "POST",
+    signal,
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
       channelId: target.channelId,
@@ -145,6 +151,7 @@ function voiceUrl(target: CallTarget): string {
  */
 export async function acquireRoomTicket(
   target: CallTarget,
+  signal?: AbortSignal,
 ): Promise<RoomTicket> {
   const join = openJoin(target, "room");
   if (join) {
@@ -168,10 +175,11 @@ export async function acquireRoomTicket(
       };
     }
   }
-  const admission = await requestAdmission(target, {
-    sockets: ["room"],
-    media: false,
-  });
+  const admission = await requestAdmission(
+    target,
+    { sockets: ["room"], media: false },
+    signal,
+  );
   return {
     url: roomUrl(target),
     protocols: ticketProtocols(requireTicket(admission.room_ticket)),
@@ -185,6 +193,7 @@ export async function acquireRoomTicket(
 export async function acquireVoiceTicket(
   target: CallTarget,
   participantId: string | null,
+  signal?: AbortSignal,
 ): Promise<GatewayTicket> {
   const join = openJoin(target, "voice");
   if (join) {
@@ -199,11 +208,15 @@ export async function acquireVoiceTicket(
       };
     }
   }
-  const admission = await requestAdmission(target, {
-    sockets: ["voice"],
-    media: false,
-    ...(participantId ? { participantId } : {}),
-  });
+  const admission = await requestAdmission(
+    target,
+    {
+      sockets: ["voice"],
+      media: false,
+      ...(participantId ? { participantId } : {}),
+    },
+    signal,
+  );
   return {
     url: voiceUrl(target),
     protocols: ticketProtocols(requireTicket(admission.voice_ticket)),

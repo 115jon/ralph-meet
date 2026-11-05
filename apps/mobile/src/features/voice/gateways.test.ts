@@ -7,7 +7,14 @@ vi.mock("./tickets", () => ({
   beginCallAdmission: vi.fn(),
 }));
 
+vi.mock("../../../modules/ralph-network/src", () => ({
+  resetTicketRequests: vi.fn(),
+}));
+
+import { resetTicketRequests } from "../../../modules/ralph-network/src";
+import { CONNECT_TIMEOUTS } from "@ralph/realtime";
 import { VoiceSocket, type VoiceSocketHandlers } from "./gateways";
+import { acquireVoiceTicket } from "./tickets";
 
 class TestWebSocket {
   static instances: TestWebSocket[] = [];
@@ -100,5 +107,85 @@ describe("VoiceSocket", () => {
 
     expect(events.disconnected).toHaveBeenCalledWith("replaced");
     voice.stop();
+  });
+
+  it("holds its identify after a network change until the room says who we are", async () => {
+    vi.mocked(acquireVoiceTicket).mockImplementation(async () => ({
+      url: "wss://meet.test/voice",
+      protocols: [],
+    }));
+    const identifies = (socket: TestWebSocket) =>
+      socket.sent
+        .map((frame) => JSON.parse(frame) as { op: number; d?: unknown })
+        .filter((frame) => frame.op === GatewayOp.VoiceIdentify)
+        .map((frame) => (frame.d as { participant_id: string }).participant_id);
+    const open = async (count: number) => {
+      await vi.waitFor(() =>
+        expect(TestWebSocket.instances).toHaveLength(count),
+      );
+      const socket = TestWebSocket.instances[count - 1]!;
+      socket.readyState = TestWebSocket.OPEN;
+      socket.onopen?.({} as Event);
+      socket.receive({
+        op: GatewayOp.Hello,
+        d: { heartbeat_interval: 15_000 },
+      });
+      return socket;
+    };
+
+    const voice = new VoiceSocket(target, handlers());
+    voice.connectVoice("participant-1", "token");
+    expect(identifies(await open(1))).toEqual(["participant-1"]);
+
+    // The network came back: the socket is dropped and opens again, but
+    // waits for the room.
+    voice.holdIdentify();
+    voice.wake({ networkChanged: true });
+    const second = await open(2);
+    expect(identifies(second)).toEqual([]);
+
+    // The room resumed: same participant, identify now.
+    voice.releaseIdentify();
+    expect(identifies(second)).toEqual(["participant-1"]);
+
+    // Next time the room comes back as someone new: identify as them.
+    voice.holdIdentify();
+    voice.wake({ networkChanged: true });
+    const third = await open(3);
+    expect(identifies(third)).toEqual([]);
+    voice.connectVoice("participant-2", "token-2");
+    expect(identifies(third)).toEqual(["participant-2"]);
+    voice.stop();
+  });
+
+  it("resets the HTTP pool and asks again when a ticket request never answers", async () => {
+    vi.useFakeTimers();
+    try {
+      const signals: AbortSignal[] = [];
+      vi.mocked(acquireVoiceTicket).mockImplementation(
+        (_target, _participant, signal) => {
+          if (signal) signals.push(signal);
+          return new Promise(() => {});
+        },
+      );
+      const voice = new VoiceSocket(target, handlers());
+      voice.connectVoice("participant-1", "token");
+      expect(signals).toHaveLength(1);
+
+      await vi.advanceTimersByTimeAsync(CONNECT_TIMEOUTS.ticketMs);
+      expect(signals[0]!.aborted).toBe(true);
+      expect(resetTicketRequests).toHaveBeenCalledWith(
+        "voice ticket timed out",
+      );
+
+      // Call sockets back off 500 ms × (0.5–1) before the next attempt.
+      await vi.advanceTimersByTimeAsync(500);
+      expect(signals).toHaveLength(2);
+      expect(TestWebSocket.instances).toHaveLength(0);
+      voice.stop();
+      expect(signals[1]!.aborted).toBe(true);
+    } finally {
+      vi.useRealTimers();
+    }
   });
 });

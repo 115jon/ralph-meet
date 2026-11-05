@@ -415,7 +415,9 @@ export function setWatchingVideo(watching: boolean): void {
   session?.setWatchingVideo(watching);
 }
 
-/** The app is in front again. */
-export function wakeCall(): void {
-  session?.wake();
+/** The app is in front again, or the network came back (`networkChanged`). */
+export function wakeCall(
+  options: { readonly networkChanged?: boolean } = {},
+): void {
+  session?.wake(options);
 }

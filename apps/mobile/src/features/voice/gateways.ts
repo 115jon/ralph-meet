@@ -7,10 +7,13 @@ import {
 } from "@ralph/protocol";
 import {
   CALL_SOCKET_POLICY,
+  isRealtimeTimeout,
   RealtimeSocket,
   type OutboundFrame,
   type SocketTicket,
 } from "@ralph/realtime";
+
+import { resetTicketRequests } from "../../../modules/ralph-network/src";
 
 import {
   decodeRoomServerFrame,
@@ -99,14 +102,19 @@ export class RoomSocket {
       label: "RoomGW",
       policy: CALL_SOCKET_POLICY,
       decode: decodeRoomServerFrame,
-      acquireTicket: () => acquireRoomTicket(target),
+      acquireTicket: (signal) => acquireRoomTicket(target, signal),
       hooks: {
         ticketReady: (ticket) => {
           if (ticket.mediaBootstrap) {
             this.handlers.mediaBootstrap(ticket.mediaBootstrap);
           }
         },
-        ticketFailed: (error) => this.handlers.ticketFailed(error),
+        ticketFailed: (error) => {
+          if (isRealtimeTimeout(error)) {
+            resetTicketRequests("room ticket timed out");
+          }
+          this.handlers.ticketFailed(error);
+        },
         authFailed: () => this.handlers.disconnected("auth-failed"),
         frame: (frame) => {
           const seq = readReplaySeq(frame);
@@ -129,8 +137,8 @@ export class RoomSocket {
     this.socket.connect({ freshTicket: true });
   }
 
-  wake(): void {
-    this.socket.wake();
+  wake(options: { readonly networkChanged?: boolean } = {}): void {
+    this.socket.wake(options);
   }
 
   /** Sends once identified (queued until then). */
@@ -269,6 +277,8 @@ export class VoiceSocket {
     null;
   private helloReceived = false;
   private identifiedParticipantId: string | null = null;
+  /** holdIdentify(): the room may be about to name a new participant. */
+  private identifyHeld = false;
 
   constructor(
     target: CallTarget,
@@ -280,10 +290,19 @@ export class VoiceSocket {
       decode: decodeVoiceServerFrame,
       // Bound to the participant it will identify as, when known (the
       // voice room closes 1013 on a mismatch and this asks again).
-      acquireTicket: () =>
-        acquireVoiceTicket(target, this.credentials?.participantId ?? null),
+      acquireTicket: (signal) =>
+        acquireVoiceTicket(
+          target,
+          this.credentials?.participantId ?? null,
+          signal,
+        ),
       hooks: {
         ticketReady: () => this.resetIdentity(),
+        ticketFailed: (error) => {
+          if (isRealtimeTimeout(error)) {
+            resetTicketRequests("voice ticket timed out");
+          }
+        },
         authFailed: () => this.handlers.disconnected("auth-failed"),
         message: (message) => this.handleMessage(message),
         closed: ({ next }) => {
@@ -303,8 +322,8 @@ export class VoiceSocket {
     this.socket.connect();
   }
 
-  wake(): void {
-    this.socket.wake();
+  wake(options: { readonly networkChanged?: boolean } = {}): void {
+    this.socket.wake(options);
   }
 
   /**
@@ -317,12 +336,31 @@ export class VoiceSocket {
       this.identifiedParticipantId !== null &&
       this.identifiedParticipantId !== participantId;
     this.credentials = { participantId, voiceToken };
+    this.identifyHeld = false;
     if (replacing) {
       this.socket.stop();
       this.resetIdentity();
     }
     this.maybeIdentify();
     this.socket.connect();
+  }
+
+  /**
+   * Keeps the next VoiceIdentify back until connectVoice() or
+   * releaseIdentify(). After a network change the room socket reconnects
+   * too, and may come back as a new participant (Ready, not Resumed): a
+   * voice socket that identified first would name the old one, which the
+   * voice room refuses (4008 once its join grant is gone, 4010 while held).
+   */
+  holdIdentify(): void {
+    this.identifyHeld = true;
+  }
+
+  /** The room resumed: identify as the participant we already are. */
+  releaseIdentify(): void {
+    if (!this.identifyHeld) return;
+    this.identifyHeld = false;
+    this.maybeIdentify();
   }
 
   updateVoiceToken(voiceToken: string): void {
@@ -349,6 +387,7 @@ export class VoiceSocket {
     this.socket.stop();
     this.resetIdentity();
     this.credentials = null;
+    this.identifyHeld = false;
   }
 
   private resetIdentity(): void {
@@ -359,6 +398,7 @@ export class VoiceSocket {
   private maybeIdentify(): void {
     const credentials = this.credentials;
     if (
+      this.identifyHeld ||
       !this.helloReceived ||
       this.identifiedParticipantId !== null ||
       !credentials ||
