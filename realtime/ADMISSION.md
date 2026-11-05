@@ -70,7 +70,7 @@ after refreshing the app token), `503 AUTH_UNAVAILABLE` (Kova could not
 answer; `Retry-After: 5`), `403 CONNECT_DENIED`, `403 SERVER_MISMATCH`,
 `403 ROOM_NOT_ALLOWED`, `400 SERVER_VOICE_REQUIRED`, `403` channel not
 found, `503 REALTIME_TICKET_SECRET_MISSING` / `CALLS_APP_SECRET_MISSING`,
-`429` rate limits (120 per minute per user; demo rooms 12 per hour per IP,
+`429` rate limits (120 per minute per client IP, counted per edge isolate; demo rooms 12 per hour per IP,
 30 per hour per demo session).
 
 ## Ticket claims
