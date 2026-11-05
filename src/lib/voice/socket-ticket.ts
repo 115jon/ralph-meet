@@ -1,5 +1,6 @@
 const SOCKET_TICKET_VERSION = "rt1";
-const SOCKET_PROTOCOL_NAME = "ralph.realtime.v1";
+/** The realtime subprotocol every socket negotiates (the ticket rides beside it). */
+export const SOCKET_PROTOCOL_NAME = "ralph.realtime.v1";
 const SOCKET_TICKET_PROTOCOL_PREFIX = "ralph.ticket.";
 const textEncoder = new TextEncoder();
 const ticketTokenPattern = /^[A-Za-z0-9_-]+$/;

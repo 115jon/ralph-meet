@@ -51,7 +51,6 @@ import {
   decodeVoiceGatewayClientFrame,
   GatewayCloseCode as CloseCode,
   GatewayOp as Op,
-  parseGatewayFrame,
   VOICE_MOVED_CLOSE_REASON,
   type VoiceClientPayload,
 } from "../src/lib/gateway-protocol";
@@ -59,11 +58,24 @@ import {
   issuePartyTracksSessionCapability,
   verifyPartyTracksSessionCapability,
 } from "./partytracks-proxy";
+import { initRealtimeTicketNonces } from "./realtime-admission";
 import {
-  consumeRealtimeTicketNonce,
-  getRealtimeAdmissionFromHeaders,
-  initRealtimeTicketNonces,
-} from "./realtime-admission";
+  acceptSocket,
+  admitSocket,
+  broadcastToIdentified,
+  isOpcodeAllowed,
+  isSilent,
+  isSpentTicketReason,
+  markSocketHeard,
+  rateLimitedError,
+  readSocketFrame,
+  requestedGatewayVersion,
+  sendFrame,
+  silentAt,
+  SocketRateLimiter,
+  unauthorizedUpgrade,
+  unknownOpcodeError,
+} from "./socket-core";
 import { verifyVoiceToken } from "./voice-token";
 import {
   VOICE_JOIN_GRANT_CHECK_PATH,
@@ -186,8 +198,6 @@ interface VoiceAttachment {
 
 // ── Constants ───────────────────────────────────────────────────────────────
 
-const VOICE_HEARTBEAT_INTERVAL_MS = 15_000;
-const VOICE_ZOMBIE_TIMEOUT_MS = VOICE_HEARTBEAT_INTERVAL_MS * 6;
 const VOICE_PRUNE_ALARM_INTERVAL_MS = 300_000;
 const DEMO_CHAT_TTL_MS = 10 * 60 * 1000;
 const DEMO_CHAT_MAX_MESSAGES = 75;
@@ -201,8 +211,7 @@ const MAX_SOUNDBOARD_DATA_URL_BYTES = 128 * 1024;
 const SOUNDBOARD_MEDIA_CAPABILITY_TTL_MS = 60 * 60 * 1000;
 const MAX_SOUNDBOARD_POSITION_SECONDS = 24 * 60 * 60;
 const DEFAULT_SOUNDBOARD_SOUND_IDS = new Set(["ping", "pop", "chime", "tada"]);
-const MAX_VOICE_FRAME_BYTES = 1_000_000;
-const VOICE_WS_RATE_LIMIT_WINDOW_MS = 60_000;
+/** Per-opcode limits per minute (SocketRateLimiter). */
 const VOICE_WS_RATE_LIMITS: Record<number, number> = {
   [Op.SelectProtocol]: 20,
   [Op.Video]: 20,
@@ -234,6 +243,7 @@ export class VoiceRoom extends DurableObject<Env, unknown> {
   private listenTogetherCommandQueue: Promise<void> = Promise.resolve();
   private nativeScreenOperations = new Map<string, symbol>();
   private voiceJoinGrants: VoiceJoinGrantStore;
+  private readonly rateLimiter: SocketRateLimiter;
   private readonly voiceJoinGrantWaiters = new VoiceJoinGrantWaiters();
   private readonly identifyingSockets = new Set<WebSocket>();
   private voiceJoinGrantWaitMs = VOICE_JOIN_GRANT_WAIT_MS;
@@ -264,6 +274,7 @@ export class VoiceRoom extends DurableObject<Env, unknown> {
     // zombie pruning alarm to falsely evict active users after 90 seconds.
 
     this.initSchema();
+    this.rateLimiter = new SocketRateLimiter(this.sql, VOICE_WS_RATE_LIMITS);
     initRealtimeTicketNonces(this.ctx.storage.sql);
     this.voiceJoinGrants = new VoiceJoinGrantStore(this.sql);
     this.scheduleAlarm();
@@ -316,13 +327,6 @@ export class VoiceRoom extends DurableObject<Env, unknown> {
     // Owners of `s-<owner>-<sound>` playback ids, which no client sends any
     // more. A rollback recreates the table (CREATE IF NOT EXISTS).
     this.sql.exec(`DROP TABLE IF EXISTS soundboard_legacy_playback_owners;`);
-    this.sql.exec(`
-      CREATE TABLE IF NOT EXISTS ws_rate_limits (
-        rate_key TEXT PRIMARY KEY,
-        window_start INTEGER NOT NULL,
-        count INTEGER NOT NULL
-      );
-    `);
     try {
       this.sql.exec(`ALTER TABLE participants ADD COLUMN connection_id TEXT;`);
     } catch {
@@ -456,7 +460,7 @@ export class VoiceRoom extends DurableObject<Env, unknown> {
 
   async fetch(request: Request): Promise<Response> {
     const url = new URL(request.url);
-    const gatewayVersion = parseInt(url.searchParams.get("v") ?? "1", 10);
+    const gatewayVersion = requestedGatewayVersion(url);
 
     const match = url.pathname.match(
       /\/api\/(?:channels|room)\/([^/]+)\/voice/,
@@ -467,54 +471,34 @@ export class VoiceRoom extends DurableObject<Env, unknown> {
     }
 
     if (url.pathname.endsWith("/voice")) {
-      const admission = getRealtimeAdmissionFromHeaders(request.headers);
-      if (
-        !admission ||
-        admission.audience !== "voice" ||
-        admission.roomSlug !== this.roomSlug
-      ) {
-        return new Response("Unauthorized", { status: 401 });
-      }
-      // Single use: a voice ticket's nonce is spent here, in the object that
-      // accepts the socket (custom-server-entry.ts verified its signature).
-      const consumed = consumeRealtimeTicketNonce(
-        this.ctx.storage.sql,
-        admission,
-      );
-      if (!consumed.ok) {
-        roomLog.warn(`Voice admission refused: ${consumed.reason}`);
-        return new Response("Unauthorized", { status: 401 });
-      }
-
-      const pair = new WebSocketPair();
-      const [client, server] = Object.values(pair);
-      this.ctx.acceptWebSocket(server);
-      server.serializeAttachment({
-        admission: {
-          accessMode: admission.accessMode,
-          subject: admission.subject,
-          ...(admission.serverId ? { serverId: admission.serverId } : {}),
-        },
-        last_seen_at: Date.now(),
+      const admitted = admitSocket(request.headers, this.ctx.storage.sql, {
+        audience: "voice",
+        roomSlug: this.roomSlug,
       });
-      // The alarm closes this socket if it goes silent before identifying.
-      this.scheduleAlarm();
+      if (!admitted.ok) {
+        if (isSpentTicketReason(admitted.reason)) {
+          roomLog.warn(`Voice admission refused: ${admitted.reason}`);
+        }
+        return unauthorizedUpgrade();
+      }
+      const { admission } = admitted;
 
       log.info(`New connection, gateway_version=${gatewayVersion}`);
-
-      this.sendTo(server, {
-        op: Op.Hello,
-        d: {
-          heartbeat_interval: VOICE_HEARTBEAT_INTERVAL_MS,
-          gateway_version: gatewayVersion,
-        },
-      });
-
-      return new Response(null, {
-        status: 101,
-        headers: { "Sec-WebSocket-Protocol": "ralph.realtime.v1" },
-        webSocket: client,
-      });
+      const accepted = acceptSocket(
+        this.ctx,
+        {
+          admission: {
+            accessMode: admission.accessMode,
+            subject: admission.subject,
+            ...(admission.serverId ? { serverId: admission.serverId } : {}),
+          },
+          last_seen_at: Date.now(),
+        } satisfies Partial<VoiceAttachment>,
+        gatewayVersion,
+      );
+      // The alarm closes this socket if it goes silent before identifying.
+      this.scheduleAlarm();
+      return accepted.response;
     }
 
     if (url.pathname === VOICE_JOIN_GRANT_PATH && request.method === "POST") {
@@ -606,36 +590,12 @@ export class VoiceRoom extends DurableObject<Env, unknown> {
   }
 
   async webSocketMessage(ws: WebSocket, rawMsg: string | ArrayBuffer) {
-    if (typeof rawMsg !== "string") {
-      this.sendTo(ws, {
-        op: Op.Error,
-        d: {
-          code: CloseCode.InvalidPayload,
-          message: "Text websocket frames are required",
-        },
-      });
+    const read = readSocketFrame(rawMsg);
+    if (!read.ok) {
+      this.sendTo(ws, read.error);
       return;
     }
-    if (rawMsg.length > MAX_VOICE_FRAME_BYTES) {
-      this.sendTo(ws, {
-        op: Op.Error,
-        d: {
-          code: CloseCode.InvalidPayload,
-          message: "Websocket frame is too large",
-        },
-      });
-      return;
-    }
-
-    const parsed = parseGatewayFrame(rawMsg);
-    if (!parsed.ok) {
-      this.sendTo(ws, {
-        op: Op.Error,
-        d: { code: parsed.code, message: parsed.message },
-      });
-      return;
-    }
-    const frame = parsed.frame;
+    const frame = read.frame;
 
     if (
       this.isAuthenticatedMutatingOpcode(frame.op) &&
@@ -644,27 +604,21 @@ export class VoiceRoom extends DurableObject<Env, unknown> {
       return;
     }
 
+    if (!isOpcodeAllowed("voice", frame.op)) {
+      this.sendTo(ws, unknownOpcodeError("voice", frame.op));
+      return;
+    }
+
     if (this.isRateLimited(ws, frame.op)) {
-      this.sendTo(ws, {
-        op: Op.Error,
-        d: {
-          code: CloseCode.RateLimited,
-          message: "Operation rate limit exceeded",
-        },
-      });
+      this.sendTo(ws, rateLimitedError());
       return;
     }
 
     const decoded = decodeVoiceGatewayClientFrame(frame);
     if (!decoded.ok) {
       if (decoded.reason === "unknown-op") {
-        this.sendTo(ws, {
-          op: Op.Error,
-          d: {
-            code: CloseCode.UnknownOpcode,
-            message: `Unknown voice opcode: ${frame.op}`,
-          },
-        });
+        // The voice table and the decoder list the same opcodes.
+        this.sendTo(ws, unknownOpcodeError("voice", frame.op));
       } else if (frame.op === Op.SelectProtocol) {
         // As for a valid offer: an unidentified socket hears that first.
         if (this.requireParticipantId(ws)) this.rejectBrowserSfuNegotiation(ws);
@@ -783,7 +737,7 @@ export class VoiceRoom extends DurableObject<Env, unknown> {
         const pid = row.id as string;
         const lastActivity = (row.last_heartbeat as number) || 0;
 
-        if (lastActivity && now - lastActivity >= VOICE_ZOMBIE_TIMEOUT_MS) {
+        if (isSilent(lastActivity, now)) {
           log.info(
             `Pruning zombie: ${pid}, last_activity=${Math.round((now - lastActivity) / 1000)}s ago`,
           );
@@ -826,11 +780,11 @@ export class VoiceRoom extends DurableObject<Env, unknown> {
     for (const row of this.sql.exec(
       `SELECT last_heartbeat FROM participants WHERE last_heartbeat > 0`,
     )) {
-      deadlines.push((row.last_heartbeat as number) + VOICE_ZOMBIE_TIMEOUT_MS);
+      deadlines.push(silentAt(row.last_heartbeat as number));
     }
     for (const ws of this.unidentifiedSockets()) {
       const lastSeenAt = this.getVoiceAttachment(ws)?.last_seen_at;
-      deadlines.push((lastSeenAt ?? now) + VOICE_ZOMBIE_TIMEOUT_MS);
+      deadlines.push(silentAt(lastSeenAt ?? now));
     }
     for (const row of this.sql.exec(
       `SELECT MIN(expires_at) as expires_at FROM demo_chat_messages`,
@@ -1333,52 +1287,12 @@ export class VoiceRoom extends DurableObject<Env, unknown> {
   }
 
   private isRateLimited(ws: WebSocket, op: number): boolean {
-    const limit = VOICE_WS_RATE_LIMITS[op];
-    if (!limit) return false;
-
     const attachment = this.getVoiceAttachment(ws);
-    const subject = attachment?.admission?.subject;
-    const keys = [
-      `session:${attachment?.participant_id ?? "unidentified"}:${op}`,
-      ...(subject ? [`subject:${subject}:${op}`] : []),
-    ];
-    const now = Date.now();
-    let limited = false;
-
-    for (const key of keys) {
-      const rows = [
-        ...this.sql.exec(
-          "SELECT window_start, count FROM ws_rate_limits WHERE rate_key = ?",
-          key,
-        ),
-      ];
-      const existing = rows[0];
-      if (
-        !existing ||
-        now - Number(existing.window_start) >= VOICE_WS_RATE_LIMIT_WINDOW_MS
-      ) {
-        this.sql.exec(
-          `INSERT INTO ws_rate_limits (rate_key, window_start, count)
-           VALUES (?, ?, 1)
-           ON CONFLICT(rate_key) DO UPDATE SET window_start = excluded.window_start, count = 1`,
-          key,
-          now,
-        );
-        continue;
-      }
-      const count = Number(existing.count) + 1;
-      this.sql.exec(
-        "UPDATE ws_rate_limits SET count = ? WHERE rate_key = ?",
-        count,
-        key,
-      );
-      if (count > limit) limited = true;
-    }
-    this.sql.exec(
-      "DELETE FROM ws_rate_limits WHERE window_start < ?",
-      now - VOICE_WS_RATE_LIMIT_WINDOW_MS,
+    return this.rateLimiter.isLimited(
+      op,
+      attachment?.participant_id,
+      attachment?.admission?.subject,
     );
-    return limited;
   }
 
   /**
@@ -1723,7 +1637,7 @@ export class VoiceRoom extends DurableObject<Env, unknown> {
         }
         continue;
       }
-      if (now - lastSeenAt < VOICE_ZOMBIE_TIMEOUT_MS) continue;
+      if (!isSilent(lastSeenAt, now)) continue;
       roomLog.info(
         `Closing unidentified voice socket, silent for ${Math.round((now - lastSeenAt) / 1000)}s`,
       );
@@ -2382,10 +2296,7 @@ export class VoiceRoom extends DurableObject<Env, unknown> {
     if (!pid) {
       // A standby session keeps its socket unidentified until the user joins
       // (see SFUClient.connectVoice); its heartbeats keep it open.
-      const attachment = this.getVoiceAttachment(ws);
-      if (attachment) {
-        ws.serializeAttachment({ ...attachment, last_seen_at: Date.now() });
-      }
+      markSocketHeard(ws, "last_seen_at");
       this.sendTo(ws, { op: Op.HeartbeatACK, d: { seq: 0 } });
       return;
     }
@@ -4159,11 +4070,7 @@ export class VoiceRoom extends DurableObject<Env, unknown> {
   }
 
   private sendTo(ws: WebSocket, msg: ServerMsg) {
-    try {
-      ws.send(JSON.stringify(msg));
-    } catch {
-      // ignore
-    }
+    sendFrame(ws, msg);
   }
 
   /**
@@ -4173,15 +4080,11 @@ export class VoiceRoom extends DurableObject<Env, unknown> {
    * the room's state once it identifies.
    */
   private broadcast(msg: ServerMsg, excludeWs?: WebSocket) {
-    const data = JSON.stringify(msg);
-    for (const ws of this.ctx.getWebSockets()) {
-      if (ws === excludeWs) continue;
-      if (!this.getParticipantId(ws)) continue;
-      try {
-        ws.send(data);
-      } catch {
-        // ignore
-      }
-    }
+    broadcastToIdentified(
+      this.ctx.getWebSockets(),
+      msg,
+      (ws) => !!this.getParticipantId(ws),
+      excludeWs,
+    );
   }
 }
