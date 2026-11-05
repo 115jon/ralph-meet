@@ -4,7 +4,10 @@
 //   - every getUserMedia call, when it resolved and when its tracks stopped,
 //   - first RTP per inbound/outbound audio stream and first audible level,
 //     from a getStats sampler the bench starts and stops around a run,
-//   - when the voice header first reads "Connected".
+//   - when the voice header first reads "Connected",
+//   - every call-socket admission request (POST /api/voice/admission, and
+//     the room/voice audiences of /api/voice/socket-ticket on builds before
+//     it): one Kova session check each.
 // It also lets the bench fake a hidden tab (document.visibilityState).
 // Nothing here runs unless the bench injects it; the app never ships it.
 (() => {
@@ -19,10 +22,38 @@
     gum: [],
     rtp: { inbound: {}, outbound: {} },
     connectedText: [],
+    admissions: [],
     sampler: null,
     hidden: false,
   };
   window.__vb = vb;
+
+  // ── Call-socket admission requests ──────────────────────────────────
+  const nativeFetch = window.fetch.bind(window);
+  window.fetch = (input, init) => {
+    try {
+      const url = typeof input === "string" ? input : input?.url;
+      const path = url ? new URL(url, location.href).pathname : "";
+      if (
+        path === "/api/voice/admission" ||
+        path === "/api/voice/socket-ticket"
+      ) {
+        const body = JSON.parse(
+          typeof init?.body === "string" ? init.body : "{}",
+        );
+        const kind =
+          path === "/api/voice/admission"
+            ? `admission:${(body.sockets ?? ["room", "voice"]).join("+")}${body.media === false ? "" : "+media"}`
+            : `socket-ticket:${body.audience}`;
+        if (kind !== "socket-ticket:global") {
+          vb.admissions.push({ t: now(), kind });
+        }
+      }
+    } catch {
+      // Never let the probe break a request.
+    }
+    return nativeFetch(input, init);
+  };
 
   // ── RTCPeerConnection ───────────────────────────────────────────────
   const NativePC = window.RTCPeerConnection;
@@ -283,6 +314,7 @@
     now: now(),
     marks: vb.marks(since),
     resources: vb.resources(since),
+    admissions: vb.admissions.filter((entry) => entry.t >= since),
     pcEvents: vb.pcEvents.filter((event) => event.t >= since),
     pcStates: vb.pcs.map((pc) => ({
       connection: pc.connectionState,
