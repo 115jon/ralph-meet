@@ -24,6 +24,7 @@ export class SocketTicketError extends Error {
 function postSocketTicket(
   request: SocketTicketRequest,
   token: string | null,
+  signal?: AbortSignal,
 ): Promise<Response> {
   const headers = new Headers({ "Content-Type": "application/json" });
   if (token) headers.set("Authorization", `Bearer ${token}`);
@@ -35,6 +36,7 @@ function postSocketTicket(
     credentials: "include",
     headers,
     body: JSON.stringify(request),
+    signal,
   });
 }
 
@@ -46,14 +48,15 @@ function postSocketTicket(
  */
 async function requestSocketTicket(
   request: SocketTicketRequest,
+  signal?: AbortSignal,
 ): Promise<string> {
   const token = getDesktopToken() ?? getStoredKovaAuthSessionToken();
-  let response = await postSocketTicket(request, token);
+  let response = await postSocketTicket(request, token, signal);
 
   if (response.status === 401) {
     const freshToken = await recoverAppSession(token);
     if (freshToken && freshToken !== token) {
-      response = await postSocketTicket(request, freshToken);
+      response = await postSocketTicket(request, freshToken, signal);
     }
   }
 
@@ -68,8 +71,10 @@ async function requestSocketTicket(
   return data.ticket;
 }
 
+/** `signal` is RealtimeSocket's: it aborts when the attempt is dropped. */
 export async function fetchSocketProtocols(
   request: SocketTicketRequest,
+  signal?: AbortSignal,
 ): Promise<string[]> {
-  return buildSocketTicketProtocols(await requestSocketTicket(request));
+  return buildSocketTicketProtocols(await requestSocketTicket(request, signal));
 }

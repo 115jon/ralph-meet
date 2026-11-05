@@ -379,6 +379,8 @@ describe("chat gateway heartbeat", () => {
     const socket = FakeWebSocket.instances[0]!;
     socket.open();
     socket.message({ op: 8, d: { heartbeat_interval: 45_000 } });
+    // Ready, so the socket's Ready deadline is not what ends it.
+    socket.message({ op: 2, d: { participant_id: "session-1" } });
     const beats = () =>
       sentMessages(socket).filter((message) => message.op === HEARTBEAT_OP)
         .length;

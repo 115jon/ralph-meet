@@ -656,8 +656,20 @@ describe("RoomGateway lifecycle", () => {
 
   it("keeps an answering socket on wake", async () => {
     const { gateway, socket } = await connectedGateway();
+    socket.onopen?.({} as Event);
+    socket.message({ op: GatewayOp.Hello, d: { heartbeat_interval: 45_000 } });
+    socket.message({
+      op: GatewayOp.Ready,
+      d: {
+        participant_id: "session-1",
+        ice_servers: [],
+        participants: [],
+        voice_token: "voice-token",
+      },
+    });
     gateway.wake();
     socket.message({ op: GatewayOp.HeartbeatACK, d: { seq: 1 } });
+    // Past the probe window and every connect deadline.
     await vi.advanceTimersByTimeAsync(10_000);
     expect(TestWebSocket.instances).toHaveLength(1);
     expect(socket.readyState).toBe(TestWebSocket.OPEN);

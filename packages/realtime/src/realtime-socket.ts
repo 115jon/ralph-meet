@@ -17,7 +17,9 @@
 // Each attempt (one ticket request and the socket it opens) has an identity.
 // stop(), reconnectNow() and a fresh connect() replace it, and every callback
 // of an older attempt (a late ticket, a stale close) checks it and does
-// nothing. Timers come from an injectable clock and sockets from an
+// nothing. Each step of an attempt (ticket, open, Hello, Ready) also has a
+// deadline from the policy: one that runs out aborts the ticket request or
+// abandons the socket, and the attempt retries on the backoff schedule. Timers come from an injectable clock and sockets from an
 // injectable factory, so tests drive the whole state machine by hand.
 
 import { clog, type ScopedLogger } from "./logger";
@@ -45,6 +47,8 @@ export interface RealtimeClock {
   readonly schedule: ScheduleTimer;
   /** Uniform in [0, 1), for backoff jitter. */
   readonly random: () => number;
+  /** Milliseconds, for how long a ticket request has been out. Defaults to Date.now. */
+  readonly now?: () => number;
 }
 
 const systemClock: RealtimeClock = {
@@ -53,7 +57,25 @@ const systemClock: RealtimeClock = {
     return () => clearTimeout(handle);
   },
   random: () => Math.random(),
+  now: () => Date.now(),
 };
+
+/** A step of a connection attempt that ran out of time. */
+export type ConnectStage = "ticket" | "open" | "hello" | "ready";
+
+/** What ticketFailed() gets when the ticket request ran out of time. */
+export class RealtimeTimeoutError extends Error {
+  constructor(readonly stage: ConnectStage) {
+    super(`Realtime ${stage} timed out`);
+    this.name = "RealtimeTimeoutError";
+  }
+}
+
+export function isRealtimeTimeout(
+  error: unknown,
+): error is RealtimeTimeoutError {
+  return error instanceof RealtimeTimeoutError;
+}
 
 /** The part of a WebSocket the lifecycle uses. */
 export type RealtimeWebSocket = Pick<
@@ -116,7 +138,10 @@ export interface RealtimeSocketHooks<
   attemptStarted?(): void;
   /** The current attempt has its ticket; the socket opens next. */
   ticketReady?(ticket: T): void;
-  /** The ticket request (or opening the socket) failed. */
+  /**
+   * The ticket request (or opening the socket) failed. A RealtimeTimeoutError
+   * (isRealtimeTimeout) means the request got no answer in time.
+   */
   ticketFailed?(error: unknown): void;
   /** Ticket refused too often: the session is gone. Retries stop or slow. */
   authFailed?(): void;
@@ -139,8 +164,11 @@ export interface RealtimeSocketOptions<
   readonly policy: RealtimeSocketPolicy;
   /** The endpoint's payload decoder from @ralph/protocol. */
   readonly decode: (frame: GatewayFrame) => PayloadDecodeResult<M>;
-  /** Fetches a ticket and names the URL for one attempt. */
-  readonly acquireTicket: () => Promise<T>;
+  /**
+   * Fetches a ticket and names the URL for one attempt. `signal` aborts when
+   * the attempt is dropped (timed out, stopped, replaced); pass it to fetch.
+   */
+  readonly acquireTicket: (signal: AbortSignal) => Promise<T>;
   readonly hooks: RealtimeSocketHooks<M, T>;
   /** Checked when a retry timer fires; false leaves the socket idle. */
   readonly shouldRetry?: () => boolean;
@@ -156,7 +184,12 @@ type Phase =
   /** stop() was called. */
   | { readonly kind: "stopped" }
   | { readonly kind: "given-up"; readonly reason: SocketGiveUp }
-  | { readonly kind: "ticket"; readonly attempt: symbol }
+  | {
+      readonly kind: "ticket";
+      readonly attempt: symbol;
+      readonly abort: AbortController;
+      readonly startedAt: number;
+    }
   | {
       readonly kind: "socket";
       readonly attempt: symbol;
@@ -222,6 +255,10 @@ export class RealtimeSocket<
   private ready = false;
   private queue: OutboundFrame[] = [];
   private cancelProbe: (() => void) | null = null;
+  /** The current step's deadline (ticket, open, Hello or Ready). */
+  private cancelDeadline: (() => void) | null = null;
+  /** Hello arrived on the current socket and markReady() has not followed. */
+  private awaitingIdentify = false;
 
   private readonly log: ScopedLogger;
   private readonly heartbeat: HeartbeatManager;
@@ -318,17 +355,40 @@ export class RealtimeSocket<
   }
 
   /**
-   * The page is back (visible, online). Retry now if waiting; probe an open
-   * socket, which is abandoned unless a frame arrives within the probe window.
+   * The page is back (visible, online). Retry now if waiting; ask again for
+   * a ticket that has been out longer than the probe window (it is likely
+   * stuck on a dead connection); probe an open socket, which is abandoned
+   * unless a frame arrives within the probe window.
+   *
+   * `networkChanged`: the device lost its network and has one again. Every
+   * socket from before is dead, so an open one is dropped at once instead of
+   * probed, and a ticket request still out is asked again.
    */
-  wake(): void {
+  wake(options: { readonly networkChanged?: boolean } = {}): void {
     const phase = this.phase;
     switch (phase.kind) {
       case "waiting":
       case "auth-failed":
         this.beginAttempt();
         return;
+      case "ticket":
+        if (
+          options.networkChanged ||
+          this.now() - phase.startedAt >= this.policy.probeMs
+        ) {
+          this.log.info("Ticket request still out after wake, asking again");
+          this.beginAttempt();
+        }
+        return;
       case "socket":
+        if (options.networkChanged) {
+          this.abandon(phase.socket, "network changed");
+          // Retry now rather than after the backoff delay.
+          if (this.phase.kind === "waiting" && !this.phase.auth) {
+            this.beginAttempt();
+          }
+          return;
+        }
         this.probe(phase.socket);
         return;
       default:
@@ -338,9 +398,14 @@ export class RealtimeSocket<
 
   /** The gateway is identified (Ready, Resumed, VoiceReady). */
   markReady(): void {
+    this.clearDeadline();
+    this.awaitingIdentify = false;
     this.ready = true;
     this.retries = 0;
-    if (this.queue.length === 0) return;
+    if (this.queue.length === 0) {
+      this.log.info("Identified");
+      return;
+    }
     this.log.info(`Identified, flushing ${this.queue.length} queued messages`);
     const queued = this.queue;
     this.queue = [];
@@ -349,9 +414,17 @@ export class RealtimeSocket<
 
   // ── Sending ──────────────────────────────────────────────────────────────
 
-  /** Sends now if the socket is open; false otherwise. */
+  /**
+   * Sends now if the socket is open; false otherwise. The first frame after
+   * Hello is the gateway's Identify or Resume, and starts the Ready deadline.
+   */
   sendJson(message: OutboundFrame): boolean {
-    return this.sendRaw(JSON.stringify(message));
+    const sent = this.sendRaw(JSON.stringify(message));
+    if (sent && this.awaitingIdentify && this.phase.kind === "socket") {
+      this.awaitingIdentify = false;
+      this.socketDeadline(this.phase.socket, "ready");
+    }
+    return sent;
   }
 
   /** Sends if ready, else queues until markReady(). False only if a send failed. */
@@ -396,10 +469,15 @@ export class RealtimeSocket<
     return this.phase.kind === "socket" && this.phase.socket === socket;
   }
 
-  /** Cancels the pending retry, drops the socket, stops liveness timers. */
+  /**
+   * Cancels the pending retry, aborts the ticket request, drops the socket,
+   * stops liveness timers and the step deadline.
+   */
   private leavePhase(): void {
     const phase = this.phase;
+    this.clearDeadline();
     if (phase.kind === "waiting") phase.cancel();
+    if (phase.kind === "ticket") phase.abort.abort();
     if (phase.kind === "socket") {
       detach(phase.socket);
       try {
@@ -412,17 +490,52 @@ export class RealtimeSocket<
     this.clearProbe();
   }
 
+  private now(): number {
+    return this.clock.now?.() ?? Date.now();
+  }
+
+  private clearDeadline(): void {
+    this.cancelDeadline?.();
+    this.cancelDeadline = null;
+  }
+
+  /** Runs `expired` unless the step ends (clearDeadline) within `ms`. */
+  private deadline(ms: number, expired: () => void): void {
+    this.clearDeadline();
+    const cancel = this.clock.schedule(() => {
+      if (this.cancelDeadline !== cancel) return;
+      this.cancelDeadline = null;
+      expired();
+    }, ms);
+    this.cancelDeadline = cancel;
+  }
+
+  /** A socket step that runs out of time drops the socket, which retries. */
+  private socketDeadline(socket: RealtimeWebSocket, stage: ConnectStage) {
+    const ms = this.policy.timeouts[`${stage}Ms` as const];
+    this.deadline(ms, () => this.abandon(socket, `${stage} timed out`));
+  }
+
   private beginAttempt(): void {
     this.leavePhase();
     const attempt = Symbol(this.options.label);
-    this.phase = { kind: "ticket", attempt };
+    const abort = new AbortController();
+    this.phase = { kind: "ticket", attempt, abort, startedAt: this.now() };
     this.ready = false;
+    this.awaitingIdentify = false;
     this.hooks.attemptStarted?.();
     if (!this.isCurrent(attempt)) return;
 
+    this.deadline(this.policy.timeouts.ticketMs, () => {
+      if (!this.isCurrent(attempt)) return;
+      this.log.warn("Ticket request timed out");
+      abort.abort();
+      this.attemptFailed(attempt, new RealtimeTimeoutError("ticket"));
+    });
+
     let ticket: Promise<T>;
     try {
-      ticket = this.options.acquireTicket();
+      ticket = this.options.acquireTicket(abort.signal);
     } catch (error) {
       ticket = Promise.reject(error);
     }
@@ -434,6 +547,7 @@ export class RealtimeSocket<
 
   private openWithTicket(attempt: symbol, ticket: T): void {
     if (!this.isCurrent(attempt)) return;
+    this.clearDeadline();
     this.refusals = 0;
     this.authFailed = false;
 
@@ -447,9 +561,11 @@ export class RealtimeSocket<
       return;
     }
     this.phase = { kind: "socket", attempt, socket };
+    this.socketDeadline(socket, "open");
 
     socket.onopen = () => {
       if (!this.owns(socket)) return;
+      this.socketDeadline(socket, "hello");
       this.log.info("Connected");
       this.hooks.opened?.();
       this.reachability.reachable();
@@ -473,6 +589,7 @@ export class RealtimeSocket<
 
   private attemptFailed(attempt: symbol, error: unknown): void {
     if (!this.isCurrent(attempt)) return;
+    this.clearDeadline();
     const failed: Phase = { kind: "idle" };
     this.phase = failed;
     this.hooks.ticketFailed?.(error);
@@ -583,6 +700,13 @@ export class RealtimeSocket<
       }
       if (frame.op === GatewayOp.Hello) {
         this.heartbeat.start(helloInterval(frame.d));
+        // The Ready window opens when the gateway sends Identify or Resume
+        // (sendJson); a gateway may wait for credentials first, and that
+        // wait has no deadline (the heartbeat keeps watching the link).
+        if (!this.ready) {
+          this.clearDeadline();
+          this.awaitingIdentify = true;
+        }
       } else if (frame.op === GatewayOp.HeartbeatACK) {
         this.heartbeat.onAck();
       }
@@ -624,6 +748,8 @@ export class RealtimeSocket<
 
   private closed(socket: RealtimeWebSocket, code: number, reason: string) {
     detach(socket);
+    this.clearDeadline();
+    this.awaitingIdentify = false;
     this.heartbeat.stop();
     this.clearProbe();
     this.ready = false;

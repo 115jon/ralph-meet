@@ -8,7 +8,9 @@ import {
   backoffDelay,
   CALL_SOCKET_POLICY,
   CHAT_SOCKET_POLICY,
+  CONNECT_TIMEOUTS,
   createServerReachability,
+  isRealtimeTimeout,
   RealtimeSocket,
   type RealtimeClock,
   type RealtimeSocketPolicy,
@@ -21,12 +23,13 @@ import {
 
 /** A clock the test advances by hand. `random` is fixed (0 = no jitter). */
 class FakeClock implements RealtimeClock {
-  now = 0;
+  time = 0;
+  readonly now = () => this.time;
   randomValue = 0;
   private timers: Array<{ at: number; fn: () => void; live: boolean }> = [];
 
   readonly schedule = (fn: () => void, ms: number) => {
-    const timer = { at: this.now + ms, fn, live: true };
+    const timer = { at: this.time + ms, fn, live: true };
     this.timers.push(timer);
     return () => {
       timer.live = false;
@@ -39,21 +42,21 @@ class FakeClock implements RealtimeClock {
   pending(): number[] {
     return this.timers
       .filter((timer) => timer.live)
-      .map((timer) => timer.at - this.now);
+      .map((timer) => timer.at - this.time);
   }
 
   advance(ms: number): void {
-    const end = this.now + ms;
+    const end = this.time + ms;
     for (;;) {
       const due = this.timers
         .filter((timer) => timer.live && timer.at <= end)
         .sort((a, b) => a.at - b.at)[0];
       if (!due) break;
       due.live = false;
-      this.now = due.at;
+      this.time = due.at;
       due.fn();
     }
-    this.now = end;
+    this.time = end;
   }
 }
 
@@ -135,9 +138,12 @@ function harness(
   const tickets: Array<ReturnType<typeof deferred<SocketTicket>>> = [];
   const events: string[] = [];
   const messages: RoomGatewayServerMessage[] = [];
-  const acquireTicket = vi.fn(() => {
+  const signals: AbortSignal[] = [];
+  const failures: unknown[] = [];
+  const acquireTicket = vi.fn((signal: AbortSignal) => {
     const ticket = deferred<SocketTicket>();
     tickets.push(ticket);
+    signals.push(signal);
     return ticket.promise;
   });
   const socket = new RealtimeSocket<RoomGatewayServerMessage>({
@@ -156,7 +162,10 @@ function harness(
     hooks: {
       attemptStarted: () => events.push("attempt"),
       ticketReady: () => events.push("ticket"),
-      ticketFailed: () => events.push("ticket-failed"),
+      ticketFailed: (error) => {
+        failures.push(error);
+        events.push("ticket-failed");
+      },
       authFailed: () => events.push("auth-failed"),
       opened: () => events.push("open"),
       message: (message) => messages.push(message),
@@ -190,6 +199,8 @@ function harness(
     socket,
     sockets,
     tickets,
+    signals,
+    failures,
     events,
     messages,
     acquireTicket,
@@ -276,6 +287,122 @@ describe("backoff schedule", () => {
   });
 });
 
+// ── Connect timeouts ────────────────────────────────────────────────────────
+
+describe("connect timeouts", () => {
+  it("aborts a ticket request that never answers and retries on the backoff", async () => {
+    const h = harness();
+    h.socket.connect();
+    h.clock.advance(CONNECT_TIMEOUTS.ticketMs - 1);
+    expect(h.signals[0]!.aborted).toBe(false);
+    expect(h.events).not.toContain("ticket-failed");
+
+    h.clock.advance(1);
+    expect(h.signals[0]!.aborted).toBe(true);
+    expect(isRealtimeTimeout(h.failures[0])).toBe(true);
+    expect(h.retries()).toEqual(["retry:1:500"]);
+
+    h.clock.advance(500);
+    expect(h.acquireTicket).toHaveBeenCalledTimes(2);
+  });
+
+  it("ignores the abandoned request's late answer, ticket or failure", async () => {
+    const h = harness();
+    h.socket.connect();
+    const stale = h.tickets[0]!;
+    h.clock.advance(CONNECT_TIMEOUTS.ticketMs + 500);
+    expect(h.acquireTicket).toHaveBeenCalledTimes(2);
+
+    // The first request answers after all: it must not open a socket or
+    // fail the attempt that replaced it.
+    stale.resolve({ url: "wss://meet.test/stale" });
+    await settle();
+    expect(h.sockets).toHaveLength(0);
+    stale.reject(new Error("late"));
+    await settle();
+    expect(h.events.filter((e) => e === "ticket-failed")).toHaveLength(1);
+
+    const fake = await h.grantTicket();
+    expect(fake.url).toBe("wss://meet.test/socket");
+    expect(h.sockets).toHaveLength(1);
+  });
+
+  it("drops a socket that does not open in time", async () => {
+    const h = harness();
+    h.socket.connect();
+    const fake = await h.grantTicket();
+    h.clock.advance(CONNECT_TIMEOUTS.openMs);
+    expect(fake.closedWith).toEqual([4000, "open timed out"]);
+    expect(h.events).toContain("closed:retry");
+
+    // Its late open finds no handler.
+    fake.open();
+    expect(h.events).not.toContain("open");
+  });
+
+  it("drops an open socket that sends no Hello in time", async () => {
+    const h = harness();
+    const fake = await h.connected();
+    h.clock.advance(CONNECT_TIMEOUTS.helloMs - 1);
+    expect(h.socket.isOpen).toBe(true);
+    h.clock.advance(1);
+    expect(fake.closedWith).toEqual([4000, "hello timed out"]);
+    expect(h.retries()).toEqual(["retry:1:500"]);
+  });
+
+  it("waits for the gateway's credentials after Hello without a deadline", async () => {
+    const h = harness();
+    const fake = await h.connected();
+    fake.receive(HELLO);
+    for (let i = 0; i < 60; i++) {
+      h.clock.advance(1000);
+      fake.receive(ACK);
+    }
+    expect(h.socket.isOpen).toBe(true);
+    expect(h.events).not.toContain("closed:retry");
+  });
+
+  it("drops a socket that is not ready in time after it identifies", async () => {
+    const h = harness();
+    const fake = await h.connected();
+    fake.receive(HELLO);
+    h.socket.sendJson({ op: GatewayOp.Identify, d: {} });
+    for (let i = 0; i < 19; i++) {
+      h.clock.advance(1000);
+      fake.receive(ACK);
+    }
+    expect(h.socket.isOpen).toBe(true);
+    h.clock.advance(1000);
+    expect(fake.closedWith).toEqual([4000, "ready timed out"]);
+  });
+
+  it("keeps a ready socket past every deadline", async () => {
+    const h = harness();
+    const fake = await h.connected();
+    fake.receive(HELLO);
+    h.socket.markReady();
+    for (let i = 0; i < 60; i++) {
+      h.clock.advance(1000);
+      fake.receive(ACK);
+    }
+    expect(h.socket.isReady).toBe(true);
+    expect(h.events).not.toContain("closed:retry");
+  });
+
+  it("aborts the ticket request on stop and on reconnectNow", async () => {
+    const h = harness();
+    h.socket.connect();
+    h.socket.reconnectNow();
+    expect(h.signals[0]!.aborted).toBe(true);
+    expect(h.signals[1]!.aborted).toBe(false);
+    h.socket.stop();
+    expect(h.signals[1]!.aborted).toBe(true);
+    h.clock.advance(60_000);
+    expect(h.acquireTicket).toHaveBeenCalledTimes(2);
+    expect(h.events).not.toContain("ticket-failed");
+  });
+});
+
 // ── Wake ────────────────────────────────────────────────────────────────────
 
 describe("wake", () => {
@@ -287,8 +414,9 @@ describe("wake", () => {
 
     h.socket.wake();
     expect(h.acquireTicket).toHaveBeenCalledTimes(2);
-    expect(h.clock.pending()).toEqual([]);
-    h.clock.advance(10_000);
+    // Only the new attempt's ticket deadline is left.
+    expect(h.clock.pending()).toEqual([CONNECT_TIMEOUTS.ticketMs]);
+    h.clock.advance(CONNECT_TIMEOUTS.ticketMs - 1);
     expect(h.acquireTicket).toHaveBeenCalledTimes(2);
   });
 
@@ -320,16 +448,19 @@ describe("wake", () => {
     const h = harness();
     const fake = await h.connected();
 
+    fake.receive(HELLO);
+    h.socket.markReady();
     h.socket.wake();
     fake.receive(ACK);
-    h.clock.advance(60_000);
+    // Inside one heartbeat interval: the probe alone decides.
+    h.clock.advance(999);
 
     expect(h.events).not.toContain("closed:retry");
     expect(h.socket.isOpen).toBe(true);
     expect(h.acquireTicket).toHaveBeenCalledTimes(1);
   });
 
-  it("does nothing while a ticket is in flight or after stop", async () => {
+  it("does nothing while a fresh ticket is in flight or after stop", async () => {
     const h = harness();
     h.socket.connect();
     h.socket.wake();
@@ -339,6 +470,43 @@ describe("wake", () => {
     h.socket.wake();
     h.clock.advance(60_000);
     expect(h.acquireTicket).toHaveBeenCalledTimes(1);
+  });
+
+  it("asks again for a ticket that has been out past the probe window", async () => {
+    const h = harness();
+    h.socket.connect();
+    h.clock.advance(CALL_SOCKET_POLICY.probeMs);
+    h.socket.wake();
+    expect(h.acquireTicket).toHaveBeenCalledTimes(2);
+    expect(h.signals[0]!.aborted).toBe(true);
+
+    // The replaced request answering late changes nothing.
+    h.tickets[0]!.resolve({ url: "wss://meet.test/stale" });
+    await settle();
+    expect(h.sockets).toHaveLength(0);
+  });
+
+  it("after a network change, drops an open socket and retries at once", async () => {
+    const h = harness();
+    const fake = await h.connected();
+    fake.receive(HELLO);
+    h.socket.markReady();
+
+    h.socket.wake({ networkChanged: true });
+    expect(fake.closedWith).toEqual([4000, "network changed"]);
+    expect(h.events).toContain("closed:retry");
+    expect(h.acquireTicket).toHaveBeenCalledTimes(2);
+    // The dead socket's late close is not a second close.
+    fake.serverClose(1006);
+    expect(h.events.filter((e) => e === "closed:retry")).toHaveLength(1);
+  });
+
+  it("after a network change, asks again for a ticket still out", async () => {
+    const h = harness();
+    h.socket.connect();
+    h.socket.wake({ networkChanged: true });
+    expect(h.acquireTicket).toHaveBeenCalledTimes(2);
+    expect(h.signals[0]!.aborted).toBe(true);
   });
 });
 
@@ -365,7 +533,8 @@ describe("server reachable", () => {
     expect(chat.acquireTicket).toHaveBeenCalledTimes(5);
     const callSocket = await call.grantTicket();
     expect(chat.acquireTicket).toHaveBeenCalledTimes(6);
-    expect(chat.clock.pending()).toEqual([]);
+    // The backoff timer is gone; only the new ticket's deadline is left.
+    expect(chat.clock.pending()).toEqual([CONNECT_TIMEOUTS.ticketMs]);
 
     // Once per wait: the open that follows does not ask again.
     callSocket.open();
@@ -683,7 +852,8 @@ describe("frames", () => {
       fake.receive({ op: 4242, d: {} });
     }).not.toThrow();
     expect(h.messages).toEqual([]);
-    expect(h.clock.pending()).toEqual([]);
+    // Only the Hello deadline: nothing above counted as Hello.
+    expect(h.clock.pending()).toEqual([CONNECT_TIMEOUTS.helloMs]);
 
     fake.receive(HELLO);
     expect(h.messages).toEqual([HELLO]);
