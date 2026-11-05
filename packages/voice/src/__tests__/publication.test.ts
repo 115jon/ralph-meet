@@ -495,6 +495,24 @@ describe("PublicationReconciler", () => {
     expect(onOpError).toHaveBeenCalledTimes(2);
   });
 
+  it("sets a spent slot aside and still converges the others in the same run", async () => {
+    media.steps.push("throw", "throw", "throw");
+    reconciler.setTrack("microphone", "mic");
+    reconciler.setTrack("camera", "cam");
+    const result = reconciler.reconcile();
+    await flush();
+    timers.advance(150);
+    await flush();
+    timers.advance(300);
+    const failed = await settle(result);
+
+    expect(failed.status === "failed" && failed.failedSlots).toEqual([
+      "microphone",
+    ]);
+    expect(media.published.get("camera")).toBe("cam");
+    expect(media.published.has("microphone")).toBe(false);
+  });
+
   it("gives up after the retry budget and starts afresh on the next reconcile", async () => {
     media.steps.push("throw", "throw", "throw");
     reconciler.setTrack("microphone", "mic");
