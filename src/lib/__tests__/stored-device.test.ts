@@ -1,7 +1,11 @@
+// The browser side of saved devices: reading enumerateDevices() for the
+// @ralph/voice decisions. The decision table itself is tested in
+// packages/voice/src/__tests__/devices.test.ts.
+
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
-  matchStoredDevice,
-  refreshedDeviceId,
+  lookupSavedDevice,
+  resolveOutputSinkId,
   resolveStoredDeviceId,
 } from "../stored-device";
 
@@ -23,10 +27,13 @@ const hiddenList = [
   device("videoinput", "", ""),
 ];
 
-function stubDevices(devices: MediaDeviceInfo[]) {
-  vi.stubGlobal("navigator", {
-    mediaDevices: { enumerateDevices: vi.fn().mockResolvedValue(devices) },
-  });
+function stubDevices(devices: MediaDeviceInfo[] | Error) {
+  const enumerateDevices =
+    devices instanceof Error
+      ? vi.fn().mockRejectedValue(devices)
+      : vi.fn().mockResolvedValue(devices);
+  vi.stubGlobal("navigator", { mediaDevices: { enumerateDevices } });
+  return enumerateDevices;
 }
 
 describe("resolveStoredDeviceId", () => {
@@ -46,196 +53,88 @@ describe("resolveStoredDeviceId", () => {
     ).resolves.toEqual({ deviceId: "saved-mic", unverified: true });
   });
 
-  it("keeps a saved id the list still has", async () => {
+  it("passes a saved id through unverified when the browser cannot list", async () => {
+    vi.stubGlobal("navigator", { mediaDevices: {} });
+
+    await expect(
+      resolveStoredDeviceId("audioinput", { deviceId: "saved-mic" }, quietLog),
+    ).resolves.toEqual({ deviceId: "saved-mic", unverified: true });
+  });
+
+  it("only looks at devices of the asked kind", async () => {
     stubDevices([
-      device("audiooutput", "default", "Default - Speakers", "g-speakers"),
-      device("audiooutput", "saved-out", "Headphones", "g-headphones"),
+      device("audiooutput", "new-shure", "Shure MV7", "g-shure"),
+      device("audioinput", "webcam", "Webcam Mic", "g-cam"),
     ]);
 
     await expect(
       resolveStoredDeviceId(
-        "audiooutput",
-        { deviceId: "saved-out", label: "Headphones" },
+        "audioinput",
+        { deviceId: "old-shure", label: "Shure MV7", groupId: "g-shure" },
         quietLog,
       ),
-    ).resolves.toEqual({ deviceId: "saved-out", unverified: false });
+    ).resolves.toEqual({ deviceId: "default", unverified: false });
   });
 
-  it("finds a renamed id by groupId, skipping the default alias of that device", async () => {
+  it("finds a renamed id in the live list", async () => {
     stubDevices([
       device("audioinput", "default", "Default - Shure MV7", "g-shure"),
-      device(
-        "audioinput",
-        "communications",
-        "Communications - Shure MV7",
-        "g-shure",
-      ),
       device("audioinput", "new-shure", "Shure MV7", "g-shure"),
     ]);
 
     await expect(
-      resolveStoredDeviceId(
+      lookupSavedDevice(
         "audioinput",
         { deviceId: "old-shure", label: "Shure MV7", groupId: "g-shure" },
         quietLog,
       ),
-    ).resolves.toEqual({ deviceId: "new-shure", unverified: false });
+    ).resolves.toEqual({
+      outcome: "listed",
+      deviceId: "new-shure",
+      by: "label",
+    });
   });
 
-  it("finds a renamed id by label when the groupId changed too", async () => {
-    stubDevices([
-      device("audiooutput", "default", "Default - Speakers", "g-new-1"),
-      device("audiooutput", "new-headphones", " headphones ", "g-new-2"),
-    ]);
+  it("does not enumerate for the system default", async () => {
+    const enumerateDevices = stubDevices(hiddenList);
 
     await expect(
-      resolveStoredDeviceId(
-        "audiooutput",
-        { deviceId: "old-headphones", label: "Headphones", groupId: "g-old" },
-        quietLog,
-      ),
-    ).resolves.toEqual({ deviceId: "new-headphones", unverified: false });
-  });
-
-  it("prefers the label over a sibling endpoint that shares the groupId", async () => {
-    // Windows lists a sound card's inputs under one groupId.
-    stubDevices([
-      device("audioinput", "default", "Default - Microphone (Realtek)", "g-rt"),
-      device("audioinput", "new-mic", "Microphone (Realtek)", "g-rt"),
-      device("audioinput", "new-line", "Line In (Realtek)", "g-rt"),
-      device("audioinput", "new-mix", "Stereo Mix (Realtek)", "g-rt"),
-    ]);
-
-    await expect(
-      resolveStoredDeviceId(
-        "audioinput",
-        { deviceId: "old-line", label: "Line In (Realtek)", groupId: "g-rt" },
-        quietLog,
-      ),
-    ).resolves.toEqual({ deviceId: "new-line", unverified: false });
-  });
-
-  it("does not guess between sibling endpoints when no label matches", async () => {
-    stubDevices([
-      device("audioinput", "new-mic", "Microphone (Realtek)", "g-rt"),
-      device("audioinput", "new-mix", "Stereo Mix (Realtek)", "g-rt"),
-    ]);
-
-    await expect(
-      resolveStoredDeviceId(
-        "audioinput",
-        { deviceId: "old-line", label: "Line In (Realtek)", groupId: "g-rt" },
-        quietLog,
-      ),
+      resolveStoredDeviceId("audioinput", { deviceId: "default" }, quietLog),
     ).resolves.toEqual({ deviceId: "default", unverified: false });
-  });
-
-  it("falls back to the system default when the saved device is gone", async () => {
-    stubDevices([device("audioinput", "other-mic", "Webcam Mic", "g-cam")]);
-
-    await expect(
-      resolveStoredDeviceId(
-        "audioinput",
-        { deviceId: "old-shure", label: "Shure MV7", groupId: "g-shure" },
-        quietLog,
-      ),
-    ).resolves.toEqual({ deviceId: "default", unverified: false });
+    expect(enumerateDevices).not.toHaveBeenCalled();
   });
 });
 
-describe("refreshedDeviceId", () => {
-  const savedShure = {
-    deviceId: "old-shure",
-    label: "Shure MV7",
-    groupId: "g-shure",
+describe("resolveOutputSinkId", () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  const saved = {
+    deviceId: "old-headphones",
+    label: "Headphones",
+    groupId: "g-old",
   };
 
-  it("saves a new id for the same physical device", () => {
-    expect(
-      refreshedDeviceId(savedShure, {
-        deviceId: "new-shure",
-        label: "Shure MV7",
-        groupId: "g-other",
-      }),
-    ).toBe("new-shure");
-    expect(
-      refreshedDeviceId(savedShure, {
-        deviceId: "new-shure",
-        label: "Microphone (Shure MV7)",
-        groupId: "g-shure",
-      }),
-    ).toBe("new-shure");
+  it("routes to the refreshed speaker id", async () => {
+    stubDevices([
+      device("audiooutput", "default", "Default - Speakers", "g-speakers"),
+      device("audiooutput", "new-headphones", "Headphones", "g-new"),
+    ]);
+    await expect(resolveOutputSinkId(saved, quietLog)).resolves.toBe(
+      "new-headphones",
+    );
   });
 
-  it("keeps the saved choice when capture fell back to another device", () => {
-    expect(
-      refreshedDeviceId(savedShure, {
-        deviceId: "webcam-mic",
-        label: "Webcam Mic",
-        groupId: "g-cam",
-      }),
-    ).toBeNull();
-    expect(
-      refreshedDeviceId(savedShure, {
-        deviceId: "default",
-        label: "Default - Shure MV7",
-        groupId: "g-shure",
-      }),
-    ).toBeNull();
+  it("tries the saved id as it is when the lookup fails", async () => {
+    stubDevices(new Error("enumerate failed"));
+    await expect(resolveOutputSinkId(saved, quietLog)).resolves.toBe(
+      "old-headphones",
+    );
   });
 
-  it("does not save a sibling endpoint that shares the groupId", () => {
-    expect(
-      refreshedDeviceId(
-        { deviceId: "old-line", label: "Line In (Realtek)", groupId: "g-rt" },
-        { deviceId: "mic", label: "Microphone (Realtek)", groupId: "g-rt" },
-      ),
-    ).toBeNull();
-  });
-
-  it("keeps System default following the OS", () => {
-    expect(
-      refreshedDeviceId(
-        { deviceId: "default" },
-        { deviceId: "shure", label: "Shure MV7", groupId: "g-shure" },
-      ),
-    ).toBeNull();
-  });
-
-  it("does nothing when the id already matches", () => {
-    expect(
-      refreshedDeviceId(savedShure, { ...savedShure, deviceId: "old-shure" }),
-    ).toBeNull();
-  });
-});
-
-describe("matchStoredDevice", () => {
-  const list = [
-    device("audioinput", "default", "Default - Shure MV7", "g-shure"),
-    device("audioinput", "shure", "Shure MV7", "g-shure"),
-    device("audioinput", "webcam", "Webcam Mic", "g-cam"),
-  ];
-
-  it("matches by id, then label, then a unique groupId", () => {
-    expect(
-      matchStoredDevice(list, { deviceId: "shure" })?.device.deviceId,
-    ).toBe("shure");
-    expect(
-      matchStoredDevice(list, { deviceId: "old", label: "webcam mic" }),
-    ).toMatchObject({ device: { deviceId: "webcam" }, by: "label" });
-    expect(
-      matchStoredDevice(list, { deviceId: "old", groupId: "g-shure" }),
-    ).toMatchObject({ device: { deviceId: "shure" }, by: "groupId" });
-  });
-
-  it("returns null for System default and for devices not listed", () => {
-    expect(matchStoredDevice(list, { deviceId: "default" })).toBeNull();
-    expect(
-      matchStoredDevice(list, {
-        deviceId: "gone",
-        label: "Yeti",
-        groupId: "g",
-      }),
-    ).toBeNull();
+  it("routes the system default to the default", async () => {
+    stubDevices(hiddenList);
+    await expect(resolveOutputSinkId({}, quietLog)).resolves.toBe("default");
   });
 });
