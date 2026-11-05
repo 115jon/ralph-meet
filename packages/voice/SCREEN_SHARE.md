@@ -71,7 +71,7 @@ themselves.
 | `setAudio(on)`          | the wanted request with `audio: on`                |
 | `toggleAudio()`         | `setAudio(!wanted.audio)`                          |
 | `setQuality(q)`         | the wanted request with `quality: q`               |
-| `captureEnded(capture)` | nothing, if `capture` is the live one              |
+| `captureEnded(capture)` | nothing, if `capture` is the live one (see below)  |
 
 `setAudio`, `toggleAudio` and `setQuality` do nothing while nothing is
 wanted (there is no audio or quality preference outside a share).
@@ -91,8 +91,11 @@ restart, with the last value).
 
 The next step, checked in this order:
 
-1. The live capture ended by itself (`captureEnded`): nothing is wanted any
-   more, with reason `source-ended`.
+1. The live capture ended by itself (`captureEnded`): if the wanted share
+   is still that capture's (same token; only its audio or quality may have
+   changed), nothing is wanted any more, with reason `source-ended`. A newer
+   `start` queued meanwhile stays wanted and replaces the dead capture
+   (step 4).
 2. Nothing wanted and a share is live: **end** it.
 3. Something wanted and nothing live: **start** it.
 4. The wanted token is not the live one: **replace** it (below).
@@ -113,8 +116,9 @@ in flight lands.
 | `stopping`   | after: `starting` once the end is done         | -          | -                                                                                          | `off`      | `off`                                     |
 
 `captureEnded` of the live capture acts as `stop()` with reason
-`source-ended`, when the driver next looks (a restart in flight decides on
-its own: it replaces the capture, or finds it dead and ends the share).
+`source-ended`, when the driver next looks, unless a newer `start` is
+wanted by then (that start runs instead). A restart in flight decides on
+its own: it replaces the capture, or finds it dead and ends the share.
 
 ### Start
 
@@ -124,13 +128,24 @@ its own: it replaces the capture, or finds it dead and ends the share).
      allowed (web: WGC capture is allowed, not the hook-exclusive policy)
      and the share is still wanted, capture through the browser path;
      otherwise the start **fails**.
-   - It resolves but the pipeline is not active: the start **fails**, with
-     no fallback (the pipeline answered and then went away).
+   - It resolves but the pipeline is not active: stop the pipeline anyway
+     (idempotent; web: this clears the options the transport would start
+     again after a voice reconnect), release the capture, and the start
+     **fails**, with no fallback (the pipeline answered and then went
+     away).
 2. Otherwise capture through the browser path; a throw (including the user
    cancelling the picker) **fails** the start.
-3. If the share was stopped while capturing, a browser capture is released
-   and never published; a native one is on the wire already and is ended
-   like a live share.
+3. If the capture is no longer the wanted one when it lands (its token is
+   not the wanted token):
+   - Browser: it is released and never published, whether the share was
+     stopped or a newer `start` replaced it. The driver goes on with what
+     is wanted now (a newer start runs as its own capture; nothing is
+     announced for this one).
+   - Native, replaced by a newer `start`: the pipeline is stopped (it
+     withdraws what it pushed), the capture released, and the newer start
+     runs.
+   - Native, stopped: it is on the wire already, so it is recorded and
+     ended like a live share (`ended`, not announced).
 4. Publish:
    - Native: the reconciler **adopts** a fresh `{ kind: "native" }` on the
      `screen` slot (nothing is sent: the pipeline published it).
@@ -151,11 +166,23 @@ its own: it replaces the capture, or finds it dead and ends the share).
   quality in place. If it cannot, a full restart.
 - Otherwise a full restart on the new request: like **Start**, with the old
   share as "previous":
-  - If the platform says the new capture cannot run beside the old one
-    (web: any picked desktop source, since WGC and the native hook capture
-    a source once), the old capture is **released first** (native: the
-    pipeline is stopped). Nothing is withdrawn: viewers keep the share's
-    SFU track.
+  - If the new request takes the native path (it prefers native and the
+    source is eligible) and the old share is a **browser** share, the old
+    share is **withdrawn first** (the `screen` intent becomes nothing and
+    the module awaits `reconcile()`: web, `stopTracks` with both names, the
+    video parked on its keepalive, see "Keepalive park and reuse"), then
+    its capture is released, and only then does the pipeline start. The
+    pipeline publishes the same track names itself, so one publisher holds
+    them at a time; a browser publication left beside it would be
+    announced again on the next voice reconnect over the native one. If
+    the pipeline then fails and the browser fallback runs, the fallback
+    capture is published on the slot afresh (web: on the kept-alive
+    video); any other failure ends the share.
+  - Otherwise, if the platform says the new capture cannot run beside the
+    old one (web: any picked desktop source, since WGC and the native hook
+    capture a source once), the old capture is **released first** (native:
+    the pipeline is stopped). Nothing is withdrawn: viewers keep the
+    share's SFU track.
   - Otherwise (web: `getDisplayMedia`) the old capture is kept until the
     new one is ready, then released, then the new tracks are published.
   - A **swap** restart whose capture fails while the old capture is still
@@ -204,11 +231,16 @@ slot withdrawn, except a swap restart that kept the old share. Covered:
 | failure                                                                             | then                                                                                                                |
 | ----------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------- |
 | native start throws, fallback not allowed                                           | pipeline stopped; `off`; unpublish if it was live                                                                   |
-| native start resolves inactive                                                      | no fallback; `off`; unpublish if it was live                                                                        |
+| native start resolves inactive                                                      | pipeline stopped (its reconnect options cleared); no fallback; `off`; unpublish if it was live                      |
 | native start throws, browser fallback throws                                        | `off`; unpublish if it was live                                                                                     |
 | browser capture throws (cancelled, no source)                                       | first start: `off`; swap restart: old share kept; release-first restart (a picked desktop source): `off`, unpublish |
 | browser publish runs out of retries                                                 | capture released; `off`; unpublish                                                                                  |
 | a newer `start` arrived while a start failed                                        | the newer one runs; the failed one is dropped                                                                       |
+| `stop()` and a newer `start` while a browser capture was in flight                  | the old capture is released, never published or announced; the newer one runs (cancelled: `off`)                    |
+| a newer `start` while a native capture was in flight                                | the old pipeline is stopped and its capture released, never announced; the newer one runs                           |
+| the live capture ended while a newer `start` was queued                             | the newer one runs and replaces the dead capture                                                                    |
+| native restart over a browser share fails, no fallback                              | the browser share was withdrawn and released before the pipeline started; `off`                                     |
+| a native share cannot reconnect after a voice reconnect                             | see "Reconnect": the platform falls back to the browser path or ends the share                                      |
 | `stop()` arrived while a native start failed                                        | no fallback; `off`                                                                                                  |
 | `stop()` or a newer `start` during the eligibility probe or a release-first release | nothing is captured for the old request                                                                             |
 | the microphone or camera runs out of retries in the same reconcile run              | the `screen` slot still converges (STATE_MACHINE.md, "Retry and backoff")                                           |
@@ -227,7 +259,14 @@ The reconciler converges with the keepalive: once this connection
 unpublished the slot it is "none" even though the media session still
 reports the kept sender (see STATE_MACHINE.md, "Plan"). A restart of a live
 share is a swap of its sources on the same publications (`replace`), never
-a withdraw.
+a withdraw, except a restart from a browser share onto the native path
+(see "Replace"): that one withdraws the browser publication first, so its
+video is parked like a stop. A parked sender is never announced while it
+is parked (not on publish metadata, not on a reconnect's re-announce), so
+the native pipeline's own SFU track is the only one under the names while
+it runs. When the native share ends, its names are withdrawn as usual, and
+the next browser share resumes the parked track: browser, native, browser
+still announces the first browser share's SFU track again.
 
 ## Reconnect
 
@@ -237,6 +276,23 @@ camera (browser path: the same tracks on fresh publications). A native
 share reconnects through its own transport; the reconciler's `publish` of
 the adopted native value does nothing, but records it, so stopping the
 share later still withdraws both names.
+
+A native reconnect (web: `NativeScreenShareTransport.reconnect`) starts the
+pipeline again with the options it last started with:
+
+- Nothing to bring back (the share was stopped, or never started): nothing
+  happens.
+- The share's owner stopped, restarted or reset the pipeline meanwhile, or
+  the transport was disposed: the reconnect gives up quietly (that command
+  owns the pipeline now).
+- The pipeline could not come back on its own: it is stopped, its options
+  are cleared (nothing retries it), and the client reports it like the
+  native pipeline's own `connection-failed` end (web: the client's
+  `native-screen-share-ended` event; the desktop backend emits nothing for
+  a stop the renderer made). The platform acts on it only while the live
+  share is a native one: if a browser fallback is allowed it restarts the
+  same request through the browser path (`start` with `preferNative`
+  false), otherwise it stops the share.
 
 ## Teardown
 
@@ -278,4 +334,8 @@ Nothing on the wire: the same `SelectProtocol`/`TracksReady`/`StopTracks`
 messages for native shares, the same PartyTracks pushes for browser shares
 (one `publishStream` call per share, the same `screen` prefix and track
 names), the same `stopTracks` call with both names on stop, the same voice
-state fields and the same watch app events.
+state fields and the same watch app events. One sequence differs: a restart
+from a browser share onto the native path sends the browser share's
+`StopTracks` (one per name, from the `stopTracks` withdrawal) before the
+pipeline's `SelectProtocol`, where it used to send nothing and leave the
+browser publication up beside the native one.
