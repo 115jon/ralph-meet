@@ -258,8 +258,10 @@ export async function joinVoiceChannel(target: JoinTarget): Promise<void> {
     },
   });
   session = next;
-  next.setWatchingVideo(watchingVideo);
   next.start();
+  // After start: a session that is not live yet ignores it, and the call
+  // screen (open since the tap that joined) does not say it again.
+  next.setWatchingVideo(watchingVideo);
   watchAppState();
   stopCallWatchers = watchCall(next);
   // While the app is still in front: Android only starts the microphone
