@@ -30,6 +30,14 @@ reopened.
       1.4 s). Restart the voice socket's attempt when the participant changes
       while held.
 
+- [ ] After a network switch in a call (emulator: mobile data to Wi-Fi,
+      then Android tearing mobile data down 30 s later), the sockets came
+      back as the same participant within 6 s but the peer connection stayed
+      `disconnected` on the old network for 53 s until ICE declared it
+      `failed` and PartyTracks rebuilt it. Restart ICE (or rebuild the peer
+      connection) on a network-change wake instead of waiting for `failed`;
+      lives in `@ralph/voice-media` / PartyTracks.
+
 ## In progress
 
 - [ ] Nothing in flight.
@@ -118,7 +126,8 @@ reopened.
   back 1–6 s after Android reports the network, and call audio 4–10 s.
   Review fixes: a stalled ticket only cancels the ticket requests (an
   upload on a slow uplink carries on), an app launched offline reports
-  the network when it comes, and web/desktop abort a timed-out ticket
+  the network when it comes (and then loads the profile and server list it
+  could not load offline), and web/desktop abort a timed-out ticket
   request. Server: a Resume takes over a session still live on the socket
   the phone lost in a network change (Wi-Fi to mobile data), so the call
   keeps its participant instead of rejoining (`realtime/SOCKET_CORE.md`).
