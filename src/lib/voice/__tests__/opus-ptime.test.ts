@@ -2,15 +2,16 @@ import type { PartyTracksConfig } from "partytracks/client";
 import { Subject } from "rxjs";
 import { describe, expect, it, vi } from "vitest";
 import {
+  PartyTracksTransport,
+  type PartyTracksClient,
+} from "@ralph/voice-media";
+import {
   installOpusPtimePreference,
+  opusPtimeConfigurator,
   preferOpusPtime,
   resolveVoiceOpusPtime,
   VOICE_OPUS_PTIME_OVERRIDE_KEY,
 } from "../opus-ptime";
-import {
-  PartyTracksTransport,
-  type PartyTracksClient,
-} from "../partytracks-transport";
 
 // The SFU's answer to a microphone push, as the latency bench recorded it.
 const SFU_ANSWER = [
@@ -122,7 +123,7 @@ describe("installOpusPtimePreference", () => {
       {
         factory: (_config: PartyTracksConfig) => client,
         resolveApiUrl: (path) => path,
-        opusPtimeMs,
+        configurePeerConnection: opusPtimeConfigurator(opusPtimeMs),
       },
     );
     return { peerConnection$, transport };

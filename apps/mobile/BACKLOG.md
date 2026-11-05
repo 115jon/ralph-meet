@@ -17,6 +17,19 @@ reopened.
 - [ ] Jumping to an uncached message briefly flashes the loading skeleton.
 - [ ] Device-code approval page says "DESKTOP SIGN-IN" for the Android app
       (web copy).
+- [ ] After the network drops and comes back (emulator airplane toggle,
+      even 4 s), no socket reconnects: chat, room and voice all wait on
+      ticket requests that never answer, and wake does nothing. RN's HTTP
+      client has no timeouts and keeps the dead pooled connection; a 10 s
+      ticket timeout alone did not help (every retry stalls the same way).
+      `@ralph/realtime` has no timeout on its ticket phase either. Check on a
+      real phone (a real network change may reset the connection). Its own
+      follow-up PR.
+- [ ] Reconnect grace does not protect audio (web and mobile): after a
+      remote person's voice socket reconnects, the server follows their
+      `ClientDisconnect` with `StopTracks` for all their tracks, so viewers
+      close the audio pull and pull it again (about 1.2 s of silence). The
+      grace only keeps them in the roster. Its own follow-up PR.
 
 ## In progress
 
@@ -30,6 +43,12 @@ reopened.
       search; "Mute and deafen sounds" and "People in this call" in the call
       settings sheet; the web's "only hear a share's audio while it is
       focused" rule (the phone plays share audio at its stream volume).
+
+- [ ] iOS video keepalive: iOS has no black-frame source yet
+      (`VideoKeepalivePool.supported` is Android only), so camera or share
+      off on an iPhone closes the publication, and a web Chrome viewer
+      pulling the next one can hit the SFU's recycled-MID failure (no video
+      until they rejoin). Add a native iOS keepalive source.
 
 ## Later (from the audit)
 
@@ -56,12 +75,30 @@ reopened.
 
 - [ ] Two-person voice: hearing each other, speaking LEDs, deafen.
 - [ ] Bluetooth and earpiece routing.
-- [ ] Receiving camera and screen share.
+- [ ] Receiving camera and screen share on a real phone (checked on the
+      emulator against a web peer: camera layers, kept pulls, re-watch).
+- [ ] Hearing each other's microphone with real audio (the emulator mic is
+      silent; checked that packets flow both ways and web audio plays).
 - [ ] Soft-keyboard handling (composer, picker slot, custom status field).
 - [ ] Haptics feel; pager smoothness on a release build.
 
 ## Done
 
+- Voice on the shared packages: `@ralph/voice` (session phase and one
+  teardown, publication reconciler, screen share, reconnect grace) and
+  `@ralph/voice-media` (the web's PartyTracks media manager and transport);
+  the app's own copies are gone. Camera and share off keep their SFU track
+  on a native black-frame keepalive on Android, so viewers see them come
+  back (not on iOS yet: there it closes the publication, see Next). Remote
+  video stays pulled once watched while the app is in front (no re-pull
+  after the call screen hides), and web cameras are pulled at the layer the
+  tile needs; in the background (outside PiP) every video pull closes and
+  its own PartyTracks session goes, and coming back pulls on a new one. A
+  leave sends `ClientDisconnect` in the same turn as the call service stops
+  (no send window on a phone). Joining from the channel list watches video
+  again (the call screen's watch flag was dropped before the session
+  started, so no video was pulled until the screen was reopened). No 30 s presence re-send and no chat-socket
+  mute mirror.
 - Scaffold, sign-in, servers/tree/chat, composer/DMs/activity, voice,
   background calls, video viewing/settings, push, signed releases (v0.1.0).
 - Rail + your panel, animated media, camera + screen share, attach tray

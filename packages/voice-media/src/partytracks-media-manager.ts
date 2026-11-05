@@ -1,14 +1,16 @@
-import type { TrackInfo } from "@/lib/types";
 import { scheduleWithGlobalTimers, type ScheduleTimer } from "@ralph/realtime";
+import { BehaviorSubject, type Observable, Subscription } from "rxjs";
 import {
   type PartyTracksPullError,
   SFU_TRACK_NOT_FOUND,
-} from "@/lib/voice/partytracks-pull-errors";
+} from "./partytracks-pull-errors";
 import type {
   RalphPublishedTrack,
   RalphPullOptions,
   RalphPushOptions,
-} from "@/lib/voice/partytracks-transport";
+} from "./partytracks-transport";
+import { PUBLICATION_STALE_AFTER_MS } from "./publication-liveness";
+import type { TrackInfo } from "./track-info";
 import {
   CAMERA_SIMULCAST_ENCODINGS,
   compareVideoLayerQuality,
@@ -16,18 +18,16 @@ import {
   selectSimulcastRid,
   type RenderedVideoSize,
   type VideoLayerQuality,
-} from "@/lib/voice/video-layers";
+} from "./video-layers";
+import {
+  noVideoKeepalive,
+  type CreateVideoKeepalive,
+  type VideoKeepalive,
+} from "./video-keepalive";
 import {
   videoRenderDemand,
   type VideoRenderDemandSource,
-} from "@/lib/voice/video-render-demand";
-import { PUBLICATION_STALE_AFTER_MS } from "@/lib/voice/publication-liveness";
-import {
-  createVideoKeepalive,
-  type CreateVideoKeepalive,
-  type VideoKeepalive,
-} from "@/lib/voice/video-keepalive";
-import { BehaviorSubject, type Observable, Subscription } from "rxjs";
+} from "./video-render-demand";
 
 export interface PartyTracksMediaTransport {
   readonly peerConnectionState$: Observable<RTCPeerConnectionState>;
@@ -126,9 +126,24 @@ export interface PartyTracksMediaManagerOptions {
   readonly layerDowngradeDelayMs?: number;
   /**
    * The stand-in a withdrawn video publication sends (see unpublishTrack);
-   * returning null closes withdrawn video like audio instead.
+   * returning null closes withdrawn video like audio instead. The platform
+   * makes it (web: a canvas track); without one, nothing is kept alive.
    */
   readonly createVideoKeepalive?: CreateVideoKeepalive;
+  /**
+   * The encodings a camera (`cam-video-*`) is first pushed with. Defaults to
+   * the three simulcast layers; null pushes one layer (the Expo app, whose
+   * phone uplink and encoder send one).
+   */
+  readonly cameraSendEncodings?: readonly RTCRtpEncodingParameters[] | null;
+  /**
+   * Alias prefixes pulled only once subscribed (see
+   * setRemoteTrackSubscription) and kept pulled after an unsubscribe, until
+   * their publication ends. Defaults to screen video, as the web watches
+   * shares; the Expo app adds camera video, which it pulls only while the
+   * call screen is up.
+   */
+  readonly optInTrackPrefixes?: readonly string[];
 }
 
 // PartyTracks retries a failing pull itself (100 ms doubling to 10 s) and
@@ -144,7 +159,7 @@ const DEFAULT_TRACK_UNAVAILABLE_MAX_REPORTS = 3;
 const DEFAULT_LAYER_UPGRADE_DELAY_MS = 150;
 const DEFAULT_LAYER_DOWNGRADE_DELAY_MS = 1_000;
 /** Remote tracks pulled only once subscribed (see isSubscribed). */
-const OPT_IN_TRACK_PREFIX = "screen-video-";
+const DEFAULT_OPT_IN_TRACK_PREFIXES: readonly string[] = ["screen-video-"];
 /** Until something renders a pulled camera, it is pulled at the low layer. */
 const INITIAL_VIDEO_LAYER: VideoLayerQuality = "low";
 
@@ -259,6 +274,10 @@ export class PartyTracksMediaManager {
   private readonly layerUpgradeDelayMs: number;
   private readonly layerDowngradeDelayMs: number;
   private readonly createVideoKeepalive: CreateVideoKeepalive;
+  private readonly cameraSendEncodings:
+    | readonly RTCRtpEncodingParameters[]
+    | null;
+  private readonly optInTrackPrefixes: readonly string[];
 
   constructor(
     private readonly transport: PartyTracksMediaTransport,
@@ -287,7 +306,13 @@ export class PartyTracksMediaManager {
     this.layerDowngradeDelayMs =
       options.layerDowngradeDelayMs ?? DEFAULT_LAYER_DOWNGRADE_DELAY_MS;
     this.createVideoKeepalive =
-      options.createVideoKeepalive ?? createVideoKeepalive;
+      options.createVideoKeepalive ?? noVideoKeepalive;
+    this.cameraSendEncodings =
+      options.cameraSendEncodings === undefined
+        ? CAMERA_SIMULCAST_ENCODINGS
+        : options.cameraSendEncodings;
+    this.optInTrackPrefixes =
+      options.optInTrackPrefixes ?? DEFAULT_OPT_IN_TRACK_PREFIXES;
     this.videoRenderDemand = options.videoRenderDemand ?? videoRenderDemand;
     this.unsubscribeVideoRenderDemand = this.videoRenderDemand.subscribe(() =>
       this.refreshVideoLayers(),
@@ -310,8 +335,19 @@ export class PartyTracksMediaManager {
   }
 
   publishStream(stream: MediaStream, prefix: string): void {
+    this.publishTracks(stream.getTracks(), prefix);
+  }
+
+  /**
+   * Publishes each track as `<prefix>-<kind>-<participant>`. A publication
+   * that exists (or was withdrawn and kept alive) has its source swapped, so
+   * publishing again is harmless. Takes tracks, not a stream, so platforms
+   * where a stream is a native object (react-native-webrtc) need not make
+   * one.
+   */
+  publishTracks(tracks: readonly MediaStreamTrack[], prefix: string): void {
     if (this.disposed) return;
-    for (const track of stream.getTracks()) {
+    for (const track of tracks) {
       if (!isMediaKind(track.kind)) continue;
       const trackName = `${prefix}-${track.kind}-${this.participantId}`;
       const existing = this.publications.get(trackName);
@@ -332,7 +368,7 @@ export class PartyTracksMediaManager {
         track,
         track.kind,
         prefix === "cam" && track.kind === "video"
-          ? CAMERA_SIMULCAST_ENCODINGS
+          ? (this.cameraSendEncodings ?? undefined)
           : undefined,
       );
     }
@@ -603,16 +639,20 @@ export class PartyTracksMediaManager {
   }
 
   /**
-   * Screen video is opt-in: it is pulled only once the viewer subscribes
-   * (watches the share), so joining a room with shares running does not
-   * pull, negotiate and then drop each of them. Everything else is pulled
-   * unless unsubscribed.
+   * Opt-in tracks (screen video; on the Expo app camera video too, see
+   * optInTrackPrefixes) are pulled only once the viewer subscribes (watches
+   * the share), so joining a room with shares running does not pull,
+   * negotiate and then drop each of them. Everything else is pulled unless
+   * unsubscribed.
    */
   private isSubscribed(trackName: string): boolean {
     if (this.unsubscribedTrackNames.has(trackName)) return false;
-    return (
-      !trackName.startsWith(OPT_IN_TRACK_PREFIX) ||
-      this.subscribedTrackNames.has(trackName)
+    return !this.isOptIn(trackName) || this.subscribedTrackNames.has(trackName);
+  }
+
+  private isOptIn(trackName: string): boolean {
+    return this.optInTrackPrefixes.some((prefix) =>
+      trackName.startsWith(prefix),
     );
   }
 
@@ -628,20 +668,37 @@ export class PartyTracksMediaManager {
     }
     this.subscribedTrackNames.delete(trackName);
     this.unsubscribedTrackNames.add(trackName);
-    // Screen video already pulled keeps its pull (and its transceiver).
+    // An opt-in track already pulled keeps its pull (and its transceiver).
     // Closing a pull and pulling again fails in Chrome: the SFU recycles the
     // closed m-line under the same MID with other RTP header extension IDs,
     // which Chrome rejects ("RTP extension ID reassignment not supported"),
     // and the retries leave the session's signalling out of step (406, then
     // 410).
-    if (
-      trackName.startsWith(OPT_IN_TRACK_PREFIX) &&
-      this.pulls.has(trackName)
-    ) {
+    if (this.isOptIn(trackName) && this.pulls.has(trackName)) {
       return;
     }
     this.stopPull(trackName);
     this.clearPullRetry(trackName);
+  }
+
+  /**
+   * Closes the pulls setRemoteTrackSubscription keeps: those of opt-in
+   * tracks nobody subscribes to now, parked ones included. Their offers
+   * stay, so subscribing again pulls afresh. Only for a transport that pulls
+   * them again on a new peer connection (the Expo app's video session, which
+   * it drops once these close): on the same connection the SFU recycles the
+   * closed m-line under its old MID, and the re-pull can fail (see
+   * setRemoteTrackSubscription).
+   */
+  releaseUnsubscribedPulls(): void {
+    const released = [...this.pulls.keys()].filter(
+      (trackName) => this.isOptIn(trackName) && !this.isSubscribed(trackName),
+    );
+    for (const trackName of released) {
+      this.stopPull(trackName);
+      this.clearPullRetry(trackName);
+      this.notFound.delete(trackName);
+    }
   }
 
   /**

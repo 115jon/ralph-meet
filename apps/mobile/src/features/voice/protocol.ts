@@ -6,7 +6,10 @@ import {
   type DecodedMessage,
   type PayloadRules,
 } from "@ralph/protocol";
+import type { IceServer, TrackInfo } from "@ralph/voice-media";
 import { Schema } from "effect";
+
+export type { IceServer, TrackInfo };
 
 // Server → client payloads of the two call sockets, the parts this app reads.
 // Mirrors the web's src/lib/gateway-protocol/server-payloads.ts (which carries
@@ -29,17 +32,52 @@ export const TrackInfoSchema = Schema.Struct({
   /** A simulcast camera's layer RIDs, highest first; absent for one layer. */
   simulcast_rids: Schema.optional(Schema.Array(Schema.String)),
 });
-/** As src/lib/types.ts: `track` is set locally on pulled tracks, never sent. */
-export type TrackInfo = typeof TrackInfoSchema.Type & {
-  readonly track?: MediaStreamTrack;
-};
+/** A track as the voice room sent it; see toTrackInfo. */
+export type WireTrackInfo = typeof TrackInfoSchema.Type;
+
+/**
+ * A wire track in the shape the shared media layer (@ralph/voice-media)
+ * takes, or null for a kind it cannot pull (neither audio nor video).
+ */
+export function toTrackInfo(track: WireTrackInfo): TrackInfo | null {
+  if (track.kind !== "audio" && track.kind !== "video") return null;
+  const info: TrackInfo = {
+    participant_id: track.participant_id,
+    track_name: track.track_name,
+    session_id: track.session_id,
+    kind: track.kind,
+  };
+  if (track.sfu_track_name !== undefined) {
+    info.sfu_track_name = track.sfu_track_name;
+  }
+  if (track.simulcast_rids) info.simulcast_rids = [...track.simulcast_rids];
+  return info;
+}
+
+export function toTrackInfos(tracks: readonly WireTrackInfo[]): TrackInfo[] {
+  return tracks.flatMap((track) => toTrackInfo(track) ?? []);
+}
 
 const IceServerSchema = Schema.Struct({
   urls: Schema.Union([Schema.String, Schema.Array(Schema.String)]),
   username: Schema.optional(Schema.String),
   credential: Schema.optional(Schema.String),
 });
-export type IceServer = typeof IceServerSchema.Type;
+export type WireIceServer = typeof IceServerSchema.Type;
+
+/** The room's ICE servers as the PartyTracks transport takes them. */
+export function toIceServers(
+  servers: readonly WireIceServer[] | undefined,
+): IceServer[] {
+  return (servers ?? []).map((server) => {
+    const ice: IceServer = {
+      urls: typeof server.urls === "string" ? [server.urls] : [...server.urls],
+    };
+    if (server.username !== undefined) ice.username = server.username;
+    if (server.credential !== undefined) ice.credential = server.credential;
+    return ice;
+  });
+}
 
 /**
  * A room participant. Join and leave carry the full state; an update may be

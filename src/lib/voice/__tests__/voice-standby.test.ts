@@ -124,7 +124,7 @@ import { releaseLocalStream, startEarlyMic } from "@/lib/local-media-manager";
 import {
   PUBLICATION_STALE_AFTER_MS,
   SFU_TRACK_INACTIVITY_GC_MS,
-} from "@/lib/voice/publication-liveness";
+} from "@ralph/voice-media";
 import {
   claimVoiceStandby,
   markVoiceChannelJoining,

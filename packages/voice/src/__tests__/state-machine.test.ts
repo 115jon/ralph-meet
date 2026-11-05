@@ -195,4 +195,25 @@ describe("planTeardown", () => {
       expect(row(plan)).toEqual(expected);
     },
   );
+
+  it.each([
+    ["user-leave", true],
+    ["forced-disconnect", true],
+    ["forced-disconnect", false],
+    ["component-unmount", true],
+  ] as const)(
+    "%s (joined: %s) without a leave trigger disconnects at once",
+    (reason, joined) => {
+      const withTrigger = planTeardown(reason, joined, { isCall: false });
+      const plan = planTeardown(reason, joined, {
+        isCall: false,
+        leaveTrigger: false,
+      });
+      expect(plan).toEqual({
+        ...withTrigger,
+        leaveTrigger: false,
+        sendWindowMs: 0,
+      });
+    },
+  );
 });

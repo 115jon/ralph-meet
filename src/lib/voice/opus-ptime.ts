@@ -124,3 +124,15 @@ export function installOpusPtimePreference(
   }) as RTCPeerConnection["setRemoteDescription"];
   markVoice("opus-ptime", { ptimeMs });
 }
+
+/**
+ * The PartyTracks transport's peer-connection hook for the Opus ptime
+ * preference (`configurePeerConnection`), or undefined when it is turned off.
+ */
+export function opusPtimeConfigurator(
+  ptimeMs: number | null = resolveVoiceOpusPtime(),
+): ((peerConnection: RTCPeerConnection) => void) | undefined {
+  if (ptimeMs === null) return undefined;
+  return (peerConnection) =>
+    installOpusPtimePreference(peerConnection, ptimeMs);
+}

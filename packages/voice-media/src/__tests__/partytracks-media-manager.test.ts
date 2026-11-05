@@ -1,6 +1,6 @@
-import type { TrackInfo } from "@/lib/types";
-import type { PartyTracksPullError } from "@/lib/voice/partytracks-pull-errors";
-import type { RalphPublishedTrack } from "@/lib/voice/partytracks-transport";
+import type { TrackInfo } from "../track-info";
+import type { PartyTracksPullError } from "../partytracks-pull-errors";
+import type { RalphPublishedTrack } from "../partytracks-transport";
 import { Observable, Subject } from "rxjs";
 import { describe, expect, it, vi } from "vitest";
 import {
@@ -266,6 +266,72 @@ describe("PartyTracksMediaManager", () => {
       share("share-1"),
       share("share-2"),
     ]);
+    viewer.dispose();
+  });
+
+  it("releases kept opt-in pulls nobody watches and pulls them afresh on a new watch", () => {
+    const transport = new TestTransport();
+    const events: string[] = [];
+    const viewer = new PartyTracksMediaManager(
+      transport,
+      "viewer",
+      {
+        onPublicationMetadata: vi.fn(),
+        onPublicationStopped: vi.fn(),
+        onRemoteTrack: ({ action, trackInfo }) =>
+          events.push(`${action}:${trackInfo.track_name}`),
+      },
+      { optInTrackPrefixes: ["cam-video-", "screen-video-"] },
+    );
+    const video = (trackName: string): TrackInfo => ({
+      participant_id: "peer",
+      track_name: trackName,
+      sfu_track_name: `${trackName}-sfu`,
+      session_id: "peer-session",
+      kind: "video",
+    });
+    const audio: TrackInfo = {
+      participant_id: "peer",
+      track_name: "cam-audio-peer",
+      sfu_track_name: "cam-audio-peer-sfu",
+      session_id: "peer-session",
+      kind: "audio",
+    };
+    viewer.offerTracks([
+      audio,
+      video("cam-video-peer"),
+      video("screen-video-peer"),
+    ]);
+    viewer.setRemoteTrackSubscription("cam-video-peer", true);
+    viewer.setRemoteTrackSubscription("screen-video-peer", true);
+    const audioTrack = mediaTrack("audio", "audio");
+    const camera = mediaTrack("video", "camera");
+    const share = mediaTrack("video", "share");
+    transport.pulledTracks.get("cam-audio-peer")?.next(audioTrack);
+    transport.pulledTracks.get("cam-video-peer")?.next(camera);
+    transport.pulledTracks.get("screen-video-peer")?.next(share);
+    expect(transport.pullCount).toBe(3);
+
+    // Still watched: nothing is released.
+    viewer.releaseUnsubscribedPulls();
+    expect(camera.stop).not.toHaveBeenCalled();
+
+    // The camera's publisher withdraws it (parked), then nobody watches.
+    viewer.withdrawRemoteTracks(["cam-video-peer"]);
+    viewer.setRemoteTrackSubscription("cam-video-peer", false);
+    viewer.setRemoteTrackSubscription("screen-video-peer", false);
+    events.length = 0;
+    viewer.releaseUnsubscribedPulls();
+    expect(camera.stop).toHaveBeenCalled();
+    expect(share.stop).toHaveBeenCalled();
+    expect(audioTrack.stop).not.toHaveBeenCalled();
+    // The parked camera was hidden already; only the share is removed now.
+    expect(events).toEqual(["remove:screen-video-peer"]);
+    expect(viewer.hasRemoteOffer("screen-video-peer")).toBe(true);
+
+    // Watching again pulls the share afresh.
+    viewer.setRemoteTrackSubscription("screen-video-peer", true);
+    expect(transport.pullCount).toBe(4);
     viewer.dispose();
   });
 

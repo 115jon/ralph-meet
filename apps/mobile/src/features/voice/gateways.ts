@@ -18,6 +18,9 @@ import {
   type IceServer,
   type RepublishRequest,
   type RoomServerMessage,
+  toIceServers,
+  toTrackInfo,
+  toTrackInfos,
   type TrackInfo,
   type VoiceAppEvent,
   type VoiceServerMessage,
@@ -172,7 +175,7 @@ export class RoomSocket {
         this.handlers.mediaReady({
           participantId: message.d.participant_id,
           voiceToken: message.d.voice_token,
-          iceServers: message.d.ice_servers,
+          iceServers: toIceServers(message.d.ice_servers),
         });
         return;
       case GatewayOp.Ready:
@@ -182,7 +185,7 @@ export class RoomSocket {
           {
             participantId: message.d.participant_id,
             voiceToken: message.d.voice_token,
-            iceServers: message.d.ice_servers,
+            iceServers: toIceServers(message.d.ice_servers),
           },
           message.d.participants ?? [],
         );
@@ -192,7 +195,9 @@ export class RoomSocket {
         this.handlers.resumed(
           {
             voiceToken: message.d.voice_token,
-            iceServers: message.d.ice_servers,
+            iceServers: message.d.ice_servers
+              ? toIceServers(message.d.ice_servers)
+              : undefined,
           },
           message.d.participants,
         );
@@ -368,12 +373,14 @@ export class VoiceSocket {
       case GatewayOp.VoiceReady:
         this.socket.markReady();
         this.handlers.voiceReady(
-          message.d.tracks ?? [],
+          toTrackInfos(message.d.tracks ?? []),
           message.d.speaking ?? {},
         );
         return;
       case GatewayOp.Video:
-        for (const track of message.d.tracks) {
+        for (const wire of message.d.tracks) {
+          const track = toTrackInfo(wire);
+          if (!track) continue;
           this.handlers.trackOffered({
             ...track,
             participant_id: track.participant_id || message.d.participant_id,
@@ -389,7 +396,10 @@ export class VoiceSocket {
         }
         return;
       case GatewayOp.StopTracks:
-        this.handlers.stopTracks(message.d.track_names, message.d.tracks);
+        this.handlers.stopTracks(
+          message.d.track_names,
+          message.d.tracks && toTrackInfos(message.d.tracks),
+        );
         return;
       case GatewayOp.RepublishRequest:
         this.handlers.republishRequest(message.d);

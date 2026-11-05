@@ -1,4 +1,4 @@
-import type { TrackInfo } from "@/lib/types";
+import type { TrackInfo } from "../track-info";
 import type { TrackMetadata } from "partytracks/client";
 import {
   BehaviorSubject,
@@ -71,7 +71,7 @@ function setup() {
       voiceToken: "token",
       iceServers: [{ urls: ["stun:stun.example.test"] }],
     },
-    { factory: () => fake, resolveApiUrl: (path) => path, opusPtimeMs: null },
+    { factory: () => fake, resolveApiUrl: (path) => path },
   );
   return { fake, transport };
 }
@@ -164,7 +164,7 @@ describe("PartyTracksTransport simulcast publishing", () => {
     };
     const transport = new PartyTracksTransport(
       { roomSlug: "room", participantId: "publisher", voiceToken: "t" },
-      { factory: () => fake, resolveApiUrl: (path) => path, opusPtimeMs: null },
+      { factory: () => fake, resolveApiUrl: (path) => path },
     );
     fake.peerConnection$.next(pc);
     const source$ = new BehaviorSubject(camera);

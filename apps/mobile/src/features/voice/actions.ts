@@ -29,21 +29,20 @@ import type { CameraFacing } from "./local-media";
 import { peerGain, peerSettings, usePeerSettingsStore } from "./peer-settings";
 import { inPip, usePipStore } from "./pip";
 import { dmCallRoomSlug, voiceRoomSlug } from "./protocol";
-import type { AudioSource, VoiceSession } from "./session";
+import type { AudioSource, CallSession } from "./session";
 import { type DmCall, NO_LOCAL_MEDIA, useVoiceStore } from "./store";
 import { startJoinLeaveTones } from "./tones";
 
 // Starting and ending calls. The WebRTC engine (react-native-webrtc,
 // PartyTracks) is imported on the first join, so the app starts without it.
 
-let session: VoiceSession | null = null;
+let session: CallSession | null = null;
 /** Bumped by every join and leave; a join that finds it moved gives up. */
 let generation = 0;
 /** The call screen is up with the app in front: pull remote video. */
 let watchingVideo = false;
-/** A camera or screen start is in flight; taps meanwhile are ignored. */
+/** A camera start is in flight; taps meanwhile are ignored. */
 let cameraStarting = false;
-let screenStarting = false;
 /**
  * The camera was on when the app went behind. Android gives the camera only
  * to the app in front (a background camera needs a camera-type foreground
@@ -84,7 +83,7 @@ function audioGain(participantId: string, source: AudioSource): number {
  * settings or the roster change, and the camera's background rule when the
  * PiP window closes behind other apps.
  */
-function watchCall(current: VoiceSession): () => void {
+function watchCall(current: CallSession): () => void {
   const stopTones = startJoinLeaveTones();
   const stopSettings = usePeerSettingsStore.subscribe(() =>
     current.refreshAudioGains(),
@@ -115,6 +114,13 @@ function stopWatchingCall(): void {
   stopCallWatchers?.();
   stopCallWatchers = null;
   resetSoundboard();
+}
+
+/** The call service could not take the mediaProjection type. */
+class ScreenCaptureUnavailable extends Error {
+  constructor() {
+    super("Screen capture is unavailable");
+  }
 }
 
 function failJoin(label: string, text: string): void {
@@ -179,7 +185,7 @@ export async function joinVoiceChannel(target: JoinTarget): Promise<void> {
   }
 
   engine.startCallAudio();
-  const next = new engine.VoiceSession({
+  const next = new engine.CallSession({
     target: {
       serverId: target.serverId,
       channelId: target.channelId,
@@ -197,8 +203,37 @@ export async function joinVoiceChannel(target: JoinTarget): Promise<void> {
     microphone,
     muted: joinMuted,
     deafened: false,
+    isCall: target.dm !== undefined,
     speakingLevel,
     audioGain,
+    screenCapture: {
+      capture: async () => {
+        if (!(await prepareScreenCapture())) {
+          throw new ScreenCaptureUnavailable();
+        }
+        try {
+          return await engine.captureScreen();
+        } catch (error) {
+          releaseScreenCapture();
+          throw error;
+        }
+      },
+      release: (stream) => {
+        engine.stopStream(stream);
+        releaseScreenCapture();
+      },
+    },
+    onScreenShareFailed: (error) => {
+      if (session !== next) return;
+      if (error instanceof ScreenCaptureUnavailable) {
+        callToast("Screen sharing can't start right now");
+      } else if (engine.isPermissionRefusal(error)) {
+        callToast("Screen sharing was cancelled");
+      } else {
+        console.warn("[Voice] Could not share the screen", error);
+        callToast("Screen sharing did not start");
+      }
+    },
     onAppEvent: handleSoundboardEvent,
     onAppEventRejected: handleSoundboardRejected,
     onEnd: (end) => {
@@ -223,8 +258,10 @@ export async function joinVoiceChannel(target: JoinTarget): Promise<void> {
     },
   });
   session = next;
-  next.setWatchingVideo(watchingVideo);
   next.start();
+  // After start: a session that is not live yet ignores it, and the call
+  // screen (open since the tap that joined) does not say it again.
+  next.setWatchingVideo(watchingVideo);
   watchAppState();
   stopCallWatchers = watchCall(next);
   // While the app is still in front: Android only starts the microphone
@@ -324,68 +361,36 @@ export function flipCamera(): void {
 
 /**
  * Shares the screen, or stops sharing. Android asks the user first; the call
- * service takes the mediaProjection type between their yes and the capture.
+ * service takes the mediaProjection type between their yes and the capture
+ * (the session's screenCapture). The session's ScreenShare serializes taps
+ * and Android's own Stop.
  */
-export async function toggleScreenShare(): Promise<void> {
-  const current = session;
-  if (!current || screenStarting) return;
-  if (current.sharingScreen) {
-    stopScreenShare();
-    return;
-  }
-  if (Platform.OS !== "android") return;
-  screenStarting = true;
-  try {
-    if (!(await prepareScreenCapture())) {
-      callToast("Screen sharing can't start right now");
-      return;
-    }
-    const engine = await import("./engine");
-    let stream: MediaStream;
-    try {
-      stream = await engine.captureScreen();
-    } catch (error) {
-      releaseScreenCapture();
-      if (engine.isPermissionRefusal(error)) {
-        if (session === current) callToast("Screen sharing was cancelled");
-      } else {
-        console.warn("[Voice] Could not share the screen", error);
-        if (session === current) callToast("Screen sharing did not start");
-      }
-      return;
-    }
-    if (session !== current) {
-      engine.stopStream(stream);
-      releaseScreenCapture();
-      return;
-    }
-    // Android's own Stop (the status bar chip, the cast tile) ends the track.
-    stream.getVideoTracks()[0]?.addEventListener("ended", () => {
-      if (session === current && current.isScreen(stream)) stopScreenShare();
-    });
-    current.setScreen(stream);
-  } finally {
-    screenStarting = false;
-  }
+export function toggleScreenShare(): void {
+  if (Platform.OS !== "android" && !session?.sharingScreen) return;
+  session?.toggleScreenShare();
 }
 
 export function stopScreenShare(): void {
-  if (!session?.sharingScreen) return;
-  session.setScreen(null);
-  releaseScreenCapture();
+  session?.stopScreenShare();
 }
 
 function onAppStateChange(state: AppStateStatus): void {
   const current = session;
   if (!current) return;
-  // In PiP the call is still on screen: the camera stays on.
-  if (state === "background" && current.cameraOn && !inPip()) {
-    resumeCamera = current.facing;
-    current.setCamera(null);
-  } else if (state === "active" && resumeCamera) {
-    const facing = resumeCamera;
-    resumeCamera = null;
-    void startCamera(facing);
+  // In PiP the call is still on screen: the camera and remote video stay.
+  if (state === "background" && !inPip()) {
+    current.setInBackground(true);
+    if (current.cameraOn) {
+      resumeCamera = current.facing;
+      current.setCamera(null);
+    }
+  } else if (state === "active") {
+    current.setInBackground(false);
+    if (resumeCamera) {
+      const facing = resumeCamera;
+      resumeCamera = null;
+      void startCamera(facing);
+    }
   }
 }
 
