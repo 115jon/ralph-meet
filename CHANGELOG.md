@@ -1,5 +1,80 @@
 # Changelog
 
+## [3.13.0](https://github.com/115jon/yap/compare/v3.12.0...v3.13.0) (2026-11-05)
+
+
+### Features
+
+* **mobile:** ✨ join voice with a single admission ([c5f3357](https://github.com/115jon/yap/commit/c5f3357fd6dcec4dd0b6c1630b0a59f9828d0d9b))
+* **mobile:** ✨ pull simulcast cameras at their top layer ([0e74233](https://github.com/115jon/yap/commit/0e74233deef43e3782128d0cdf17fcf5d427e64d))
+* **realtime:** ✨ admit a voice join with one request ([0652e6e](https://github.com/115jon/yap/commit/0652e6e3a877fd3eec4f030594999f0a04d3d774))
+* **realtime:** ✨ share one socket core and gate opcodes by socket role ([2d026c9](https://github.com/115jon/yap/commit/2d026c970e8b98faa93aeba51f530a0f89387bd5))
+* **realtime:** one socket core for both rooms, with opcodes gated by socket role ([ab548bc](https://github.com/115jon/yap/commit/ab548bc8617e932da1550018a04819a5deea9b50))
+* **voice-media:** ✨ close kept opt-in pulls on request ([a070cef](https://github.com/115jon/yap/commit/a070cef205c29f8d2a39d330f815299b4fbece04))
+* **voice-room:** ✨ relay simulcast layers and request rid fallback ([8bcfe8c](https://github.com/115jon/yap/commit/8bcfe8cfa802df9a021396ee757645c99ee62fca))
+* **voice:** ✨ add a publication reconciler to the voice package ([7322167](https://github.com/115jon/yap/commit/732216730c1a6cf6d8c62529deddb666c7f0c216))
+* **voice:** ✨ add a voice session state machine package ([60d2fc2](https://github.com/115jon/yap/commit/60d2fc22a2b0a0de4142335b4f8e4ec22e839352))
+* **voice:** ✨ add the device rules to the voice package ([fba1ea6](https://github.com/115jon/yap/commit/fba1ea6219cd5591105268d89712f720cdde1af3))
+* **voice:** ✨ add the screen share lifecycle to the voice package ([16a8704](https://github.com/115jon/yap/commit/16a87048c715d1bed61d1b01c149768d77547e02))
+* **voice:** ✨ give the publication reconciler a screen slot ([ab91930](https://github.com/115jon/yap/commit/ab9193093366e73e8ad8bfe46191a6f22ba8804d))
+* **voice:** ✨ join voice with a single admission on web ([272f06e](https://github.com/115jon/yap/commit/272f06ed7cac42f0c36004596be689432af4ecf0))
+* **voice:** ✨ keep a remote participant's media through their reconnect ([9600ec6](https://github.com/115jon/yap/commit/9600ec64d1bc1b522608115b9bb8d8d1e817e538))
+* **voice:** ✨ make the room the one authority on voice channel rosters ([10c40a4](https://github.com/115jon/yap/commit/10c40a4129ca9cfe2acbadaf42c40c3f082ab7d3))
+* **voice:** ✨ pull camera simulcast layers by rendered size ([4526b83](https://github.com/115jon/yap/commit/4526b839cea3534c2cedf2828a5d6c5c65a04529))
+* **voice:** ✨ skip the send window when there is no leave trigger ([947048c](https://github.com/115jon/yap/commit/947048cbf2159d7b55f296b43698bd496e158ec3))
+* **voice:** cameras send simulcast layers and viewers pull the one a tile needs ([015dca2](https://github.com/115jon/yap/commit/015dca2d0024e8bbf48413253ae266c79426afb0))
+* **voice:** one admission request per voice join ([231c02c](https://github.com/115jon/yap/commit/231c02c868c0ebb53bcb78ef4eeb9b93f66c813e))
+* **voice:** the room is the one authority on voice channel rosters ([32e24ce](https://github.com/115jon/yap/commit/32e24ce9eeaa154c4a922e15c833a3703f482ffd))
+
+
+### Bug Fixes
+
+* **calls:** 🐛 build the dm call room from the gateway user id ([346551c](https://github.com/115jon/yap/commit/346551c497bd445ebb00bf656ee8e9dd295aa2e6))
+* **calls:** 🐛 prefer the gateway user id for the dm call room ([7d255cc](https://github.com/115jon/yap/commit/7d255ccb17b6574c61ed8cc7a332aec0981a2ca7))
+* **chat:** 🐛 join the switch target after the old voice session left ([909b22e](https://github.com/115jon/yap/commit/909b22e1c24985234411106b1352dffb6acd353f))
+* **chat:** switching voice channels joins the new channel again ([d5f93dc](https://github.com/115jon/yap/commit/d5f93dc1f2d2a7b8ea9c42860b05411f97f14718))
+* **mobile:** 🐛 disconnect within the leave on a phone ([4b383f5](https://github.com/115jon/yap/commit/4b383f5ca3ff37ecc7a42b49c4942b509884e842))
+* **mobile:** 🐛 stop pulling video in the background ([74be669](https://github.com/115jon/yap/commit/74be6696a6ca5bbb6ebc917290f01366595bbfe0))
+* **mobile:** 🐛 watch video when joining from the channel list ([20c838c](https://github.com/115jon/yap/commit/20c838c3610faf1a20ffb457d872d6e5587d5661))
+* **presence:** 🐛 show disconnected dm and friend rows as offline ([5a23dee](https://github.com/115jon/yap/commit/5a23deefedef1e828fb669845f7887c4a3cff786))
+* **presence:** disconnected people no longer show online in DMs ([c8386a7](https://github.com/115jon/yap/commit/c8386a77f75f186b8e61f7e5555ddbd4b4527011))
+* **realtime:** 🐛 keep the retired nonce table when its carry-over fails ([53223e7](https://github.com/115jon/yap/commit/53223e7701c2052b322c87b6bdc71502352c72d2))
+* **realtime:** 🐛 retry voice identify when the join cannot be verified ([f539683](https://github.com/115jon/yap/commit/f5396838c16ac335c78b1be06f14b5665ad72aa8))
+* **room:** 🐛 abandon an identify whose socket closed or was superseded ([b182633](https://github.com/115jon/yap/commit/b1826333545ca1251b6a211612fe196eb101e31a))
+* **room:** 🐛 keep mute and deafen state on a re-sent voice channel join ([ebacb5f](https://github.com/115jon/yap/commit/ebacb5fe2ef13e40e4a26e36989ac015a6f8c04e))
+* **voice-room:** 🐛 pull simulcast cameras at top layer for old clients ([ed71279](https://github.com/115jon/yap/commit/ed712798b157b53cb6e52bcc7bd1ce79a878a1df))
+* **voice:** 🐛 drop a track publication whose publisher left mid-check ([a18b216](https://github.com/115jon/yap/commit/a18b21680009a6a4d4948debf3657c7d02b83c52))
+* **voice:** 🐛 end lost sessions and release leftover state on leave ([d2b4312](https://github.com/115jon/yap/commit/d2b4312779504df254ad1d6671b6fc764b8cb1d1))
+* **voice:** 🐛 end only the call a late voice leave belongs to ([1ea48e5](https://github.com/115jon/yap/commit/1ea48e5e5c8f6d550b010d1b23b2cbb6e4dba96d))
+* **voice:** 🐛 end or fall back a native share that cannot reconnect ([d748069](https://github.com/115jon/yap/commit/d748069d043c6520bd4e1abd5eecda23ba21602a))
+* **voice:** 🐛 keep a watched share's video pulled until the share ends ([48da625](https://github.com/115jon/yap/commit/48da625538df58fc90bae3733eb3c40b487de989))
+* **voice:** 🐛 keep mute, device swaps and first capture through recovery ([93996a7](https://github.com/115jon/yap/commit/93996a710ad84a0873e3d81088257f40e32be4d1))
+* **voice:** 🐛 keep saved audio devices across restarts ([8e5f38f](https://github.com/115jon/yap/commit/8e5f38f78356d3710230377cc5963fd66a4a2115))
+* **voice:** 🐛 keep simulcast rids when the camera track is replaced ([5a2a637](https://github.com/115jon/yap/commit/5a2a6377d40d2b17db98c59b04a6427f4330fbcb))
+* **voice:** 🐛 keep the fallback mic when a saved-device lookup fails ([12ee30c](https://github.com/115jon/yap/commit/12ee30c64c56e8d3d9008ddc6dfa71c9389c8489))
+* **voice:** 🐛 keep unidentified voice sockets out of room broadcasts ([47bfd29](https://github.com/115jon/yap/commit/47bfd2936c6be152ab8b1a067860e8a1e4bb7856))
+* **voice:** 🐛 keep voice rosters through room resets and seq drift ([3ac946d](https://github.com/115jon/yap/commit/3ac946d60b179db5041b89dbcf23a9c4fb280f3c))
+* **voice:** 🐛 match saved devices by label before a shared groupId ([0c566e2](https://github.com/115jon/yap/commit/0c566e27f734f1eb918a789d1c3ba8d2319623de))
+* **voice:** 🐛 only let a user disconnect their own voice session ([c76843d](https://github.com/115jon/yap/commit/c76843da65e44dd89b5cba416f5144e431566be2))
+* **voice:** 🐛 reopen the saved mic and speaker once they are listed ([6e4e262](https://github.com/115jon/yap/commit/6e4e262e95c176deed447dd8b9547089aecdace9))
+* **voice:** 🐛 reschedule the alarm after a failed voice identify ([b180bba](https://github.com/115jon/yap/commit/b180bbab4839851d64100adf31a0b9bbef71b682))
+* **voice:** 🐛 serialize stream audio restarts and clear failed shares ([c9aa0e4](https://github.com/115jon/yap/commit/c9aa0e44f7a5ef0733e6e80588454860b2ab0e07))
+* **voice:** 🐛 show a camera turned back on to viewers ([4ffd416](https://github.com/115jon/yap/commit/4ffd416908748a66e60005e41494522a468b22b7))
+* **voice:** 🐛 show the still or loader until a tile has live video ([c7cf924](https://github.com/115jon/yap/commit/c7cf924cc4f866208a2592bb1c8058145967e474))
+* **voice:** 🐛 stop replanning an unpublish the connection already made ([bd02e29](https://github.com/115jon/yap/commit/bd02e2986e71444dc164aa652c62f4e8b6edc5e4))
+* **voice:** 🐛 stop stray screen captures and withdraw before native ([6da3041](https://github.com/115jon/yap/commit/6da30410e1f673bbaa060f5fc470a42242334dc4))
+* **voice:** a camera turned back on reaches viewers, and layer switches land in 300 ms ([03eac9b](https://github.com/115jon/yap/commit/03eac9b401ed6ee52ecb3b193fdfbb151a927ec1))
+* **voice:** close voice socket races and keep unidentified sockets out of the room ([793d059](https://github.com/115jon/yap/commit/793d059fcb336537d14a3633719592557807e0cb))
+* **voice:** lost sessions end cleanly and native stream audio toggles ([81f1258](https://github.com/115jon/yap/commit/81f1258975ede81ce9b5ade88f8d800eaa3d4207))
+* **voice:** only the session's own user can disconnect it from voice ([dd7900b](https://github.com/115jon/yap/commit/dd7900b6ce2c613fcd8761625c81c825b5d7e8c0))
+* **voice:** saved microphone and speaker survive an app restart ([6180238](https://github.com/115jon/yap/commit/61802386aa5507bb924d39887288486578cb3929))
+
+
+### Performance Improvements
+
+* **voice:** ⚡️ pull screen video only once the viewer watches it ([fd276f1](https://github.com/115jon/yap/commit/fd276f1777a70c27937f5887750c2b1b767d80f5))
+* **voice:** ⚡️ switch simulcast layers without waiting on the sfu ([2c71432](https://github.com/115jon/yap/commit/2c7143297a1e1b1af679232b2f90f500e943e3e3))
+
 ## [3.12.0](https://github.com/115jon/yap/compare/v3.11.0...v3.12.0) (2026-11-04)
 
 
