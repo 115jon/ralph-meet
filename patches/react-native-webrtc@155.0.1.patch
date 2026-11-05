@@ -169,3 +169,84 @@ index 0000000000000000000000000000000000000000..befd4dee041f767224324160dbec6557
 +        }
 +    }
 +}
+diff --git a/android/src/main/java/com/oney/WebRTCModule/WebRTCModule.java b/android/src/main/java/com/oney/WebRTCModule/WebRTCModule.java
+index d3bfe07d8bb5c37c76db2af712fc75fb8dbafb86..d454f234d056930ba35d34f4f11538f76a803258 100644
+--- a/android/src/main/java/com/oney/WebRTCModule/WebRTCModule.java
++++ b/android/src/main/java/com/oney/WebRTCModule/WebRTCModule.java
+@@ -979,7 +979,8 @@ public class WebRTCModule extends ReactContextBaseJavaModule {
+     public void peerConnectionCreateOffer(int id, ReadableMap options, Promise promise) {
+         ThreadUtils.runOnExecutor(() -> {
+             PeerConnectionObserver pco = mPeerConnectionObservers.get(id);
+-            PeerConnection peerConnection = pco.getPeerConnection();
++            // Ralph: null once the PC was closed while this call was queued.
++            PeerConnection peerConnection = pco == null ? null : pco.getPeerConnection();
+ 
+             if (peerConnection == null) {
+                 Log.d(TAG, "peerConnectionCreateOffer() peerConnection is null");
+@@ -1001,6 +1002,11 @@ public class WebRTCModule extends ReactContextBaseJavaModule {
+                 @Override
+                 public void onCreateSuccess(SessionDescription sdp) {
+                     ThreadUtils.runOnExecutor(() -> {
++                        // Ralph: disposed while creating; reading it would crash.
++                        if (getPeerConnection(id) == null) {
++                            promise.reject(new Exception("PeerConnection closed"));
++                            return;
++                        }
+                         WritableMap params = Arguments.createMap();
+                         WritableMap sdpInfo = Arguments.createMap();
+ 
+@@ -1058,6 +1064,11 @@ public class WebRTCModule extends ReactContextBaseJavaModule {
+                 @Override
+                 public void onCreateSuccess(SessionDescription sdp) {
+                     ThreadUtils.runOnExecutor(() -> {
++                        // Ralph: disposed while creating; reading it would crash.
++                        if (getPeerConnection(id) == null) {
++                            promise.reject(new Exception("PeerConnection closed"));
++                            return;
++                        }
+                         WritableMap params = Arguments.createMap();
+                         WritableMap sdpInfo = Arguments.createMap();
+ 
+@@ -1099,6 +1110,11 @@ public class WebRTCModule extends ReactContextBaseJavaModule {
+                 @Override
+                 public void onSetSuccess() {
+                     ThreadUtils.runOnExecutor(() -> {
++                        // Ralph: disposed while setting; reading it would crash.
++                        if (getPeerConnection(pcId) == null) {
++                            promise.reject(new Exception("PeerConnection closed"));
++                            return;
++                        }
+                         WritableMap newSdpMap = Arguments.createMap();
+                         WritableMap params = Arguments.createMap();
+ 
+@@ -1141,7 +1157,8 @@ public class WebRTCModule extends ReactContextBaseJavaModule {
+     public void peerConnectionSetRemoteDescription(int id, ReadableMap desc, Promise promise) {
+         ThreadUtils.runOnExecutor(() -> {
+             PeerConnectionObserver pco = mPeerConnectionObservers.get(id);
+-            PeerConnection peerConnection = pco.getPeerConnection();
++            // Ralph: null once the PC was closed while this call was queued.
++            PeerConnection peerConnection = pco == null ? null : pco.getPeerConnection();
+ 
+             if (peerConnection == null) {
+                 Log.d(TAG, "peerConnectionSetRemoteDescription() peerConnection is null");
+@@ -1164,6 +1181,11 @@ public class WebRTCModule extends ReactContextBaseJavaModule {
+                 @Override
+                 public void onSetSuccess() {
+                     ThreadUtils.runOnExecutor(() -> {
++                        // Ralph: disposed while setting; reading it would crash.
++                        if (getPeerConnection(id) == null) {
++                            promise.reject(new Exception("PeerConnection closed"));
++                            return;
++                        }
+                         WritableMap newSdpMap = Arguments.createMap();
+                         WritableMap params = Arguments.createMap();
+ 
+@@ -1355,6 +1377,8 @@ public class WebRTCModule extends ReactContextBaseJavaModule {
+             PeerConnectionObserver pco = mPeerConnectionObservers.get(id);
+             if (pco == null || pco.getPeerConnection() == null) {
+                 Log.d(TAG, "peerConnectionDispose() peerConnection is null");
++                // Ralph: already disposed; pco.dispose() on null would crash.
++                if (pco == null) return;
+             }
+             pco.dispose();
+             mPeerConnectionObservers.remove(id);
