@@ -29,6 +29,7 @@ import {
 import { copyToClipboard } from "@/components/ui/toast";
 import { apiPost } from "@/lib/api-client";
 import { describeApiError } from "@/lib/api-errors";
+import { buildInvitePayload } from "@/lib/invite-payload";
 import { getWebOrigin } from "@/lib/platform";
 import { useEffect, useRef, useState } from "react";
 import InlineEmojiText from "./InlineEmojiText";
@@ -83,10 +84,10 @@ export default function InviteModal({
     try {
       const data = await apiPost<{ code: string }>(
         `/api/servers/${serverId}/invites`,
-        {
-          expires_hours: state.expiresHours || null,
-          max_uses: state.maxUses || null,
-        },
+        buildInvitePayload({
+          expiresHours: state.expiresHours,
+          maxUses: state.maxUses,
+        }),
       );
       setState((prev) => ({ ...prev, inviteCode: data.code }));
     } catch (err) {
