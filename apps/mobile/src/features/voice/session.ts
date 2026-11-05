@@ -907,6 +907,12 @@ export class CallSession {
         this.options.onEnd(this.endMessage ?? end);
       },
     };
-    this.voice.end(reason, steps, { isCall: this.options.isCall });
+    // No leave trigger on a phone, so no send window either: ClientDisconnect
+    // and the sockets' close go out within this teardown, in the same turn
+    // as onEnd's release of the call service and audio (see TeardownOptions).
+    this.voice.end(reason, steps, {
+      isCall: this.options.isCall,
+      leaveTrigger: false,
+    });
   }
 }
