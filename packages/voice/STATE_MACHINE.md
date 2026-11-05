@@ -1,7 +1,7 @@
 # Voice session state machine
 
 This is the contract every Yap voice client follows: the web client (through
-`@ralph/voice`), the Expo app (once it adopts this package) and the native
+`@ralph/voice`), the Expo app (`apps/mobile`, also through it) and the native
 Rust client. `src/state-machine.ts` is the same table as code; the two must
 agree. Device choice, fallback, persistence and output routing are in
 [DEVICES.md](DEVICES.md); screen sharing and watching shares are in

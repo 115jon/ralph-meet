@@ -2,9 +2,11 @@
 
 How a Yap voice client picks, opens, keeps and saves its microphone, camera
 and speaker. `src/devices.ts` is these rules as pure functions; this
-document and that file must agree. The web client, the Expo app (once it
-adopts this package) and the native Rust client implement the platform side
-(listing devices, opening them, routing audio) and follow these decisions.
+document and that file must agree. The web client and the native Rust
+client implement the platform side (listing devices, opening them, routing
+audio) and follow these decisions. The Expo app picks no devices yet (the
+system microphone and route, the front or back camera); a device picker
+there MUST follow them too.
 Where it says MUST, a client that does otherwise loses or overwrites the
 user's choice.
 

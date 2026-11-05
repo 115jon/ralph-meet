@@ -127,7 +127,7 @@ web tabs still send these. All are accepted with unchanged payload schemas:
   check, spends no move grant, answers no ring, and its `started_at` is
   ignored. It records `channel_id` as the session's hint channel (for op 15
   below) and, if the gateway has not heard from that channel's room in 30 s,
-  triggers a pull. Any cadence (mobile's 30 s) is fine. On an identified socket
+  triggers a pull. Any cadence (released mobile builds' 30 s) is fine. On an identified socket
   it sends no Error.
 - **Op 34 VoiceChannelLeave**: removes nobody; clears the hint channel; may
   trigger a pull. A client's room-socket op 11 or close is what removes it. On
