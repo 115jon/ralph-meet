@@ -682,6 +682,26 @@ export class PartyTracksMediaManager {
   }
 
   /**
+   * Closes the pulls setRemoteTrackSubscription keeps: those of opt-in
+   * tracks nobody subscribes to now, parked ones included. Their offers
+   * stay, so subscribing again pulls afresh. Only for a transport that pulls
+   * them again on a new peer connection (the Expo app's video session, which
+   * it drops once these close): on the same connection the SFU recycles the
+   * closed m-line under its old MID, and the re-pull can fail (see
+   * setRemoteTrackSubscription).
+   */
+  releaseUnsubscribedPulls(): void {
+    const released = [...this.pulls.keys()].filter(
+      (trackName) => this.isOptIn(trackName) && !this.isSubscribed(trackName),
+    );
+    for (const trackName of released) {
+      this.stopPull(trackName);
+      this.clearPullRetry(trackName);
+      this.notFound.delete(trackName);
+    }
+  }
+
+  /**
    * Their publisher withdrew these tracks (camera off, share stopped). A
    * pull that produced a track is parked rather than closed: hidden, but
    * kept with its transceiver. A publisher that keeps the withdrawn SFU
