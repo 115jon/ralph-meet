@@ -1,5 +1,6 @@
 import { scheduleWithGlobalTimers, type ScheduleTimer } from "@ralph/realtime";
 import {
+  VIDEO_RECOVERED_FIRST_FRAME_TIMEOUT_MS,
   VideoFlowDetector,
   type VideoFlow,
   type VideoFlowOptions,
@@ -28,6 +29,11 @@ export interface RemoteVideoHealthOptions extends VideoFlowOptions {
   readonly recover: (trackName: string) => boolean;
   /** Only tracks on screen are measured: nothing else needs to play. */
   readonly renderDemand: VideoRenderDemandSource;
+  /**
+   * firstFrameTimeoutMs for a re-pull's track, which also waits for its new
+   * peer connection to connect.
+   */
+  readonly recoveredFirstFrameTimeoutMs?: number;
   readonly intervalMs?: number;
   readonly schedule?: ScheduleTimer;
   /** The clock readings are taken on (VideoFrameReading.at). */
@@ -82,7 +88,7 @@ export class RemoteVideoHealth implements RemoteVideoHealthSource {
     // loading state rather than black until the first reading. Any other
     // new track shows as before until it is measured.
     const detector = this.recovered.has(trackName)
-      ? new VideoFlowDetector(this.now(), this.options)
+      ? this.detectorFor(trackName)
       : null;
     this.watched.set(track, { trackName, track, detector });
     if (detector) this.notify();
@@ -150,7 +156,7 @@ export class RemoteVideoHealth implements RemoteVideoHealthSource {
           return;
         }
         if (!entry.detector) {
-          entry.detector = new VideoFlowDetector(this.now(), this.options);
+          entry.detector = this.detectorFor(entry.trackName);
           changed = true;
         }
         const before = entry.detector.flow;
@@ -166,6 +172,19 @@ export class RemoteVideoHealth implements RemoteVideoHealthSource {
       this.inFlight = false;
     }
     if (changed) this.notify();
+  }
+
+  /** A re-pull's track gets longer for its first frame (see the option). */
+  private detectorFor(trackName: string): VideoFlowDetector {
+    if (!this.recovered.has(trackName)) {
+      return new VideoFlowDetector(this.now(), this.options);
+    }
+    return new VideoFlowDetector(this.now(), {
+      firstFrameTimeoutMs:
+        this.options.recoveredFirstFrameTimeoutMs ??
+        VIDEO_RECOVERED_FIRST_FRAME_TIMEOUT_MS,
+      stallAfterMs: this.options.stallAfterMs,
+    });
   }
 
   private onStalled(entry: Watched): void {

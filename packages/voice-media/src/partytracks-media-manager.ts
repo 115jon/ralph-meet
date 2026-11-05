@@ -158,7 +158,12 @@ export interface PartyTracksMediaManagerOptions {
   readonly readVideoFrames?: ReadVideoFrames;
   readonly videoHealthTiming?: Pick<
     RemoteVideoHealthOptions,
-    "intervalMs" | "firstFrameTimeoutMs" | "stallAfterMs" | "now" | "schedule"
+    | "intervalMs"
+    | "firstFrameTimeoutMs"
+    | "recoveredFirstFrameTimeoutMs"
+    | "stallAfterMs"
+    | "now"
+    | "schedule"
   >;
 }
 

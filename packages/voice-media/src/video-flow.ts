@@ -41,6 +41,13 @@ export interface VideoFlowOptions {
  */
 export const VIDEO_FIRST_FRAME_TIMEOUT_MS = 6_000;
 /**
+ * A re-pull (see RemoteVideoHealth) comes on a new peer connection, whose
+ * ICE and DTLS must complete before the first packet: over TURN on a slow
+ * uplink that takes several seconds more than a pull on the call's own
+ * connection.
+ */
+export const VIDEO_RECOVERED_FIRST_FRAME_TIMEOUT_MS = 10_000;
+/**
  * A camera sends at least a few frames a second, even of a still scene (a
  * keepalive sends one a second). The web reads stats every 2 s, so this is
  * two to three readings without progress.
@@ -129,10 +136,12 @@ export interface CameraTileInput {
 /**
  * A camera announced on (the participant's self_video) with no track, or
  * one not yet decoding, shows the loading state this long, then
- * "unavailable". Covers a pull (up to 10 s before its watchdog pulls again)
- * plus the media manager's one fresh re-pull of a stalled camera.
+ * "unavailable". Covers a pull that decodes nothing in time plus the media
+ * manager's one fresh re-pull of it (a pull with no track at all is pulled
+ * again by its watchdog within this too).
  */
-export const CAMERA_CONNECT_GRACE_MS = 12_000;
+export const CAMERA_CONNECT_GRACE_MS =
+  VIDEO_FIRST_FRAME_TIMEOUT_MS + VIDEO_RECOVERED_FIRST_FRAME_TIMEOUT_MS;
 
 /** For a remote camera that is announced on. */
 export function cameraTileVideo(input: CameraTileInput): CameraTileVideo {

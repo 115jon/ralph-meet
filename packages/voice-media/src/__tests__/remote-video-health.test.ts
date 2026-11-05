@@ -86,18 +86,46 @@ describe("RemoteVideoHealth", () => {
     shown.add(second);
     frames.set(second, 0);
     await at(7_000);
-    await at(13_000);
+    // Its new connection gets longer than the call's for a first frame.
+    await at(12_000);
+    expect(health.flowOf(second)).toBe("waiting");
+    await at(16_000);
     expect(health.flowOf(second)).toBe("stalled");
     // One attempt per episode: no loop against a publisher that is gone.
     expect(recover).toHaveBeenCalledOnce();
 
     // Frames come back: it plays, and a later stall may be recovered again.
     frames.set(second, 10);
-    await at(14_000);
+    await at(17_000);
     expect(health.flowOf(second)).toBe("playing");
-    await at(19_000);
+    await at(22_000);
     expect(health.flowOf(second)).toBe("stalled");
     expect(recover).toHaveBeenCalledTimes(2);
+  });
+
+  it("gives a re-pull's track the recovered first-frame timeout, even after it was off screen", async () => {
+    const { health, frames, shown, at } = setup();
+    const first = track("first");
+    health.watch("cam-video-a", first);
+    shown.add(first);
+    frames.set(first, 0);
+    await at(0);
+    await at(6_000);
+    health.unwatch(first);
+
+    const second = track("second");
+    health.watch("cam-video-a", second);
+    frames.set(second, 0);
+    // Hidden for a reading (its measure is dropped), then shown again.
+    await at(7_000);
+    shown.add(second);
+    await at(8_000);
+    await at(17_000);
+    // A slow connection: the first frame lands 9 s after it was shown.
+    expect(health.flowOf(second)).toBe("waiting");
+    frames.set(second, 3);
+    await at(17_500);
+    expect(health.flowOf(second)).toBe("playing");
   });
 
   it("starts a new episode when the alias ends", async () => {

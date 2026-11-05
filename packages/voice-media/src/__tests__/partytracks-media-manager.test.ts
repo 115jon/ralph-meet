@@ -1432,7 +1432,10 @@ describe("PartyTracksMediaManager remote video recovery", () => {
     expect(manager.videoHealth.flowOf(first)).toBeUndefined();
     const second = mediaTrack("video", "second");
     transport.pulledTracks.get("cam-video-remote")?.next(second);
+    // The re-pull's new connection gets longer for its first frame.
     await advance(8_000);
+    expect(manager.videoHealth.flowOf(second)).toBe("waiting");
+    await advance(3_000);
     expect(manager.videoHealth.flowOf(second)).toBe("stalled");
     expect(transport.pullCount).toBe(2);
 
