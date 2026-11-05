@@ -525,7 +525,6 @@ export function useVoiceChannel({
     chatUserAvatarDisplay,
     chatUserDisplayName,
     chatUsername,
-    chatConnected,
     voiceChannelStartedAt,
   } = useChatStore(
     useShallow((s) => ({
@@ -535,7 +534,6 @@ export function useVoiceChannel({
       chatUserAvatarDisplay: s.user?.avatar_display,
       chatUserDisplayName: s.user?.display_name,
       chatUsername: s.user?.username,
-      chatConnected: s.connected,
       voiceChannelStartedAt: s.voiceChannelStartedAt,
     })),
   );
@@ -2844,28 +2842,10 @@ export function useVoiceChannel({
     voiceSession,
   ]);
 
-  useEffect(() => {
-    if (!joined || mode === "room" || !channelId || !chatConnected) return;
-
-    const reassertJoin = () => {
-      sendVoiceChannelJoin(
-        channelId,
-        currentSettingsRef.current.isMuted,
-        currentVoiceChannelStartedAt,
-      );
-    };
-
-    reassertJoin();
-    const timer = window.setInterval(reassertJoin, 30_000);
-    return () => window.clearInterval(timer);
-  }, [
-    joined,
-    mode,
-    channelId,
-    chatConnected,
-    sendVoiceChannelJoin,
-    currentVoiceChannelStartedAt,
-  ]);
+  // No 30 s VoiceChannelJoin re-send: the sidebar roster is the voice
+  // room's own (realtime/VOICE_ROSTER.md), which the room pushes to the
+  // global gateway on every change. The one join above only names the
+  // channel this session's chat-socket op 15 hints (preview, spatial) are for.
 
   // Reset the guard whenever autoJoin flips back to false (user navigated away),
   // so the next time they return to the voice channel it auto-joins again.
@@ -3812,25 +3792,8 @@ export function useVoiceChannel({
     existingPublication,
   ]);
 
-  useEffect(() => {
-    if (!joined || mode === "room") return;
-    sendVoiceStateUpdate({
-      self_mute: settingsMuted,
-      self_deaf: isDeafened,
-      self_video: isCameraOn,
-      self_stream: isScreenSharing,
-      self_stream_audio: isStreamingAudio,
-    });
-  }, [
-    settingsMuted,
-    isDeafened,
-    isCameraOn,
-    isScreenSharing,
-    isStreamingAudio,
-    joined,
-    sendVoiceStateUpdate,
-    mode,
-  ]);
+  // Mute, deafen, camera and share go to the room socket only (above): the
+  // room's roster carries them to the sidebar.
 
   const disconnectBeaconSentRef = useRef(false);
 

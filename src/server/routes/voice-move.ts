@@ -7,7 +7,9 @@
 // tell the source channel's room. The room sends the user's voice session(s)
 // a VoiceMove frame and ends them at once, so the move never waits on the
 // client: an offline or old client is out of the source room either way.
-// The global gateway then takes the user off the source channel's roster.
+// Ending them changes that room's roster, which the room pushes to the
+// global gateway itself (realtime/VOICE_ROSTER.md), so the sidebar follows
+// the move with no further step here.
 // A current client joins the target with the grant, which stands in for
 // CONNECT there (realtime/voice-move.ts, src/lib/voice/voice-move-grant.ts).
 
@@ -34,10 +36,8 @@ import { Database, RateLimiter, WorkerEnv } from "@/server/bindings";
 import { runRoute, type RouteServices } from "@/server/edge";
 import { signedInUserId } from "@/server/kova-auth";
 import {
-  serializeVoiceMoveOutRequest,
   serializeVoiceMoveRequest,
   VOICE_MOVE_GRANT_PATH,
-  VOICE_MOVE_OUT_PATH,
   VOICE_MOVE_PATH,
   type VoiceMoveGrantRecord,
   type VoiceMoveNotice,
@@ -328,21 +328,6 @@ const moveMember = Effect.fn("voice.move")(function* (request: Request) {
       request,
     );
   }
-
-  yield* Effect.promise(() =>
-    gateway
-      .fetch(`https://internal${VOICE_MOVE_OUT_PATH}`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: serializeVoiceMoveOutRequest(targetId, fromId),
-      })
-      .then((response) => response.body?.cancel())
-      .catch((error: unknown) => {
-        // The room has ended the session; the roster catches up when the
-        // client leaves or its session is reconciled.
-        console.warn("[voice-move] global roster update failed", error);
-      }),
-  );
 
   yield* Effect.promise(() =>
     logAuditAction({

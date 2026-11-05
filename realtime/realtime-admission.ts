@@ -15,6 +15,7 @@ export interface RealtimeAdmissionContext {
   participantId: string;
   roomSlug: string;
   serverId?: string;
+  channelId?: string;
   subject: string;
 }
 
@@ -52,6 +53,7 @@ export async function createRealtimeAdmissionContext(
     participantId: claims.nonce,
     roomSlug: claims.roomSlug,
     ...(claims.serverId ? { serverId: claims.serverId } : {}),
+    ...(claims.channelId ? { channelId: claims.channelId } : {}),
     subject: claims.subject,
   };
 }
@@ -79,6 +81,9 @@ export function appendRealtimeAdmissionHeaders(
   if (context.serverId) {
     next.set(`${ADMISSION_HEADER_PREFIX}server-id`, context.serverId);
   }
+  if (context.channelId) {
+    next.set(`${ADMISSION_HEADER_PREFIX}channel-id`, context.channelId);
+  }
   next.set(`${ADMISSION_HEADER_PREFIX}subject`, context.subject);
   return next;
 }
@@ -102,6 +107,7 @@ export function getRealtimeAdmissionFromHeaders(
   const participantId = headers.get(`${ADMISSION_HEADER_PREFIX}participant-id`);
   const roomSlug = headers.get(`${ADMISSION_HEADER_PREFIX}room-slug`);
   const serverId = headers.get(`${ADMISSION_HEADER_PREFIX}server-id`);
+  const channelId = headers.get(`${ADMISSION_HEADER_PREFIX}channel-id`);
   const subject = headers.get(`${ADMISSION_HEADER_PREFIX}subject`);
   const expiresAt = Number(expiresAtRaw);
 
@@ -126,6 +132,7 @@ export function getRealtimeAdmissionFromHeaders(
     participantId,
     roomSlug,
     ...(serverId ? { serverId } : {}),
+    ...(channelId ? { channelId } : {}),
     subject,
   };
 }

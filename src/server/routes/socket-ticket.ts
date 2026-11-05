@@ -62,6 +62,8 @@ type TicketAdmission = {
   cookie?: string;
   roomSlug: string;
   serverId?: string;
+  /** Room and voice tickets: the channel the room reports its roster for. */
+  channelId?: string;
   subject: string;
 };
 
@@ -133,6 +135,7 @@ const issueTicket = Effect.fn("voice.socket_ticket")(function* (
         nonce,
         roomSlug: admission.roomSlug,
         ...(admission.serverId ? { serverId: admission.serverId } : {}),
+        ...(admission.channelId ? { channelId: admission.channelId } : {}),
         subject: admission.subject,
       },
       config.ticketSecret,
@@ -305,6 +308,7 @@ function authorizeAuthenticatedTicket(
       return {
         accessMode: "authenticated",
         roomSlug: callRoomSlug,
+        channelId,
         subject: userId,
       } satisfies TicketAdmission;
     }
@@ -381,6 +385,7 @@ function authorizeAuthenticatedTicket(
       accessMode: "authenticated",
       roomSlug: buildVoiceChannelRoomSlug(serverId, channelId),
       serverId,
+      channelId,
       subject: userId,
     } satisfies TicketAdmission;
   });
