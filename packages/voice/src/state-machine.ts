@@ -141,6 +141,14 @@ export interface TeardownPlan {
 export interface TeardownOptions {
   /** A 1:1 call: the call gateway plays its own end sound and owns `left`. */
   readonly isCall: boolean;
+  /**
+   * The platform sends a leave trigger (default true). False (the Expo app,
+   * which has none) drops the send window too: with nothing to send, the
+   * client disconnects within the teardown, so ClientDisconnect goes out in
+   * the same turn as the platform's release of its call (a phone's call
+   * service), and the OS cannot suspend the app between the two.
+   */
+  readonly leaveTrigger?: boolean;
 }
 
 /**
@@ -154,8 +162,22 @@ export interface TeardownOptions {
  * | forced-disconnect | 0 | no       | no      | 100 ms | after     | yes      | no       |
  * | component-unmount | 1 | no       | yes     | 100 ms | now       | no       | yes      |
  * | component-unmount | 0 | no       | no      | 0      | now       | no       | no       |
+ *
+ * Without a leave trigger (`leaveTrigger: false`) there is no trigger and no
+ * window in any row.
  */
 export function planTeardown(
+  reason: VoiceEndReason,
+  wasJoined: boolean,
+  options: TeardownOptions,
+): TeardownPlan {
+  const plan = planTeardownWithTrigger(reason, wasJoined, options);
+  return options.leaveTrigger === false
+    ? { ...plan, leaveTrigger: false, sendWindowMs: 0 }
+    : plan;
+}
+
+function planTeardownWithTrigger(
   reason: VoiceEndReason,
   wasJoined: boolean,
   options: TeardownOptions,

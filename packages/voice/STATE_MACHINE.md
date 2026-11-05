@@ -119,7 +119,11 @@ ends only choose its **plan**:
 - _leave trigger_: the automatic soundboard leave sound, sent as a
   `VoiceAppEvent` (op 106) on the voice socket. This is why the sockets stay
   open for the **send window** (100 ms, `LEAVE_SEND_WINDOW_MS`) before the
-  client disconnects.
+  client disconnects. A platform with no leave trigger (the Expo app) passes
+  `leaveTrigger: false`: no trigger and a send window of 0 in every row, so
+  the client disconnects within the teardown, in the same turn as the app's
+  own release of the call (a phone's call service and audio session), and
+  the OS cannot suspend it in between with the room still holding it.
 - _release client_: when the platform stops exposing the client (web: the
   hook's `sfu` value that stats and call surfaces read).
 - _`left`_: the app is told the session is over (web: `onLeft`). It fires
