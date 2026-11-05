@@ -6,10 +6,13 @@ import {
 } from "@ralph/protocol";
 import {
   CHAT_SOCKET_POLICY,
+  isRealtimeTimeout,
   RealtimeSocket,
   type OutboundFrame,
 } from "@ralph/realtime";
 import { create } from "zustand";
+
+import { resetConnections } from "../../../modules/ralph-network/src";
 
 import { acquireGatewayTicket, type GatewayTicket } from "./ticket";
 
@@ -113,6 +116,11 @@ const socket = new RealtimeSocket<ChatGatewayServerMessage, GatewayTicket>({
         setStatus("connecting");
       }
     },
+    // A ticket that got no answer went down a dead pooled connection; the
+    // retry must not reuse it.
+    ticketFailed: (error) => {
+      if (isRealtimeTimeout(error)) resetConnections("chat ticket timed out");
+    },
     authFailed: () => setStatus("signed-out"),
     message: handleMessage,
     closed: () => setStatus("reconnecting"),
@@ -134,9 +142,15 @@ export function connectGateway(id: string | null): void {
   }
 }
 
-/** The app is in front again: retry now, or probe the open socket. */
-export function wakeGateway(): void {
-  if (userId) socket.wake();
+/**
+ * The app is in front again, or the network came back (`networkChanged`):
+ * retry now, ask again for a stuck ticket, or probe (or, after a network
+ * change, drop) the open socket.
+ */
+export function wakeGateway(
+  options: { readonly networkChanged?: boolean } = {},
+): void {
+  if (userId) socket.wake(options);
 }
 
 /** Server events (voice occupancy, channel changes) for these servers. */

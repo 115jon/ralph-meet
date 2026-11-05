@@ -28,7 +28,9 @@ import { resetServersStore } from "@/features/servers/store";
 import { resetShare } from "@/features/share/store";
 import { leaveCall, wakeCall } from "@/features/voice/actions";
 
+import { addNetworkChangeListener } from "../../../modules/ralph-network/src";
 import { connectGateway, wakeGateway } from "./gateway";
+import { createNetworkWake } from "./network-wake";
 
 /**
  * Runs the chat socket while signed in: connects once the profile (the
@@ -58,6 +60,16 @@ export function useRealtime(): void {
         wakeCall();
       }
     });
+    // The default network changed; the HTTP pool was reset natively before
+    // this fired. Back after a loss, every socket from before is dead, so
+    // reconnect now (resuming the call) instead of waiting out a backoff or
+    // a probe; a switch with no loss probes. Runs in the background too.
+    const stopNetwork = addNetworkChangeListener(
+      createNetworkWake((networkChanged) => {
+        wakeGateway({ networkChanged });
+        wakeCall({ networkChanged });
+      }),
+    );
     return () => {
       stopServers();
       stopChat();
@@ -69,6 +81,7 @@ export function useRealtime(): void {
       stopProfiles();
       stopCalls();
       appState.remove();
+      stopNetwork();
     };
   }, []);
 

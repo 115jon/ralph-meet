@@ -25,14 +25,22 @@ export function socketUrl(path: string): string {
   return `${config.apiBaseUrl.replace(/^http/, "ws")}${path}`;
 }
 
-/** POSTs a ticket request; a 401 rejects with ApiError (status 401). */
+/**
+ * POSTs a ticket request; a 401 rejects with ApiError (status 401). `signal`
+ * is RealtimeSocket's: it aborts when the attempt times out or is replaced.
+ */
 export function requestSocketTicket<
   S extends Schema.ConstraintDecoder<unknown>,
->(body: Record<string, string>, schema: S): Promise<S["Type"]> {
+>(
+  body: Record<string, string>,
+  schema: S,
+  signal?: AbortSignal,
+): Promise<S["Type"]> {
   return apiJson("/api/voice/socket-ticket", schema, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(body),
+    signal,
   });
 }
 
@@ -40,10 +48,13 @@ export function requestSocketTicket<
  * One single-use ticket for the global chat socket. A 401 rejects with an
  * ApiError whose `status` RealtimeSocket reads as "the session is gone".
  */
-export async function acquireGatewayTicket(): Promise<GatewayTicket> {
+export async function acquireGatewayTicket(
+  signal?: AbortSignal,
+): Promise<GatewayTicket> {
   const { ticket } = await requestSocketTicket(
     { audience: "global" },
     TicketSchema,
+    signal,
   );
   return { url: socketUrl("/api/gateway"), protocols: ticketProtocols(ticket) };
 }
