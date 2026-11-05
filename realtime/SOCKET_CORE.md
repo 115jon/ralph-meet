@@ -188,9 +188,12 @@ it.
 
 **Old clients.** A client only resumes on a new socket after it has left
 the old one, so it never reads the old socket's close. No shipped client
-(web and desktop up to v3.13.0, mobile up to mobile-v0.5.1, the native
-client spec) acts on close code 4006 or on its reason: a client that did
-hear it would retry and resume as after any drop. Clients act on close
+(web and desktop up to v3.13.0, mobile up to mobile-v0.5.1) acts on close
+code 4006 or on its reason: a client that did hear it would retry and
+resume as after any drop. The native client treats a 4006 close as
+SessionInvalid and Identifies fresh; that is only reachable when another
+device of the same user resumed its session id, and the fresh Identify
+then replaces that device (4010). Clients act on close
 codes 4008 and 4010, and on `1000 "Replaced by new connection"` (the voice
 socket's), which this close is none of.
 
