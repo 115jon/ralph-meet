@@ -12,7 +12,7 @@ import {
 } from "@ralph/realtime";
 import { create } from "zustand";
 
-import { resetConnections } from "../../../modules/ralph-network/src";
+import { resetTicketRequests } from "../../../modules/ralph-network/src";
 
 import { acquireGatewayTicket, type GatewayTicket } from "./ticket";
 
@@ -116,10 +116,11 @@ const socket = new RealtimeSocket<ChatGatewayServerMessage, GatewayTicket>({
         setStatus("connecting");
       }
     },
-    // A ticket that got no answer went down a dead pooled connection; the
-    // retry must not reuse it.
+    // A ticket that got no answer may have gone down a dead pooled
+    // connection; the retry must not wait on it again.
     ticketFailed: (error) => {
-      if (isRealtimeTimeout(error)) resetConnections("chat ticket timed out");
+      if (isRealtimeTimeout(error))
+        resetTicketRequests("chat ticket timed out");
     },
     authFailed: () => setStatus("signed-out"),
     message: handleMessage,

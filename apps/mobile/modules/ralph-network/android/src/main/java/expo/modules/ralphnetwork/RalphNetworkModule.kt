@@ -3,7 +3,7 @@ package expo.modules.ralphnetwork
 import expo.modules.kotlin.modules.Module
 import expo.modules.kotlin.modules.ModuleDefinition
 
-/** JS's side: network change events, and a reset after a request stalls. */
+/** JS's side: network change events, and a scoped reset after a request stalls. */
 class RalphNetworkModule : Module() {
   private val listener: (Boolean) -> Unit = { connected ->
     sendEvent("onNetworkChange", mapOf("connected" to connected))
@@ -23,6 +23,8 @@ class RalphNetworkModule : Module() {
 
       Function("isConnected") { RalphNetwork.connected }
 
-      Function("resetConnections") { reason: String -> RalphNetwork.reset(reason) }
+      Function("resetRequests") { reason: String, paths: List<String> ->
+        RalphNetwork.resetRequests(reason, paths)
+      }
     }
 }

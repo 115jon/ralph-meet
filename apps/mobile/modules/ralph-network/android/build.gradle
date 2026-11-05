@@ -17,4 +17,5 @@ android {
 dependencies {
   // OkHttpClientProvider, and the OkHttp that React Native ships with.
   implementation 'com.facebook.react:react-android'
+  testImplementation 'junit:junit:4.13.2'
 }

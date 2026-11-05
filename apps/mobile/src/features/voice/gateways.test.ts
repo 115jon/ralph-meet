@@ -8,10 +8,10 @@ vi.mock("./tickets", () => ({
 }));
 
 vi.mock("../../../modules/ralph-network/src", () => ({
-  resetConnections: vi.fn(),
+  resetTicketRequests: vi.fn(),
 }));
 
-import { resetConnections } from "../../../modules/ralph-network/src";
+import { resetTicketRequests } from "../../../modules/ralph-network/src";
 import { CONNECT_TIMEOUTS } from "@ralph/realtime";
 import { VoiceSocket, type VoiceSocketHandlers } from "./gateways";
 import { acquireVoiceTicket } from "./tickets";
@@ -174,7 +174,9 @@ describe("VoiceSocket", () => {
 
       await vi.advanceTimersByTimeAsync(CONNECT_TIMEOUTS.ticketMs);
       expect(signals[0]!.aborted).toBe(true);
-      expect(resetConnections).toHaveBeenCalledWith("voice ticket timed out");
+      expect(resetTicketRequests).toHaveBeenCalledWith(
+        "voice ticket timed out",
+      );
 
       // Call sockets back off 500 ms × (0.5–1) before the next attempt.
       await vi.advanceTimersByTimeAsync(500);

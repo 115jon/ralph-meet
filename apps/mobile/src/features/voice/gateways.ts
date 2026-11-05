@@ -13,7 +13,7 @@ import {
   type SocketTicket,
 } from "@ralph/realtime";
 
-import { resetConnections } from "../../../modules/ralph-network/src";
+import { resetTicketRequests } from "../../../modules/ralph-network/src";
 
 import {
   decodeRoomServerFrame,
@@ -111,7 +111,7 @@ export class RoomSocket {
         },
         ticketFailed: (error) => {
           if (isRealtimeTimeout(error)) {
-            resetConnections("room ticket timed out");
+            resetTicketRequests("room ticket timed out");
           }
           this.handlers.ticketFailed(error);
         },
@@ -300,7 +300,7 @@ export class VoiceSocket {
         ticketReady: () => this.resetIdentity(),
         ticketFailed: (error) => {
           if (isRealtimeTimeout(error)) {
-            resetConnections("voice ticket timed out");
+            resetTicketRequests("voice ticket timed out");
           }
         },
         authFailed: () => this.handlers.disconnected("auth-failed"),

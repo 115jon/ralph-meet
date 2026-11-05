@@ -16,7 +16,7 @@ interface Subscription {
 
 interface RalphNetworkNative {
   isConnected(): boolean;
-  resetConnections(reason: string): void;
+  resetRequests(reason: string, paths: readonly string[]): void;
   addListener(
     event: "onNetworkChange",
     listener: (change: NetworkChange) => void,
@@ -49,9 +49,23 @@ export function isConnected(): boolean {
 }
 
 /**
- * Cancels HTTP calls in flight and empties the pool: a request that stalled
- * means the pooled connection is dead, and the next one must not reuse it.
+ * The paths of the socket ticket requests: the chat gateway's and the call
+ * sockets' tickets, and a call's admission.
  */
-export function resetConnections(reason: string): void {
-  native?.resetConnections(reason);
+export const SOCKET_TICKET_PATHS: readonly string[] = [
+  "/api/voice/socket-ticket",
+  "/api/voice/admission",
+];
+
+/**
+ * A socket ticket request got no answer: it went down a pooled connection
+ * that may be dead, and the retry must not wait on it again. Cancels the
+ * ticket requests still in flight and evicts idle pooled connections (now
+ * and a moment later), so the retry opens a fresh one unless a live call
+ * still holds the old one. Other calls (an upload, an image load) carry on:
+ * the connection may only be slow. A real network change resets everything
+ * natively.
+ */
+export function resetTicketRequests(reason: string): void {
+  native?.resetRequests(reason, SOCKET_TICKET_PATHS);
 }

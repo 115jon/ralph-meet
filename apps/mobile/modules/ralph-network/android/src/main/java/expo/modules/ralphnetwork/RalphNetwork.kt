@@ -27,11 +27,19 @@ import okhttp3.OkHttpClient
  * - The client comes from [OkHttpClientProvider.setOkHttpClientFactory], with
  *   connect, read and write timeouts. A read timeout on an HTTP/2 stream also
  *   makes OkHttp ping the connection and stop reusing it if no pong comes.
- * - When the default network changes or is lost, or JS calls [reset], every
- *   HTTP call in flight is cancelled and the pool is emptied, so the next
- *   request opens a fresh connection on the network that works. A browser
- *   does the same (ERR_NETWORK_CHANGED). WebSockets are left alone: their
- *   owners probe them and decide.
+ * - When the default network changes or is lost, every HTTP call in flight
+ *   is cancelled and the pool is emptied, so the next request opens a fresh
+ *   connection on the network that works. A browser does the same
+ *   (ERR_NETWORK_CHANGED). WebSockets are left alone: their owners probe
+ *   them and decide.
+ * - When JS reports a request that stalled with no network change (a socket
+ *   ticket that got no answer), only the calls to the paths it names are
+ *   cancelled, and idle connections are evicted now and a moment later.
+ *   The connection may only be slow (an upload filling the uplink), so
+ *   other calls on it (uploads, image loads) carry on. A dead connection
+ *   that still carries one of them is retired by OkHttp itself: its read or
+ *   write timeout fails the call and pings the connection, and a connection
+ *   that misses the pong is not reused.
  *
  * Network callbacks, resets and listeners all run on one background thread:
  * closing a pooled TLS connection writes to its socket, which the main
@@ -65,11 +73,12 @@ object RalphNetwork {
 
   @Volatile private var installed = false
 
-  /** Only touched on the worker thread. */
-  private var current: Network? = null
+  /** Seeded in [install] from the launch network; then changed on the worker thread only. */
+  @Volatile private var state = DefaultNetworkState<Network>(initiallyConnected = true)
 
-  @Volatile var connected: Boolean = true
-    private set
+  /** False while Android reports no default network (also after an offline launch). */
+  val connected: Boolean
+    get() = state.connected
 
   fun install(context: Context) {
     if (installed) return
@@ -87,9 +96,16 @@ object RalphNetwork {
     watchDefaultNetwork(app)
   }
 
-  /** Cancels HTTP calls in flight (not WebSockets) and empties the pool. Any thread. */
-  fun reset(reason: String) {
-    worker.post { resetNow(reason) }
+  /**
+   * Cancels the HTTP calls in flight to [paths] (never WebSockets) and
+   * evicts idle pooled connections, now and a moment later. Any thread.
+   */
+  fun resetRequests(
+    reason: String,
+    paths: Collection<String>,
+  ) {
+    val only = paths.toSet()
+    worker.post { resetNow(reason, only) }
   }
 
   /**
@@ -97,13 +113,19 @@ object RalphNetwork {
    * connection keeps it in use, so evictAll() would leave it in the pool for
    * the next request to reuse. Per-request clients (React Native's per-call
    * timeout) share their base client's dispatcher and pool.
+   *
+   * [onlyPaths]: cancel only calls to these paths; null cancels every call.
    */
-  private fun resetNow(reason: String) {
+  private fun resetNow(
+    reason: String,
+    onlyPaths: Set<String>? = null,
+  ) {
     var cancelled = 0
     for (client in clients) {
       val dispatcher = client.dispatcher
       for (call in dispatcher.runningCalls() + dispatcher.queuedCalls()) {
-        if (call.request().header("Upgrade").equals("websocket", ignoreCase = true)) continue
+        val request = call.request()
+        if (!cancelsCall(request.url.encodedPath, request.header("Upgrade"), onlyPaths)) continue
         call.cancel()
         cancelled++
       }
@@ -112,11 +134,20 @@ object RalphNetwork {
     for (delay in LATER_EVICTS_MS) {
       worker.postDelayed({ for (client in clients) client.connectionPool.evictAll() }, delay)
     }
-    Log.i(TAG, "reset ($reason): cancelled $cancelled call(s), pool emptied")
+    Log.i(TAG, "reset ($reason): cancelled $cancelled call(s), idle connections evicted")
   }
 
   private fun watchDefaultNetwork(context: Context) {
     val manager = context.getSystemService(ConnectivityManager::class.java) ?: return
+    // Launched offline: no callback comes until a network does, and that
+    // one must be reported as a change.
+    val launchedOnline =
+      try {
+        manager.activeNetwork != null
+      } catch (error: RuntimeException) {
+        true
+      }
+    state = DefaultNetworkState(launchedOnline)
     val callback =
       object : ConnectivityManager.NetworkCallback() {
         override fun onAvailable(network: Network) {
@@ -140,24 +171,18 @@ object RalphNetwork {
   }
 
   private fun available(network: Network) {
-    val previous = current
-    current = network
     // The first callback reports the network we started on.
-    if (connected && (previous == null || previous == network)) return
-    changed(true, "network available")
+    if (state.available(network)) changed(true, "network available")
   }
 
   private fun lost(network: Network) {
-    if (network != current) return
-    current = null
-    changed(false, "network lost")
+    if (state.lost(network)) changed(false, "network lost")
   }
 
   private fun changed(
     nowConnected: Boolean,
     reason: String,
   ) {
-    connected = nowConnected
     resetNow(reason)
     for (listener in listeners) listener(nowConnected)
   }
