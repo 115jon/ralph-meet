@@ -3,7 +3,7 @@
   "version": "0.0.0",
   "private": true,
   "type": "module",
-  "description": "Yap voice session lifecycle: one state machine, one teardown, one publication reconciler and the device rules, without React or the DOM.",
+  "description": "Yap voice session lifecycle: one state machine, one teardown, one publication reconciler, the device rules and the screen share lifecycle, without React or the DOM.",
   "exports": {
     ".": "./src/index.ts"
   }

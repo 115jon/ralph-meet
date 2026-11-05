@@ -73,6 +73,7 @@ const {
       this.isNativeScreenShareActive = false;
     });
     readonly updateNativeScreenQuality = vi.fn(async () => false);
+    readonly updateSenderEncoding = vi.fn(async () => {});
     readonly stopTracks = vi.fn();
     readonly getParticipantId = vi.fn((): string | null => this.participantId);
     readonly connect = vi.fn();
@@ -435,7 +436,11 @@ vi.mock("@/stores/useSoundSettingsStore", () => ({
 import { mergeVoiceState, useVoiceChannel } from "@/hooks/useVoiceChannel";
 import { resetVoiceStandbyForTests } from "@/lib/voice/voice-standby";
 import { playAutomaticSoundboardTrigger } from "@/lib/voice/auto-soundboard";
-import { playDisconnect } from "@/lib/sounds";
+import {
+  playDisconnect,
+  playScreenShareStart,
+  playScreenShareStop,
+} from "@/lib/sounds";
 import type { VoiceState, VoiceStateDelta } from "@/lib/types";
 
 class TestMediaStream {
@@ -1223,6 +1228,168 @@ describe("useVoiceChannel SFU lifecycle", () => {
       hook.unmount();
     },
   );
+
+  it("ends a native share whose reconnect failed (no CEF fallback allowed)", async () => {
+    const { hook, sfu } = await startNativeShare();
+    // The transport already stopped the pipeline when its reconnect failed.
+    sfu.isNativeScreenShareActive = false;
+
+    await act(async () => {
+      sfu.emit("native-screen-share-ended", {
+        reason: "connection-failed",
+        detail: "reconnect failed: connect timeout",
+      });
+    });
+
+    await waitFor(() =>
+      expect(hook.result.current.isScreenSharing).toBe(false),
+    );
+    expect(hook.result.current.currentScreenSource).toBeNull();
+    expect(sfu.stopTracks).toHaveBeenCalledWith([
+      "screen-video-self",
+      "screen-audio-self",
+    ]);
+    hook.unmount();
+  });
+
+  async function startBrowserShare() {
+    vi.mocked(acquireLocalStream).mockResolvedValue(
+      createStream([createTrack("audio", "browser-share-mic").track]),
+    );
+    const hook = renderHook(() =>
+      useVoiceChannel({ channelId: "channel", serverId: "server" }),
+    );
+    await act(async () => {
+      await hook.result.current.handleJoin();
+    });
+    const sfu = sfuInstances[0];
+    if (!sfu) throw new Error("SFU was not created");
+    await act(async () => {
+      sfu.emit("joined", { participantId: "self", participants: [] });
+    });
+    await waitFor(() => expect(hook.result.current.joined).toBe(true));
+    const video = createTrack("video", "screen");
+    const audio = createTrack("audio", "screen");
+    Object.assign(video.track, { applyConstraints: vi.fn(async () => {}) });
+    const getDisplayMedia = vi.fn(async () =>
+      createStream([video.track, audio.track]),
+    );
+    vi.stubGlobal("navigator", {
+      ...globalThis.navigator,
+      mediaDevices: { getDisplayMedia },
+    });
+    await act(async () => {
+      await hook.result.current.toggleScreenShare();
+    });
+    return { hook, sfu, video, audio, getDisplayMedia };
+  }
+
+  const screenPublishes = (sfu: InstanceType<typeof FakeSFUClient>) =>
+    sfu.publishTracks.mock.calls.filter(([, prefix]) => prefix === "screen");
+
+  it("publishes a browser share on the screen prefix and withdraws both names on stop", async () => {
+    const { hook, sfu, video, audio } = await startBrowserShare();
+
+    expect(hook.result.current.isScreenSharing).toBe(true);
+    expect(hook.result.current.isStreamingAudio).toBe(true);
+    expect(screenPublishes(sfu)).toHaveLength(1);
+    expect(screenPublishes(sfu)[0]?.[0].getTracks()).toEqual([
+      audio.track,
+      video.track,
+    ]);
+    expect(playScreenShareStart).toHaveBeenCalledOnce();
+
+    await act(async () => {
+      await hook.result.current.toggleScreenShare();
+    });
+
+    expect(sfu.stopTracks).toHaveBeenCalledWith([
+      "screen-video-self",
+      "screen-audio-self",
+    ]);
+    expect(video.stop).toHaveBeenCalled();
+    expect(audio.stop).toHaveBeenCalled();
+    expect(hook.result.current.isScreenSharing).toBe(false);
+    expect(playScreenShareStop).toHaveBeenCalledOnce();
+    hook.unmount();
+  });
+
+  it("ignores a native reconnect failure while the live share is a browser one", async () => {
+    const { hook, sfu } = await startBrowserShare();
+
+    await act(async () => {
+      sfu.emit("native-screen-share-ended", {
+        reason: "connection-failed",
+        detail: "reconnect failed: superseded",
+      });
+    });
+
+    expect(hook.result.current.isScreenSharing).toBe(true);
+    expect(sfu.stopTracks).not.toHaveBeenCalled();
+    hook.unmount();
+  });
+
+  it("toggles a browser share's audio in place without capturing again", async () => {
+    const { hook, sfu, getDisplayMedia } = await startBrowserShare();
+
+    await act(async () => {
+      await hook.result.current.onToggleStreamAudio();
+    });
+
+    expect(sfu.setPublishedTrackEnabled).toHaveBeenLastCalledWith(
+      "screen-audio-self",
+      false,
+    );
+    expect(hook.result.current.isStreamingAudio).toBe(false);
+    expect(getDisplayMedia).toHaveBeenCalledOnce();
+    expect(screenPublishes(sfu)).toHaveLength(1);
+    hook.unmount();
+  });
+
+  it("ends a browser share quietly when its video ends by itself", async () => {
+    const { hook, sfu, video } = await startBrowserShare();
+
+    await act(async () => {
+      (video.track.onended as (() => void) | null)?.();
+    });
+
+    await waitFor(() =>
+      expect(hook.result.current.isScreenSharing).toBe(false),
+    );
+    expect(sfu.stopTracks).toHaveBeenCalledWith([
+      "screen-video-self",
+      "screen-audio-self",
+    ]);
+    expect(playScreenShareStop).not.toHaveBeenCalled();
+    hook.unmount();
+  });
+
+  it("republishes a browser share after the voice socket reconnects", async () => {
+    const { hook, sfu } = await startBrowserShare();
+
+    await act(async () => {
+      sfu.emit("voice-reconnected", undefined);
+    });
+
+    await waitFor(() => expect(screenPublishes(sfu)).toHaveLength(2));
+    hook.unmount();
+  });
+
+  it("stops sharing on leave without withdrawing on the wire", async () => {
+    const { hook, sfu, video } = await startBrowserShare();
+
+    await act(async () => {
+      hook.result.current.handleLeave();
+    });
+
+    expect(video.stop).toHaveBeenCalled();
+    expect(hook.result.current.isScreenSharing).toBe(false);
+    expect(sfu.stopTracks).not.toHaveBeenCalledWith([
+      "screen-video-self",
+      "screen-audio-self",
+    ]);
+    hook.unmount();
+  });
 
   it("merges compact participant updates and forwards profile updates to the sidebar cache", async () => {
     const hook = renderHook(() =>

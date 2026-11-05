@@ -6,17 +6,41 @@
 
 import type { VoiceTimers } from "./voice-session";
 
+/** The slots that hold one track each. */
+export type TrackSlot = "microphone" | "camera";
+
 /**
- * What a client publishes on its camera source. Screen share is not a slot
- * yet: it keeps its own publication path.
+ * What a client publishes: its microphone and camera (one track each) and
+ * its screen share (the share's tracks, published and withdrawn together).
  */
-export type PublicationSlot = "microphone" | "camera";
+export type PublicationSlot = TrackSlot | "screen";
 
 /** Reconciled in this order: what peers hear first. */
 export const PUBLICATION_SLOTS: readonly PublicationSlot[] = [
   "microphone",
   "camera",
+  "screen",
 ];
+
+/**
+ * What the `screen` slot holds. A new object for every share: the
+ * reconciler compares them by identity.
+ *
+ * - `tracks`: a share captured by the platform's media stack (web:
+ *   getDisplayMedia or a desktop capture through CEF), published like the
+ *   camera (web: PartyTracks, `screen-video-<id>` and `screen-audio-<id>`).
+ * - `native`: a share the native pipeline captures, encodes and publishes
+ *   itself (web desktop: the Rust hardware publisher). The reconciler only
+ *   records it (see {@link PublicationReconciler.adopt}) so that withdrawing
+ *   the share is still its `unpublish`; a platform's `publish` of it does
+ *   nothing.
+ */
+export type ScreenPublication<T> =
+  | { readonly kind: "tracks"; readonly video: T; readonly audio: T | null }
+  | { readonly kind: "native" };
+
+/** A slot's value: a track, or for `screen` a {@link ScreenPublication}. */
+export type PublicationValue<T> = T | ScreenPublication<T>;
 
 /** What the user wants on one slot. */
 export interface SlotIntent<T> {
@@ -34,23 +58,35 @@ export interface SlotIntent<T> {
 
 /**
  * The platform's publications (web: SFUClient over PartyTracks). Every
- * method may reject or throw; the reconciler retries.
+ * method may reject or throw; the reconciler retries. On `microphone` and
+ * `camera` the value is a track; on `screen` it is a
+ * {@link ScreenPublication}.
  */
 export interface PublicationMedia<T> {
   /**
    * Publishes `track` on `slot`. On a slot that is already published (or
    * withdrawn and kept alive) this MUST behave as a replacement of its
-   * source, so publishing twice is harmless.
+   * source, so publishing twice is harmless. A `native` screen publication
+   * is already published by its pipeline: nothing to do.
    */
-  publish(slot: PublicationSlot, track: T): Promise<void> | void;
+  publish(
+    slot: PublicationSlot,
+    track: PublicationValue<T>,
+  ): Promise<void> | void;
   /**
    * Swaps the source of the slot's existing publication. Resolves false
    * when there is no publication to swap (the reconciler then publishes).
    */
-  replace(slot: PublicationSlot, track: T): Promise<boolean> | boolean;
+  replace(
+    slot: PublicationSlot,
+    track: PublicationValue<T>,
+  ): Promise<boolean> | boolean;
   /** Stops offering the slot's publication. */
   unpublish(slot: PublicationSlot): Promise<void> | void;
-  /** Mutes or unmutes the slot's published track. Synchronous. */
+  /**
+   * Mutes or unmutes the slot's published track (on `screen`: the share's
+   * audio). Synchronous.
+   */
   setEnabled(slot: PublicationSlot, enabled: boolean): void;
   /** Whether the media session has a publication on `slot` right now. */
   isPublished(slot: PublicationSlot): boolean;
@@ -61,12 +97,12 @@ export type PublicationOp<T> =
   | {
       readonly kind: "publish";
       readonly slot: PublicationSlot;
-      readonly track: T;
+      readonly track: PublicationValue<T>;
     }
   | {
       readonly kind: "replace";
       readonly slot: PublicationSlot;
-      readonly track: T;
+      readonly track: PublicationValue<T>;
     }
   | { readonly kind: "unpublish"; readonly slot: PublicationSlot }
   | {
@@ -87,12 +123,20 @@ export interface AppliedSlot<T> {
   readonly enabled: boolean | null;
 }
 
-export type PublicationIntent<T> = Readonly<
-  Record<PublicationSlot, SlotIntent<T>>
->;
-export type AppliedPublications<T> = Readonly<
-  Partial<Record<PublicationSlot, AppliedSlot<T>>>
->;
+export type PublicationIntent<T> = Readonly<{
+  microphone: SlotIntent<T>;
+  camera: SlotIntent<T>;
+  /** Missing: nothing wanted. `enabled` is whether the share's audio sends. */
+  screen?: SlotIntent<ScreenPublication<T>>;
+}>;
+export type AppliedPublications<T> = Readonly<{
+  microphone?: AppliedSlot<T>;
+  camera?: AppliedSlot<T>;
+  screen?: AppliedSlot<ScreenPublication<T>>;
+}>;
+
+type AnyIntent<T> = SlotIntent<PublicationValue<T>>;
+type AnyApplied<T> = AppliedSlot<PublicationValue<T>>;
 
 /**
  * The operations that take `applied` to `intent`. Pure. Per slot, in
@@ -115,10 +159,18 @@ export function planPublication<T>(
   applied: AppliedPublications<T>,
   isPublished: (slot: PublicationSlot) => boolean,
 ): PublicationOp<T>[] {
+  return planSlots<T>(intent, applied, isPublished);
+}
+
+function planSlots<T>(
+  intent: Readonly<Partial<Record<PublicationSlot, AnyIntent<T>>>>,
+  applied: Readonly<Partial<Record<PublicationSlot, AnyApplied<T>>>>,
+  isPublished: (slot: PublicationSlot) => boolean,
+): PublicationOp<T>[] {
   const ops: PublicationOp<T>[] = [];
   for (const slot of PUBLICATION_SLOTS) {
-    const want = intent[slot];
-    const have = applied[slot];
+    const want: AnyIntent<T> = intent[slot] ?? NO_INTENT;
+    const have: AnyApplied<T> | undefined = applied[slot];
     if (want.track === null) {
       const published = have ? have.track !== null : isPublished(slot);
       if (published) {
@@ -169,11 +221,16 @@ export function publicationRetryDelay(
 export type ReconcileResult<T> =
   /** Every slot matches the intent there is now. */
   | { readonly status: "converged" }
-  /** The retry budget ran out on `op`; the intent is kept. */
+  /**
+   * The retry budget ran out on `op` (the first slot it ran out on); the
+   * intent is kept. Every other slot converged, except `failedSlots`.
+   */
   | {
       readonly status: "failed";
       readonly op: PublicationOp<T>;
       readonly error: unknown;
+      /** Every slot whose budget ran out in this run (includes `op.slot`). */
+      readonly failedSlots: readonly PublicationSlot[];
     }
   /** The reconciler was disposed (the session ended). */
   | { readonly status: "disposed" };
@@ -189,6 +246,7 @@ export interface PublicationGeneration {
   readonly connection: number;
   readonly microphone: number;
   readonly camera: number;
+  readonly screen: number;
 }
 
 export interface PublicationReconcilerOptions<T> {
@@ -208,8 +266,8 @@ const NO_INTENT: SlotIntent<never> = { track: null, enabled: true };
 type OpOutcome = { readonly ok: true } | { readonly ok: false; error: unknown };
 
 /**
- * Owns one client's microphone and camera publications. Platforms set the
- * intent ({@link setTrack}, {@link setEnabled}) and ask for a
+ * Owns one client's microphone, camera and screen publications. Platforms
+ * set the intent ({@link setTrack}, {@link setEnabled}) and ask for a
  * {@link reconcile}; only the reconciler publishes, replaces or unpublishes.
  */
 export class PublicationReconciler<T> {
@@ -217,20 +275,30 @@ export class PublicationReconciler<T> {
   private readonly timers: VoiceTimers;
   private readonly retry: PublicationRetryPolicy;
   private readonly onOpError: PublicationReconcilerOptions<T>["onOpError"];
-  private intent: Record<PublicationSlot, SlotIntent<T>> = {
+  private intent: Record<PublicationSlot, AnyIntent<T>> = {
     microphone: NO_INTENT,
     camera: NO_INTENT,
+    screen: NO_INTENT,
   };
   private versions: Record<PublicationSlot, number> = {
     microphone: 0,
     camera: 0,
+    screen: 0,
   };
-  private applied: Partial<Record<PublicationSlot, AppliedSlot<T>>> = {};
+  private applied: Partial<Record<PublicationSlot, AnyApplied<T>>> = {};
   private connection = 0;
   /** The connection whose run is active, if any. */
   private running: number | null = null;
   private dirty = false;
   private failures = 0;
+  /**
+   * Slots whose retry budget ran out in the run in flight, with the failed
+   * operation: set aside so the other slots still converge.
+   */
+  private setAside = new Map<
+    PublicationSlot,
+    { readonly op: PublicationOp<T>; readonly error: unknown }
+  >();
   private backoff: { timer: unknown; wake: () => void } | null = null;
   private waiters: Array<(result: ReconcileResult<T>) => void> = [];
   private disposed = false;
@@ -247,6 +315,7 @@ export class PublicationReconciler<T> {
       connection: this.connection,
       microphone: this.versions.microphone,
       camera: this.versions.camera,
+      screen: this.versions.screen,
     };
   }
 
@@ -259,12 +328,16 @@ export class PublicationReconciler<T> {
     return this.disposed;
   }
 
-  intentFor(slot: PublicationSlot): SlotIntent<T> {
+  intentFor(slot: TrackSlot): SlotIntent<T>;
+  intentFor(slot: "screen"): SlotIntent<ScreenPublication<T>>;
+  intentFor(slot: PublicationSlot): AnyIntent<T> {
     return this.intent[slot];
   }
 
   /** What this connection has on `slot`; undefined when unknown. */
-  appliedFor(slot: PublicationSlot): AppliedSlot<T> | undefined {
+  appliedFor(slot: TrackSlot): AppliedSlot<T> | undefined;
+  appliedFor(slot: "screen"): AppliedSlot<ScreenPublication<T>> | undefined;
+  appliedFor(slot: PublicationSlot): AnyApplied<T> | undefined {
     return this.applied[slot];
   }
 
@@ -284,12 +357,16 @@ export class PublicationReconciler<T> {
    * call {@link reconcile}. A run in flight re-plans before its next
    * operation, and one waiting out a retry stops waiting.
    */
-  setTrack(slot: PublicationSlot, track: T | null): void {
+  setTrack(slot: TrackSlot, track: T | null): void;
+  setTrack(slot: "screen", share: ScreenPublication<T> | null): void;
+  setTrack(slot: PublicationSlot, track: PublicationValue<T> | null): void {
     if (this.disposed) return;
     const current = this.intent[slot];
     if (current.track === track) return;
     this.intent = { ...this.intent, [slot]: { ...current, track } };
     this.versions = { ...this.versions, [slot]: this.versions[slot] + 1 };
+    // A new intent gets a budget of its own, even in the run in flight.
+    this.setAside.delete(slot);
     this.dirty = true;
     // A run waiting out a retry plans again at once.
     this.backoff?.wake();
@@ -317,11 +394,22 @@ export class PublicationReconciler<T> {
 
   /**
    * Records `track` as already published on `slot` by someone else on this
-   * connection (web: a promoted standby's silence), so the reconciler
-   * replaces it rather than publishing beside it. Takes it as the intent
-   * when nothing is wanted on the slot yet.
+   * connection (web: a promoted standby's silence; a native screen share,
+   * published by its own pipeline), so the reconciler replaces or withdraws
+   * it rather than publishing beside it. Takes it as the intent when nothing
+   * is wanted on the slot yet.
    */
-  adopt(slot: PublicationSlot, track: T, enabled: boolean | null = null): void {
+  adopt(slot: TrackSlot, track: T, enabled?: boolean | null): void;
+  adopt(
+    slot: "screen",
+    share: ScreenPublication<T>,
+    enabled?: boolean | null,
+  ): void;
+  adopt(
+    slot: PublicationSlot,
+    track: PublicationValue<T>,
+    enabled: boolean | null = null,
+  ): void {
     if (this.disposed) return;
     this.applied = { ...this.applied, [slot]: { track, enabled } };
     if (this.intent[slot].track === null) {
@@ -384,15 +472,28 @@ export class PublicationReconciler<T> {
 
   private async run(connection: number): Promise<void> {
     this.running = connection;
+    this.setAside = new Map();
     try {
       while (this.owns(connection)) {
         this.dirty = false;
-        const ops = planPublication(this.intent, this.applied, (slot) =>
+        const ops = planSlots<T>(this.intent, this.applied, (slot) =>
           this.media.isPublished(slot),
-        );
+        ).filter((op) => !this.setAside.has(op.slot));
         if (ops.length === 0) {
           this.failures = 0;
-          this.settle({ status: "converged" });
+          const failed = this.setAside.values().next();
+          const failedSlots = [...this.setAside.keys()];
+          this.setAside = new Map();
+          this.settle(
+            failed.done
+              ? { status: "converged" }
+              : {
+                  status: "failed",
+                  op: failed.value.op,
+                  error: failed.value.error,
+                  failedSlots,
+                },
+          );
           return;
         }
         for (const op of ops) {
@@ -403,9 +504,10 @@ export class PublicationReconciler<T> {
           this.failures += 1;
           this.onOpError?.(op, outcome.error, this.failures);
           if (this.failures >= this.retry.attempts) {
+            // This slot is spent for the run; the others still converge.
             this.failures = 0;
-            this.settle({ status: "failed", op, error: outcome.error });
-            return;
+            this.setAside.set(op.slot, { op, error: outcome.error });
+            break;
           }
           await this.wait(publicationRetryDelay(this.failures, this.retry));
           break;
@@ -464,7 +566,10 @@ export class PublicationReconciler<T> {
     }
   }
 
-  private record(slot: PublicationSlot, track: T | null): void {
+  private record(
+    slot: PublicationSlot,
+    track: PublicationValue<T> | null,
+  ): void {
     this.applied = { ...this.applied, [slot]: { track, enabled: null } };
   }
 

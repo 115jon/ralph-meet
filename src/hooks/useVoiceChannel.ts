@@ -21,11 +21,7 @@ import {
   type LocalMediaOwner,
 } from "@/lib/local-media-manager";
 import { resolveOutputSinkId } from "@/lib/stored-device";
-import {
-  getCapturePolicy,
-  isDesktop,
-  isWgcCaptureAllowed,
-} from "@/lib/platform";
+import { isDesktop, isWgcCaptureAllowed } from "@/lib/platform";
 import { getHost } from "@/lib/host";
 import { areReconnectSoundsSuppressed } from "@/lib/reconnect-sound-guard";
 import type { ScreenShareOptions } from "@/lib/screen-share-types";
@@ -109,11 +105,26 @@ import {
   type CaptureRecord,
   type SavedDevice,
   type PublicationGeneration,
+  screenShareSubscription,
   type PublicationReconciler,
   type PublicationSlot,
+  type ReconcileResult,
+  type ScreenShareEvent,
+  type TrackSlot,
   type VoiceEndReason,
 } from "@ralph/voice";
 import { createSfuPublicationReconciler } from "@/lib/voice/publication-media";
+import {
+  attachScreenPreview,
+  createWebScreenShare,
+  getCustomPickerDesktopStream,
+  screenShareVideoConstraints,
+  screenSourceState,
+  webScreenShareRequest,
+  type WebScreenCapture,
+  type WebScreenShare,
+  type WebScreenSource,
+} from "@/lib/voice/screen-share-sources";
 import {
   playConnected,
   playDeafen,
@@ -141,7 +152,6 @@ import {
   useState,
 } from "react";
 import { useShallow } from "zustand/shallow";
-import type { ScreenShareSourceState } from "@/lib/screen-share-types";
 import { useNativeShareStats } from "@/hooks/useNativeShareStats";
 import { useSpatialAudioSync } from "@/hooks/useSpatialAudioSync";
 
@@ -164,148 +174,28 @@ export function mergeVoiceState(
   return "name" in incoming ? incoming : null;
 }
 
+/**
+ * Whether a reconcile failed on `slot` itself. A run sets a slot aside when
+ * its retries run out and still converges the others, so another slot's
+ * failure (the screen share's, say) is not this caller's.
+ */
+function failedOn(
+  result: ReconcileResult<MediaStreamTrack>,
+  slot: PublicationSlot,
+): result is Extract<ReconcileResult<MediaStreamTrack>, { status: "failed" }> {
+  return result.status === "failed" && result.failedSlots.includes(slot);
+}
+
 function disposeVoiceActivityStream(stream: MediaStream | null): void {
   stream?.getTracks().forEach((track) => track.stop());
 }
 
-const SCREEN_QUALITY_MAP: Record<
-  string,
-  { width: number; height: number; bitrate: number }
-> = {
-  "720p": { width: 1280, height: 720, bitrate: 5_000_000 },
-  "1080p": { width: 1920, height: 1080, bitrate: 8_000_000 },
-  "1440p": { width: 2560, height: 1440, bitrate: 14_000_000 },
-  "4k": { width: 3840, height: 2160, bitrate: 24_000_000 },
-};
-
-function getScreenQualitySettings(quality: string) {
-  const fps = quality.endsWith("60") ? 60 : 30;
-  const resKey = quality.replace(/\d+$/, "");
-  const res = SCREEN_QUALITY_MAP[resKey];
-  return { fps, res };
-}
-
-function desktopCaptureSourceId(
-  sourceId: string,
-  sourceKind?: "window" | "monitor" | "device",
-) {
-  if (sourceKind === "window" && sourceId.startsWith("window-")) {
-    return `window:${sourceId.slice("window-".length)}:0`;
-  }
-
-  if (sourceKind === "monitor" && sourceId.startsWith("monitor-")) {
-    return `screen:${sourceId.slice("monitor-".length)}:0`;
-  }
-
-  return null;
-}
-
-export async function getCustomPickerDesktopStream(options: {
-  sourceId?: string;
-  captureId?: string;
-  sourceKind?: "window" | "monitor" | "device";
-  withAudio: boolean;
-  videoConstraints: MediaTrackConstraints;
-  desktopMandatoryConstraints: Record<string, unknown>;
-}): Promise<MediaStream | null> {
-  if (!options.sourceId) return null;
-
-  if (options.sourceKind === "device") {
-    return navigator.mediaDevices.getUserMedia({
-      video: {
-        deviceId: { exact: options.sourceId },
-        ...options.videoConstraints,
-      },
-      audio: false,
-    });
-  }
-
-  const chromeMediaSourceId =
-    options.captureId ??
-    desktopCaptureSourceId(options.sourceId, options.sourceKind);
-  if (!chromeMediaSourceId) return null;
-
-  const constraints: MediaStreamConstraints = {
-    video: {
-      mandatory: {
-        chromeMediaSource: "desktop",
-        chromeMediaSourceId,
-        ...options.desktopMandatoryConstraints,
-      },
-    } as MediaTrackConstraints,
-    audio: false,
-  };
-
-  if (options.withAudio && options.sourceKind === "monitor") {
-    constraints.audio = {
-      mandatory: {
-        chromeMediaSource: "desktop",
-        chromeMediaSourceId,
-      },
-    } as MediaTrackConstraints;
-  }
-
-  return navigator.mediaDevices.getUserMedia(constraints);
-}
-
-function screenShareVideoConstraints(quality: string) {
-  const { fps, res } = getScreenQualitySettings(quality);
-  const browserVideoConstraints = {
-    ...(res
-      ? { width: { ideal: res.width }, height: { ideal: res.height } }
-      : {}),
-    frameRate: { ideal: fps, max: fps },
-    cursor: "always",
-  } as MediaTrackConstraints;
-
-  const desktopMandatoryConstraints: Record<string, unknown> = {
-    maxFrameRate: fps,
-    cursor: "always",
-  };
-
-  if (res) {
-    desktopMandatoryConstraints.maxWidth = res.width;
-    desktopMandatoryConstraints.maxHeight = res.height;
-  }
-
-  return { fps, res, browserVideoConstraints, desktopMandatoryConstraints };
-}
-
-/** Whether a screen share is driven by the native hardware pipeline or by CEF. */
-export type ScreenSharePreviewKind = "native" | "cef";
-
-export interface PreviewStartDecision {
-  /** Initial `isPreviewHidden` value for the session. */
-  isPreviewHidden: boolean;
-  /** Whether a CEF preview capture session should be opened for the shared source. */
-  openCefPreview: boolean;
-}
-
-/**
- * Pure decision for the initial Local_Preview state when a screen share starts.
- *
- * Native (hardware) shares default to PAUSED so a second WGC/getDisplayMedia
- * session is not opened on the same source, which would add capture overhead
- * (Req 5.1). If the user explicitly enables "Always Show Stream Preview", that
- * preference overrides the native default and opens the preview immediately.
- * CEF (non-native) shares keep the existing default of showing the preview
- * (Req 5.4). The resume control later reopens the preview through the existing
- * `togglePreviewHidden` flow (Req 5.3).
- *
- * Preview is paused (and no CEF preview session is opened) if and only if the
- * share is native and the user has not opted into always showing the preview.
- */
-export function resolvePreviewStartState(
-  kind: ScreenSharePreviewKind,
-  alwaysShowPreview = false,
-): PreviewStartDecision {
-  const isNative = kind === "native";
-  const shouldPausePreview = isNative && !alwaysShowPreview;
-  return {
-    isPreviewHidden: shouldPausePreview,
-    openCefPreview: !shouldPausePreview,
-  };
-}
+export {
+  getCustomPickerDesktopStream,
+  resolvePreviewStartState,
+  type PreviewStartDecision,
+  type ScreenSharePreviewKind,
+} from "@/lib/voice/screen-share-sources";
 
 export interface ScreenVideoSubscriptionDecisionInput {
   /** The viewer pressed Watch on this share. */
@@ -324,7 +214,12 @@ export function resolveScreenVideoSubscription({
   isWatched,
   isFocused,
 }: ScreenVideoSubscriptionDecisionInput): boolean {
-  return isWatched || isFocused;
+  return screenShareSubscription({
+    watched: isWatched,
+    shareFocused: isFocused,
+    participantFocused: isFocused,
+    alwaysHear: false,
+  }).video;
 }
 
 /**
@@ -455,7 +350,7 @@ export function resolvePreviewHideState(args: {
  * the existing flow reopens the CEF preview for that source via the injected
  * `openPreviewStream` opener. On success the preview is shown with the new
  * stream; on failure it stays paused. For a non-native (CEF) share the existing
- * `screenStreamRef` stream is restored without opening anything new.
+ * share's local stream is restored without opening anything new.
  *
  * Extracting the decision here keeps the side-effectful pieces (ref assignment,
  * `onended` teardown wiring, dispatch) in the hook while making the resume
@@ -493,135 +388,6 @@ export async function resolvePreviewResume(args: {
     openedStream: false,
     reopenFailed: false,
   };
-}
-
-function describeVideoTrack(track?: MediaStreamTrack) {
-  if (!track) return null;
-  const settings = track.getSettings();
-  return {
-    id: track.id,
-    label: track.label,
-    readyState: track.readyState,
-    muted: track.muted,
-    width: settings.width,
-    height: settings.height,
-    frameRate: settings.frameRate,
-    displaySurface: (
-      settings as MediaTrackSettings & { displaySurface?: string }
-    ).displaySurface,
-    deviceId: settings.deviceId,
-  };
-}
-
-function describeAudioTrack(track?: MediaStreamTrack) {
-  if (!track) return null;
-  const settings = track.getSettings();
-  return {
-    id: track.id,
-    label: track.label,
-    readyState: track.readyState,
-    muted: track.muted,
-    deviceId: settings.deviceId,
-    sampleRate: (settings as MediaTrackSettings & { sampleRate?: number })
-      .sampleRate,
-    channelCount: (settings as MediaTrackSettings & { channelCount?: number })
-      .channelCount,
-  };
-}
-
-function logScreenShare(message: string, details?: unknown) {
-  if (details === undefined) {
-    screenLog.info(message);
-    return;
-  }
-  try {
-    screenLog.info(
-      `${message} ${JSON.stringify(details, (_key, value) => {
-        if (value instanceof Error) {
-          return {
-            name: value.name,
-            message: value.message,
-            stack: value.stack,
-          };
-        }
-        return value;
-      })}`,
-    );
-  } catch {
-    screenLog.info(message, details);
-  }
-}
-
-async function probeNativeHardwareEncoders() {
-  if (!isDesktop()) return null;
-  try {
-    return await getHost().media.probeHardwareVideoEncoders();
-  } catch (error) {
-    return { error };
-  }
-}
-
-function hasNativeH264HardwareEncoder(probe: unknown) {
-  return (
-    Array.isArray((probe as { h264?: unknown[] } | null)?.h264) &&
-    ((probe as { h264?: unknown[] }).h264?.length ?? 0) > 0
-  );
-}
-
-async function applyScreenTrackQuality(
-  stream: MediaStream | null,
-  quality: string,
-  sfu: SFUClient | null,
-  participantId: string | null,
-) {
-  const videoTrack = stream?.getVideoTracks()[0];
-  if (!videoTrack) return;
-
-  const { fps, res } = getScreenQualitySettings(quality);
-  if (res) {
-    logScreenShare("Applying screen quality", {
-      quality,
-      requested: {
-        width: res.width,
-        height: res.height,
-        fps,
-        bitrate: res.bitrate,
-      },
-      before: describeVideoTrack(videoTrack),
-    });
-    await videoTrack
-      .applyConstraints({
-        width: { ideal: res.width, max: res.width },
-        height: { ideal: res.height, max: res.height },
-        frameRate: { ideal: fps, max: fps },
-      })
-      .catch((err) => {
-        screenLog.warn("Failed to apply video constraints:", err);
-      });
-    logScreenShare("Applied screen quality", {
-      quality,
-      after: describeVideoTrack(videoTrack),
-      constraints: videoTrack.getConstraints?.(),
-    });
-  }
-
-  if (!sfu || !participantId) return;
-
-  await sfu
-    .updateSenderEncoding(`screen-video-${participantId}`, {
-      maxBitrate: res?.bitrate,
-      maxFramerate: fps,
-      scaleResolutionDownBy: 1,
-    })
-    .catch((err) => {
-      screenLog.warn("Failed to update sender encoding:", err);
-    });
-  logScreenShare("Updated sender encoding", {
-    trackName: `screen-video-${participantId}`,
-    quality,
-    maxBitrate: res?.bitrate,
-    maxFramerate: fps,
-  });
 }
 
 export interface UseVoiceChannelProps {
@@ -967,23 +733,6 @@ export function useVoiceChannel({
 
   const { isHookActive } = useNativeShareStats();
 
-  // Keep the synchronous source ref in lockstep with the reactive state so
-  // imperative callbacks (toggleScreenShare) can re-target the active source.
-  useEffect(() => {
-    currentScreenSourceRef.current = currentScreenSource ?? null;
-  }, [currentScreenSource]);
-  const isStreamingAudioRef = useRef(isStreamingAudio);
-  useEffect(() => {
-    isStreamingAudioRef.current = isStreamingAudio;
-  }, [isStreamingAudio]);
-  // Native stream-audio toggles restart the publisher (~1-2 s), and
-  // `isStreamingAudio` only flips once a restart lands. One restart runs at a
-  // time; toggles during it only update `wanted`, and the latest one wins.
-  const streamAudioRestartRef = useRef<{
-    running: boolean;
-    wanted: boolean | null;
-  }>({ running: false, wanted: null });
-
   useEffect(() => {
     const localUserId =
       mode === "room" ? myIdRef.current || null : user?.id || null;
@@ -1282,7 +1031,7 @@ export function useVoiceChannel({
    * it displaced: that may be another abandoned change's, already released.
    */
   const committedPublicationTrack = useCallback(
-    (slot: PublicationSlot): MediaStreamTrack | null => {
+    (slot: TrackSlot): MediaStreamTrack | null => {
       const live = (track: MediaStreamTrack | null | undefined) =>
         track && track.readyState !== "ended" ? track : null;
       if (slot === "camera") {
@@ -1317,7 +1066,105 @@ export function useVoiceChannel({
     createLocalMediaOwner(),
   );
   const standbyMediaOwnerRef = useRef<LocalMediaOwner | null>(null);
-  const screenStreamRef = useRef<MediaStream | null>(null);
+  const alwaysShowStreamPreviewRef = useRef(false);
+  // A native share ended by itself; set below, where it is defined.
+  const nativeShareEndedRef = useRef<
+    (
+      rawPayload: unknown,
+      client: SFUClient | null,
+      origin: "backend" | "reconnect",
+    ) => void
+  >(() => {});
+  // The one owner of this session's screen share (packages/voice,
+  // SCREEN_SHARE.md); it publishes through the client's reconciler.
+  // Created for a client on first use and disposed by the teardown.
+  const screenShareRef = useRef<{
+    readonly client: SFUClient;
+    readonly share: WebScreenShare;
+  } | null>(null);
+  const existingScreenShare = useCallback(
+    (client: SFUClient | null): WebScreenShare | null => {
+      const current = screenShareRef.current;
+      return client && current?.client === client && !current.share.isDisposed
+        ? current.share
+        : null;
+    },
+    [],
+  );
+  const screenShareFor = useCallback(
+    (client: SFUClient): WebScreenShare => {
+      const existing = existingScreenShare(client);
+      if (existing) return existing;
+      screenShareRef.current?.share.dispose();
+      const share = createWebScreenShare({
+        sfu: client,
+        publication: publicationFor(client),
+        participantId: () => myIdRef.current,
+        alwaysShowPreview: () => alwaysShowStreamPreviewRef.current,
+      });
+      share.subscribe(
+        (event: ScreenShareEvent<WebScreenSource, WebScreenCapture>) => {
+          switch (event.type) {
+            case "started":
+            case "updated": {
+              const { request, capture, path } = event.share;
+              voiceDispatch({
+                type: "SET_SCREEN_SHARING",
+                payload: true,
+                stream: capture.stream,
+                audio: request.audio,
+              });
+              if (event.type === "started" && path === "native") {
+                voiceDispatch({
+                  type: "SET_PREVIEW_HIDDEN",
+                  payload: capture.previewHidden,
+                  stream: capture.stream,
+                });
+              }
+              voiceDispatch({
+                type: "SET_SCREEN_QUALITY",
+                payload: request.quality,
+              });
+              if (event.type === "started") {
+                voiceDispatch({
+                  type: "SET_SCREEN_SOURCE",
+                  payload: screenSourceState(request.source),
+                });
+                playScreenShareStart();
+              }
+              return;
+            }
+            case "restart-failed":
+              screenLog.warn(
+                "Screen share restart failed; the live share is kept",
+                event.error,
+              );
+              return;
+            case "ended":
+              if (event.reason === "failed") {
+                screenLog.error("Screen share failed:", event.error);
+              }
+              voiceDispatch({
+                type: "SET_SCREEN_SHARING",
+                payload: false,
+                stream: null,
+                audio: false,
+              });
+              voiceDispatch({ type: "SET_SCREEN_SOURCE", payload: null });
+              if (event.reason === "stopped" && event.announced) {
+                playScreenShareStop();
+              }
+              return;
+            default:
+              return;
+          }
+        },
+      );
+      screenShareRef.current = { client, share };
+      return share;
+    },
+    [existingScreenShare, publicationFor],
+  );
   const participantsRef = useRef<Map<string, VoiceState>>(new Map());
   const voiceChannelMembersRef = useRef(
     voiceChannelStates[channelId ?? ""] ?? [],
@@ -1360,12 +1207,6 @@ export function useVoiceChannel({
   const myIdRef = useRef<string>("");
   const uuidToUserIdRef = useRef<Map<string, string>>(new Map());
   const speakingByParticipantRef = useRef<Record<string, boolean>>({});
-  // Mirrors `currentScreenSource` for synchronous reads inside imperative
-  // callbacks (toggleScreenShare) without adding it to their dependency arrays.
-  // Lets a mid-share quality/audio change re-target the SAME source instead of
-  // falling through to a fresh getDisplayMedia capture (which would break a
-  // live native hardware share).
-  const currentScreenSourceRef = useRef<ScreenShareSourceState | null>(null);
   const {
     hasMicrophone,
     hasCamera,
@@ -1434,6 +1275,7 @@ export function useVoiceChannel({
       };
     }),
   );
+  alwaysShowStreamPreviewRef.current = alwaysShowStreamPreview;
   const noiseReductionSupported = isNoiseReductionProviderSupported(
     noiseReductionProvider,
   );
@@ -1738,15 +1580,18 @@ export function useVoiceChannel({
       // Re-apply screen-audio volume override — setParticipantVolume
       // sets ALL GainNodes (including screen-audio) to the same volume.
       // Screen-audio should only be audible when focused or alwaysHear.
-      const alwaysHearPeer = !!settings.alwaysHear;
-      const isFocusedPeer =
-        focusedId === `remote-screen-${appUserId}` ||
-        focusedId === `remote-camera-${appUserId}`;
-      const wantsScreenAudio = isFocusedPeer || alwaysHearPeer;
+      const { audible } = screenShareSubscription({
+        watched: false,
+        shareFocused: focusedId === `remote-screen-${appUserId}`,
+        participantFocused:
+          focusedId === `remote-screen-${appUserId}` ||
+          focusedId === `remote-camera-${appUserId}`,
+        alwaysHear: !!settings.alwaysHear,
+      });
       sfuRef.current?.setTrackVolume(
         uuid,
         `screen-audio-${uuid}`,
-        wantsScreenAudio ? streamVolume : 0,
+        audible ? streamVolume : 0,
       );
     }
   }, [
@@ -1866,24 +1711,30 @@ export function useVoiceChannel({
       // and back deactivates the WebRTC media pipeline, causing the Web Audio
       // source to read silence even after reactivation. Instead, control
       // audibility purely through the GainNode volume.
-      const wantsScreenAudio = isFocused || alwaysHear;
+      // packages/voice SCREEN_SHARE.md, "Watching".
+      const subscription = screenShareSubscription({
+        watched: isWatched,
+        shareFocused: isScreenFocused,
+        participantFocused: isFocused,
+        alwaysHear,
+      });
       const streamVolume =
         currentSettingsRef.current.isDeafened || settings.muted
           ? 0
           : (settings.streamVolume ?? settings.volume) / 100;
-      sfu.setRemoteTrackSubscription(`screen-audio-${uuid}`, true);
+      sfu.setRemoteTrackSubscription(
+        `screen-audio-${uuid}`,
+        subscription.audio,
+      );
       sfu.setTrackVolume(
         uuid,
         `screen-audio-${uuid}`,
-        wantsScreenAudio ? streamVolume : 0,
+        subscription.audible ? streamVolume : 0,
       );
 
       sfu.setRemoteTrackSubscription(
         `screen-video-${uuid}`,
-        resolveScreenVideoSubscription({
-          isWatched,
-          isFocused: isScreenFocused,
-        }),
+        subscription.video,
       );
       // Always pulled; the simulcast layer follows the tile's rendered size.
       sfu.setRemoteTrackSubscription(`cam-video-${uuid}`, true);
@@ -2338,7 +2189,8 @@ export function useVoiceChannel({
           const generation = publication.generation;
           const result = await publication.reconcile();
           const current =
-            result.status === "converged" &&
+            result.status !== "disposed" &&
+            !failedOn(result, "microphone") &&
             publication.isCurrent(generation, "microphone") &&
             sfuRef.current === sfu &&
             localStreamRef.current === recoveryStream;
@@ -2352,7 +2204,7 @@ export function useVoiceChannel({
               void publication.reconcile();
             }
             recoveryProcessor.destroy();
-            if (result.status === "failed") {
+            if (failedOn(result, "microphone")) {
               sfu.outboundAudioSentinel?.resetMonitoring();
               vcLog.warn(
                 "Failed to recover stalled outbound microphone audio",
@@ -2845,12 +2697,18 @@ export function useVoiceChannel({
     // back as participants-sync, a new Ready as joined.
     onSfu("disconnected", () => voiceSession.connectionLost());
 
+    // The native share could not come back after the voice reconnect.
+    onSfu("native-screen-share-ended", (payload) => {
+      nativeShareEndedRef.current(payload, sfu, "reconnect");
+    });
+
     onSfu("voice-reconnected", () => {
       void (async () => {
         vcLog.info("Voice reconnected — re-publishing local tracks");
         // The media session has no publications: everything wanted is
         // published afresh, including a capture sync's track still on its
-        // way (it commits its own processor when its publish converges).
+        // way (it commits its own processor when its publish converges) and
+        // a browser screen share (a native one reconnects on its own).
         const publication = existingPublication(sfu);
         if (publication) {
           // The republish applies the mute as it is now.
@@ -2867,23 +2725,6 @@ export function useVoiceChannel({
             );
             restartVadMonitoring(sfu);
           }
-        }
-
-        // Screen share keeps its own publication path for now.
-        const activeScreenTracks = (): MediaStreamTrack[] =>
-          !sfu.isNativeScreenShareActive
-            ? (screenStreamRef.current
-                ?.getTracks()
-                .filter((track) => track.readyState === "live") ?? [])
-            : [];
-        for (let attempt = 0; attempt < 3; attempt += 1) {
-          const screenStream = screenStreamRef.current;
-          const tracks = activeScreenTracks();
-          if (tracks.length === 0) return;
-          vcLog.info("Voice reconnected — re-publishing active screen tracks");
-          await sfu.publishTracks(new MediaStream(tracks), "screen");
-          if (sfuRef.current !== sfu) return;
-          if (screenStreamRef.current === screenStream) return;
         }
       })().catch((error) => {
         vcLog.warn("Voice reconnect publication failed", error);
@@ -3219,18 +3060,18 @@ export function useVoiceChannel({
       // The publication intents this run set, so an abandoned run can hand
       // those slots back (see revertPublication).
       const ownIntents: Array<{
-        slot: PublicationSlot;
+        slot: TrackSlot;
         generation: PublicationGeneration;
       }> = [];
       const wantPublished = async (
-        slot: PublicationSlot,
+        slot: TrackSlot,
         track: MediaStreamTrack,
       ): Promise<boolean> => {
         publication.setTrack(slot, track);
         const generation = publication.generation;
         ownIntents.push({ slot, generation });
         const result = await publication.reconcile();
-        if (result.status === "failed") throw result.error;
+        if (failedOn(result, slot)) throw result.error;
         return publication.isCurrent(generation, slot);
       };
       const disposeStaleResources = (
@@ -4126,6 +3967,13 @@ export function useVoiceChannel({
               resetAutomaticSoundboardSession(soundboardSessionId, generation);
           },
           releaseLocalMedia: ({ client }) => {
+            // Sharing stops with the session: its captures are released
+            // (the media session and the native pipeline go with the
+            // client's disconnect).
+            if (screenShareRef.current?.client === client) {
+              screenShareRef.current.share.dispose();
+              screenShareRef.current = null;
+            }
             // Publications end with the media session; nothing more may be
             // published, replaced or retried for this client.
             if (publicationRef.current?.client === client) {
@@ -4140,17 +3988,11 @@ export function useVoiceChannel({
             publishedAudioProcessorRef.current?.destroy();
             publishedAudioProcessorRef.current = null;
             discardEarlyAudioProcessor(earlyAudioProcessorRef);
-            for (const stream of [
-              localStreamRef.current,
-              screenStreamRef.current,
-            ]) {
-              stream?.getTracks().forEach((track) => {
-                track.onended = null;
-                track.stop();
-              });
-            }
+            localStreamRef.current?.getTracks().forEach((track) => {
+              track.onended = null;
+              track.stop();
+            });
             localStreamRef.current = null;
-            screenStreamRef.current = null;
             // Also invalidates a capture that may still be pending.
             releaseLocalStream(endedMediaOwner);
             if (standbyMediaOwnerRef.current) {
@@ -4448,7 +4290,7 @@ export function useVoiceChannel({
         publication.setTrack("camera", cameraTrack);
         const result = await publication.reconcile();
         if (!isCurrent()) return;
-        if (result.status === "failed") throw result.error;
+        if (failedOn(result, "camera")) throw result.error;
       } else {
         if (!isCurrent()) return;
         stopCameraBackgroundEffect(true);
@@ -4464,7 +4306,7 @@ export function useVoiceChannel({
         publication.setTrack("camera", null);
         const result = await publication.reconcile();
         if (!isCurrent()) return;
-        if (result.status === "failed") throw result.error;
+        if (failedOn(result, "camera")) throw result.error;
       }
       if (!isCurrent()) return;
       voiceDispatch({ type: "SET_CAMERA", payload: newState });
@@ -4494,605 +4336,61 @@ export function useVoiceChannel({
     isCaptureInFlight,
   ]);
 
+  // ── Screen share ────────────────────────────────────────────────────────────
+  // The lifecycle (start, restart, audio, quality, stop, failure) is the
+  // voice package's ScreenShare (packages/voice/SCREEN_SHARE.md); this only
+  // turns the UI's calls into its commands. The UI state follows its events
+  // (see screenShareFor).
   const toggleScreenShare = useCallback(
     async (options?: ScreenShareOptions) => {
-      if (
-        isScreenSharing &&
-        !options?.changeSource &&
-        !options?.quality &&
-        options?.withAudio === undefined
-      ) {
-        // ── Stop screen sharing ─────────────────────────────────────────
-        if (sfuRef.current && myIdRef.current) {
-          await sfuRef.current.stopNativeScreenShare();
-          sfuRef.current.stopTracks([
-            `screen-video-${myIdRef.current}`,
-            `screen-audio-${myIdRef.current}`,
-          ]);
-        }
-        screenStreamRef.current?.getTracks().forEach((t) => {
-          t.onended = null;
-          t.stop();
-        });
-        screenStreamRef.current = null;
-        voiceDispatch({
-          type: "SET_SCREEN_SHARING",
-          payload: false,
-          stream: null,
-          audio: false,
-        });
-        voiceDispatch({ type: "SET_SCREEN_SOURCE", payload: null });
-        playScreenShareStop();
-      } else {
-        // A failed restart leaves the share state set (it stops the old
-        // capture first) with nothing published. Clear it unless a capture is
-        // still live. A failed first start never set the state.
-        const resetDeadScreenShare = (reason: string) => {
-          if (!isScreenSharing) return;
-          const hasLiveScreenStream = !!screenStreamRef.current
-            ?.getVideoTracks()
-            .some((track) => track.readyState === "live");
-          if (
-            hasLiveScreenStream ||
-            sfuRef.current?.isNativeScreenShareActive
-          ) {
-            return;
-          }
-          logScreenShare("Clearing screen share state after a failed restart", {
-            reason,
-          });
-          screenStreamRef.current?.getTracks().forEach((t) => {
-            t.onended = null;
-            t.stop();
-          });
-          screenStreamRef.current = null;
-          if (sfuRef.current && myIdRef.current) {
-            sfuRef.current.stopTracks([
-              `screen-video-${myIdRef.current}`,
-              `screen-audio-${myIdRef.current}`,
-            ]);
-          }
-          voiceDispatch({
-            type: "SET_SCREEN_SHARING",
-            payload: false,
-            stream: null,
-            audio: false,
-          });
-          voiceDispatch({ type: "SET_SCREEN_SOURCE", payload: null });
-        };
-        try {
-          const targetQuality = options?.quality || currentScreenQuality;
-          const targetAudio =
-            options?.withAudio !== undefined
-              ? options.withAudio
-              : isStreamingAudio;
-
-          // Mid-share quality/audio changes (and audio toggles) often arrive with
-          // NO source fields — e.g. the quality dropdown calls
-          // toggleScreenShare({ quality }). If we have a live share whose source we
-          // know, re-target THAT source so the restart routes back through the
-          // same capture path (native hardware hook for a window/monitor). Without
-          // this, `selectedDesktopSource` below is false, the native publisher is
-          // never restarted (nor stopped), and we fall through to getDisplayMedia —
-          // which grabs a fresh full-monitor stream and publishes it on top of the
-          // still-live native publisher, colliding the SDP ("invalid proposed
-          // signaling state transition from stable applying remote answer") and
-          // breaking the stream. Reusing the source makes quality switching seamless.
-          const activeSource = currentScreenSourceRef.current;
-          const activeSourceOptions: ScreenShareOptions | undefined =
-            activeSource?.sourceId
-              ? {
-                  sourceId: activeSource.sourceId ?? undefined,
-                  captureId: activeSource.captureId ?? undefined,
-                  sourceName: activeSource.sourceName ?? undefined,
-                  sourceKind: activeSource.sourceKind ?? undefined,
-                  sourceAppName: activeSource.sourceAppName ?? undefined,
-                  sourceIcon: activeSource.sourceIcon ?? undefined,
-                }
-              : undefined;
-          const effectiveOptions: ScreenShareOptions | undefined =
-            isScreenSharing && isDesktop() && activeSourceOptions
-              ? {
-                  ...activeSourceOptions,
-                  ...options,
-                }
-              : options;
-
-          // ── Seamless in-place quality switch (zero-overhead) ────────────────
-          // If the only change is quality (not the source, not audio) and a live
-          // NATIVE hardware share is running, reconfigure the encoder in place:
-          // no re-injection of the game-capture hook, no new capture session, no
-          // WebRTC renegotiation, no track teardown. The native encoder rebuilds
-          // its downscale target + bitrate and emits a fresh keyframe the existing
-          // track carries. Falls through to the full restart path only if the
-          // in-place switch reports it could not apply (no active native share).
-          //
-          // This must also catch the case where the picker/modal re-submits the
-          // SAME source at a new quality with `changeSource: true` (it sets that
-          // flag whenever a share is already live). A full restart there republishes
-          // the same-named track but does NOT renegotiate the broadcast resolution
-          // with the SFU, so viewers stay at the old resolution even though the
-          // native encoder switched — the exact 720p-stuck-after-1080p bug. So we
-          // treat "same source + quality differs + audio unchanged" as quality-only.
-          const activeSourceId = activeSource?.sourceId ?? null;
-          const requestedSourceId = options?.sourceId ?? null;
-          const sameSource =
-            requestedSourceId === null || requestedSourceId === activeSourceId;
-          const audioUnchanged =
-            options?.withAudio === undefined ||
-            options.withAudio === isStreamingAudio;
-          const qualityDiffers =
-            options?.quality !== undefined &&
-            options.quality !== currentScreenQuality;
-          const isQualityOnlyChange =
-            isScreenSharing && sameSource && qualityDiffers && audioUnchanged;
-          if (
-            isQualityOnlyChange &&
-            sfuRef.current?.isNativeScreenShareActive
-          ) {
-            const applied =
-              await sfuRef.current.updateNativeScreenQuality(targetQuality);
-            if (applied) {
-              voiceDispatch({
-                type: "SET_SCREEN_QUALITY",
-                payload: targetQuality,
-              });
-              logScreenShare("Applied in-place native quality switch", {
-                quality: targetQuality,
-                sameSource,
-                hadChangeSourceFlag: !!options?.changeSource,
-              });
-              return;
-            }
-            // else: fall through to the full native restart below.
-          }
-
-          if (
-            isScreenSharing &&
-            !options?.changeSource &&
-            screenStreamRef.current
-          ) {
-            voiceDispatch({
-              type: "SET_SCREEN_QUALITY",
-              payload: targetQuality,
-            });
-            voiceDispatch({
-              type: "SET_SCREEN_SHARING",
-              payload: true,
-              stream: localScreenStream,
-              audio: targetAudio,
-            });
-            if (screenStreamRef.current) {
-              screenStreamRef.current
-                .getAudioTracks()
-                .forEach((t) => (t.enabled = targetAudio));
-              await applyScreenTrackQuality(
-                screenStreamRef.current,
-                targetQuality,
-                sfuRef.current,
-                myIdRef.current,
-              );
-            }
-            return;
-          }
-
-          const { browserVideoConstraints, desktopMandatoryConstraints } =
-            screenShareVideoConstraints(targetQuality);
-
-          const selectedDesktopSource =
-            isDesktop() && !!effectiveOptions?.sourceId;
-          const captureStartedAt = performance.now();
-          const elapsed = () =>
-            Math.round(performance.now() - captureStartedAt);
-          logScreenShare("Starting capture", {
-            elapsedMs: 0,
-            selectedDesktopSource,
-            sourceId: effectiveOptions?.sourceId ?? null,
-            captureId: effectiveOptions?.captureId ?? null,
-            sourceKind: effectiveOptions?.sourceKind ?? null,
-            sourceName: effectiveOptions?.sourceName ?? null,
-            pickerSelectionElapsedMs:
-              effectiveOptions?.pickerSelectionElapsedMs ?? null,
-            pickerToCaptureStartMs: effectiveOptions?.pickerOpenedAt
-              ? Math.round(captureStartedAt - effectiveOptions.pickerOpenedAt)
-              : null,
-            quality: targetQuality,
-            withAudio: targetAudio,
-            browserVideoConstraints,
-            desktopMandatoryConstraints,
-          });
-          const skipNative = !!effectiveOptions?.skipNative;
-          let hardwareEncoderProbe: unknown = null;
-          if (selectedDesktopSource && !skipNative) {
-            const capturePolicy = getCapturePolicy();
-            logScreenShare("Discord-style capture summary", {
-              sourceId:
-                effectiveOptions?.captureId ?? effectiveOptions?.sourceId,
-              sourceName: effectiveOptions?.sourceName ?? null,
-              type:
-                effectiveOptions?.sourceKind === "monitor"
-                  ? "screen"
-                  : (effectiveOptions?.sourceKind ?? null),
-              capturePolicy,
-              mayAttemptVideoHook: effectiveOptions?.sourceKind === "window",
-              useGraphicsCapture: true,
-              useCaptureDeviceForEncode: "native-wmf-hardware-first",
-              requestedHardwareEncode: true,
-              note:
-                capturePolicy === "hook-exclusive"
-                  ? "Hook-exclusive policy forces the native hook for eligible windows; WGC/CEF fallback is disabled."
-                  : "Window shares may speculatively try the native hook first, but must fall back quickly to WGC/CEF if no frames arrive.",
-            });
-            hardwareEncoderProbe = await probeNativeHardwareEncoders();
-            logScreenShare(
-              "Native hardware encoder probe",
-              hardwareEncoderProbe,
-            );
-          }
-          let stream: MediaStream | null = null;
-          if (selectedDesktopSource && isScreenSharing) {
-            // Stop old native pipeline AND old preview stream before any restart.
-            await sfuRef.current?.stopNativeScreenShare();
-            screenStreamRef.current?.getTracks().forEach((t) => {
-              t.onended = null;
-              t.stop();
-            });
-            screenStreamRef.current = null;
-          }
-          if (
-            selectedDesktopSource &&
-            !skipNative &&
-            effectiveOptions?.sourceKind !== "device" &&
-            effectiveOptions?.sourceId &&
-            sfuRef.current &&
-            hasNativeH264HardwareEncoder(hardwareEncoderProbe)
-          ) {
-            try {
-              logScreenShare("Calling native hardware screen publisher", {
-                elapsedMs: elapsed(),
-                sourceId: effectiveOptions.sourceId,
-                sourceKind: effectiveOptions.sourceKind,
-                sourceName: effectiveOptions.sourceName ?? null,
-                quality: targetQuality,
-                withAudio: targetAudio,
-              });
-              await sfuRef.current.publishNativeScreenShare({
-                sourceId: effectiveOptions.sourceId,
-                sourceName: effectiveOptions.sourceName ?? null,
-                quality: targetQuality,
-                withAudio: targetAudio,
-              });
-              if (!sfuRef.current.isNativeScreenShareActive) {
-                resetDeadScreenShare("native publisher inactive after publish");
-                return;
-              }
-              logScreenShare("Native hardware screen publisher connected", {
-                elapsedMs: elapsed(),
-                sourceId: effectiveOptions.sourceId,
-                sourceKind: effectiveOptions.sourceKind,
-                sourceName: effectiveOptions.sourceName ?? null,
-              });
-
-              // ── Preview-paused default for native shares (Req 5.1, 5.2) ────
-              // Native hardware capture already runs a WGC session on the source.
-              // Opening a second CEF/getDisplayMedia preview on the same source
-              // adds capture overhead, so default the local preview to PAUSED
-              // unless the user explicitly opted into always showing it.
-              const previewDecision = resolvePreviewStartState(
-                "native",
-                alwaysShowStreamPreview,
-              );
-              let previewStream: MediaStream | null = null;
-              if (previewDecision.openCefPreview) {
-                try {
-                  previewStream = await getCustomPickerDesktopStream({
-                    sourceId: effectiveOptions.sourceId,
-                    captureId: effectiveOptions.captureId ?? undefined,
-                    sourceKind: effectiveOptions.sourceKind ?? undefined,
-                    withAudio: false,
-                    videoConstraints: browserVideoConstraints,
-                    desktopMandatoryConstraints,
-                  });
-                } catch (error) {
-                  previewLog.warn(
-                    "Failed to open native share preview on start",
-                    error,
-                  );
-                }
-              }
-
-              if (previewStream) {
-                screenStreamRef.current = previewStream;
-                const videoTrack = previewStream.getVideoTracks()[0];
-                if (videoTrack) {
-                  videoTrack.onended = async () => {
-                    if (screenStreamRef.current !== previewStream) return;
-                    screenStreamRef.current = null;
-                    await sfuRef.current?.stopNativeScreenShare();
-                    if (sfuRef.current && myIdRef.current) {
-                      sfuRef.current.stopTracks([
-                        `screen-video-${myIdRef.current}`,
-                        `screen-audio-${myIdRef.current}`,
-                      ]);
-                    }
-                    voiceDispatch({
-                      type: "SET_SCREEN_SHARING",
-                      payload: false,
-                      stream: null,
-                      audio: false,
-                    });
-                    voiceDispatch({ type: "SET_SCREEN_SOURCE", payload: null });
-                  };
-                }
-              } else {
-                screenStreamRef.current = null;
-              }
-
-              const isPreviewHidden = previewDecision.openCefPreview
-                ? !previewStream
-                : previewDecision.isPreviewHidden;
-
-              voiceDispatch({
-                type: "SET_SCREEN_SHARING",
-                payload: true,
-                stream: previewStream,
-                audio: targetAudio,
-              });
-              voiceDispatch({
-                type: "SET_PREVIEW_HIDDEN",
-                payload: isPreviewHidden,
-                stream: previewStream,
-              });
-              voiceDispatch({
-                type: "SET_SCREEN_QUALITY",
-                payload: targetQuality,
-              });
-              voiceDispatch({
-                type: "SET_SCREEN_SOURCE",
-                payload: {
-                  sourceId: effectiveOptions?.sourceId ?? null,
-                  captureId: effectiveOptions?.captureId ?? null,
-                  sourceName: effectiveOptions?.sourceName ?? null,
-                  sourceKind: effectiveOptions?.sourceKind ?? null,
-                  sourceAppName: effectiveOptions?.sourceAppName ?? null,
-                  sourceIcon: effectiveOptions?.sourceIcon ?? null,
-                } satisfies ScreenShareSourceState,
-              });
-              playScreenShareStart();
-              return;
-            } catch (error) {
-              const wgcCaptureAllowed = isWgcCaptureAllowed();
-              logScreenShare(
-                wgcCaptureAllowed
-                  ? "Native hardware publisher failed; falling back to CEF capture"
-                  : "Native hardware publisher failed; WGC/CEF fallback disabled by hook-exclusive policy",
-                {
-                  elapsedMs: elapsed(),
-                  error,
-                },
-              );
-              await sfuRef.current.stopNativeScreenShare();
-              if (!wgcCaptureAllowed) {
-                throw error;
-              }
-            }
-          }
-          if (selectedDesktopSource) {
-            logScreenShare("Calling selected desktop capture", {
-              elapsedMs: elapsed(),
-              sourceId: effectiveOptions?.sourceId,
-              captureId: effectiveOptions?.captureId,
-              sourceKind: effectiveOptions?.sourceKind,
-            });
-            stream = await getCustomPickerDesktopStream({
-              sourceId: effectiveOptions?.sourceId,
-              captureId: effectiveOptions?.captureId,
-              sourceKind: effectiveOptions?.sourceKind,
-              withAudio: targetAudio,
-              videoConstraints: browserVideoConstraints,
-              desktopMandatoryConstraints,
-            });
-            logScreenShare("Selected desktop capture returned", {
-              elapsedMs: elapsed(),
-              hasStream: !!stream,
-            });
-          }
-
-          if (selectedDesktopSource && !stream) {
-            throw new Error(
-              `Selected desktop source could not be captured: ${effectiveOptions?.sourceName || effectiveOptions?.sourceId}`,
-            );
-          }
-
-          if (selectedDesktopSource && stream) {
-            const track = stream.getVideoTracks()[0];
-            if (track) {
-              track.contentHint =
-                effectiveOptions?.sourceKind === "window" ? "motion" : "detail";
-            }
-            logScreenShare("Captured selected desktop source", {
-              elapsedMs: elapsed(),
-              sourceId: effectiveOptions?.sourceId,
-              captureId: effectiveOptions?.captureId,
-              sourceKind: effectiveOptions?.sourceKind,
-              sourceName: effectiveOptions?.sourceName,
-              track: describeVideoTrack(track),
-              audioTracks: stream.getAudioTracks().map(describeAudioTrack),
-            });
-          }
-
-          if (!stream) {
-            const audioConstraints = targetAudio
-              ? {
-                  echoCancellation: false,
-                  noiseSuppression: false,
-                  autoGainControl: false,
-                }
-              : false;
-            const displayMediaOptions: any = {
-              video: browserVideoConstraints,
-              audio: audioConstraints as any,
-              monitorTypeSurfaces: "include",
-              selfBrowserSurface: "exclude",
-              surfaceSwitching: "include",
-              systemAudio: targetAudio ? "include" : "exclude",
-              windowAudio: targetAudio ? "window" : "exclude",
-            };
-
-            try {
-              const displayMediaStartedAt = performance.now();
-              logScreenShare("Calling getDisplayMedia", {
-                elapsedMs: elapsed(),
-                options: displayMediaOptions,
-              });
-              stream =
-                await navigator.mediaDevices.getDisplayMedia(
-                  displayMediaOptions,
-                );
-              logScreenShare("getDisplayMedia returned", {
-                elapsedMs: elapsed(),
-                displayMediaElapsedMs: Math.round(
-                  performance.now() - displayMediaStartedAt,
-                ),
-                videoTracks: stream.getVideoTracks().map(describeVideoTrack),
-                audioTracks: stream.getAudioTracks().map(describeAudioTrack),
-              });
-            } catch (err: any) {
-              if (targetAudio && err.name !== "NotAllowedError") {
-                logScreenShare(
-                  "getDisplayMedia with audio failed; retrying video-only",
-                  {
-                    elapsedMs: elapsed(),
-                    error: err,
-                  },
-                );
-                const retryStartedAt = performance.now();
-                stream = await navigator.mediaDevices.getDisplayMedia({
-                  video: browserVideoConstraints as any,
-                  audio: false,
-                });
-                logScreenShare("getDisplayMedia video-only retry returned", {
-                  elapsedMs: elapsed(),
-                  displayMediaElapsedMs: Math.round(
-                    performance.now() - retryStartedAt,
-                  ),
-                  videoTracks: stream.getVideoTracks().map(describeVideoTrack),
-                  audioTracks: stream.getAudioTracks().map(describeAudioTrack),
-                });
-              } else {
-                throw err;
-              }
-            }
-          }
-
-          if (!stream) {
-            throw new Error("No screen share source was selected");
-          }
-          if (screenStreamRef.current) {
-            if (sfuRef.current && myIdRef.current) {
-              void sfuRef.current
-                .replaceTrack(`screen-video-${myIdRef.current}`, null)
-                .catch(() => {});
-              void sfuRef.current
-                .replaceTrack(`screen-audio-${myIdRef.current}`, null)
-                .catch(() => {});
-            }
-            screenStreamRef.current.getTracks().forEach((t) => {
-              t.onended = null;
-              t.stop();
-            });
-          }
-          screenStreamRef.current = stream;
-          const handleScreenVideoEnded = () => {
-            // Only unpublish if this stream is STILL the active screen share.
-            // When switching sources, the new share is already published on the
-            // same track names, so unpublishing here would kill the new stream.
-            const isStillActive = screenStreamRef.current === stream;
-            if (isStillActive) {
-              voiceDispatch({
-                type: "SET_SCREEN_SHARING",
-                payload: false,
-                stream: null,
-                audio: false,
-              });
-              voiceDispatch({ type: "SET_SCREEN_SOURCE", payload: null });
-              screenStreamRef.current = null;
-              if (sfuRef.current && myIdRef.current) {
-                sfuRef.current.stopTracks([
-                  `screen-video-${myIdRef.current}`,
-                  `screen-audio-${myIdRef.current}`,
-                ]);
-              }
-            }
-          };
-          const screenHasAudio = stream
-            .getAudioTracks()
-            .some((track: MediaStreamTrack) => track.readyState === "live");
-          stream.getVideoTracks().forEach((track) => {
-            track.contentHint =
-              effectiveOptions?.sourceKind === "window" ? "motion" : "detail";
-            track.onended = handleScreenVideoEnded;
-          });
-          logScreenShare("Capture ready", {
-            elapsedMs: elapsed(),
-            videoTracks: stream.getVideoTracks().map(describeVideoTrack),
-            videoContentHints: stream
-              .getVideoTracks()
-              .map((track) => track.contentHint),
-            audioTracks: stream.getAudioTracks().map(describeAudioTrack),
-            screenHasAudio,
-          });
-          voiceDispatch({
-            type: "SET_SCREEN_SHARING",
-            payload: true,
-            stream: stream,
-            audio: screenHasAudio,
-          });
-          voiceDispatch({ type: "SET_SCREEN_QUALITY", payload: targetQuality });
-          voiceDispatch({
-            type: "SET_SCREEN_SOURCE",
-            payload: {
-              sourceId: effectiveOptions?.sourceId ?? null,
-              captureId: effectiveOptions?.captureId ?? null,
-              sourceName: effectiveOptions?.sourceName ?? null,
-              sourceKind: effectiveOptions?.sourceKind ?? null,
-              sourceAppName: effectiveOptions?.sourceAppName ?? null,
-              sourceIcon: effectiveOptions?.sourceIcon ?? null,
-            } satisfies ScreenShareSourceState,
-          });
-
-          const publishStartedAt = performance.now();
-          logScreenShare("Publishing screen tracks", {
-            elapsedMs: elapsed(),
-            videoTrackCount: stream.getVideoTracks().length,
-            audioTrackCount: stream.getAudioTracks().length,
-          });
-          await sfuRef.current?.publishTracks(stream, "screen");
-          logScreenShare("Published screen tracks", {
-            elapsedMs: elapsed(),
-            publishElapsedMs: Math.round(performance.now() - publishStartedAt),
-          });
-          await applyScreenTrackQuality(
-            stream,
-            targetQuality,
-            sfuRef.current,
-            myIdRef.current,
-          );
-
-          playScreenShareStart();
-        } catch (err) {
-          screenLog.error("Screen share failed:", err);
-          resetDeadScreenShare("capture or publish failed");
-        }
+      const client = sfuRef.current;
+      if (!client) {
+        screenLog.warn("Screen share needs a voice connection");
+        return;
       }
+      const share = screenShareFor(client);
+      const wanted = share.wanted;
+      const changes =
+        !!options?.changeSource ||
+        !!options?.quality ||
+        options?.withAudio !== undefined;
+      // A picked source other than the wanted one is a new share, even when
+      // the caller did not know one was starting (changeSource unset).
+      const otherSource =
+        options?.sourceId !== undefined &&
+        options.sourceId !== wanted?.source.sourceId;
+      if (wanted && !changes) {
+        share.stop();
+      } else if (!wanted || options?.changeSource || otherSource) {
+        // A desktop restart re-targets the live source unless the picker
+        // chose another, so it goes back through the same capture path
+        // (the native hook) instead of a fresh getDisplayMedia.
+        const live = wanted?.source;
+        const merged: ScreenShareOptions | undefined =
+          live?.sourceId && isDesktop()
+            ? {
+                sourceId: live.sourceId,
+                captureId: live.captureId ?? undefined,
+                sourceName: live.sourceName ?? undefined,
+                sourceKind: live.sourceKind ?? undefined,
+                sourceAppName: live.sourceAppName ?? undefined,
+                sourceIcon: live.sourceIcon ?? undefined,
+                ...options,
+              }
+            : options;
+        share.start(
+          webScreenShareRequest(merged, {
+            quality: wanted?.quality ?? currentScreenQuality,
+            audio: wanted?.audio ?? isStreamingAudio,
+          }),
+        );
+      } else {
+        if (options?.withAudio !== undefined) share.setAudio(options.withAudio);
+        if (options?.quality) share.setQuality(options.quality);
+      }
+      await share.idle();
     },
-    [
-      isScreenSharing,
-      currentScreenQuality,
-      isStreamingAudio,
-      localScreenStream,
-      alwaysShowStreamPreview,
-    ],
+    [screenShareFor, currentScreenQuality, isStreamingAudio],
   );
 
   // ── Native share ended itself (desktop) ─────────────────────────────────────
@@ -5103,17 +4401,43 @@ export function useVoiceChannel({
   //   * `connection-failed` — the hardware stream's connection died mid-share.
   //     Restart the same source through CEF capture (quality and audio kept)
   //     unless the hook-exclusive policy forbids WGC/CEF capture, then stop.
-  // A ref holds the latest `toggleScreenShare` so the listener is set up once
-  // and never re-subscribes on every render.
-  const toggleScreenShareRef = useRef(toggleScreenShare);
-  useEffect(() => {
-    toggleScreenShareRef.current = toggleScreenShare;
-  }, [toggleScreenShare]);
-  const isScreenSharingRef = useRef(isScreenSharing);
-  useEffect(() => {
-    isScreenSharingRef.current = isScreenSharing;
-  }, [isScreenSharing]);
-
+  // The client emits the same `connection-failed` when a native share could
+  // not reconnect after a voice reconnect (the backend says nothing for a
+  // stop the renderer made); it counts only while the live share is native.
+  const handleNativeShareEnded = useCallback(
+    (
+      rawPayload: unknown,
+      client: SFUClient | null,
+      origin: "backend" | "reconnect",
+    ) => {
+      const share = existingScreenShare(client);
+      const wanted = share?.wanted ?? null;
+      const payload = parseNativeShareEndedPayload(rawPayload);
+      const action = resolveNativeShareEndedAction(payload, {
+        isSharing:
+          wanted !== null &&
+          (origin === "backend" || share?.live?.path === "native"),
+        wgcCaptureAllowed: isWgcCaptureAllowed(),
+      });
+      vcLog.info("Native screen share ended by itself", {
+        origin,
+        payload,
+        action,
+      });
+      if (!share || !wanted || action === "ignore") return;
+      if (action === "fallback-cef") {
+        toast.info("Screen share switched to standard capture", {
+          id: "native-share-fallback",
+          description: "The hardware stream lost its connection.",
+        });
+        share.start({ ...wanted, preferNative: false });
+      } else {
+        share.stop();
+      }
+    },
+    [existingScreenShare],
+  );
+  nativeShareEndedRef.current = handleNativeShareEnded;
   useEffect(() => {
     if (!isDesktop()) return;
     let cancelled = false;
@@ -5122,28 +4446,7 @@ export function useVoiceChannel({
       try {
         const dispose = await getHost().media.onNativeScreenShareEnded(
           (rawPayload) => {
-            const payload = parseNativeShareEndedPayload(rawPayload);
-            const action = resolveNativeShareEndedAction(payload, {
-              isSharing: isScreenSharingRef.current,
-              wgcCaptureAllowed: isWgcCaptureAllowed(),
-            });
-            vcLog.info("Native screen share ended by the backend", {
-              payload,
-              action,
-            });
-            if (action === "fallback-cef") {
-              toast.info("Screen share switched to standard capture", {
-                id: "native-share-fallback",
-                description: "The hardware stream lost its connection.",
-              });
-              void toggleScreenShareRef.current?.({
-                changeSource: true,
-                skipNative: true,
-              });
-            } else if (action === "stop") {
-              // The no-arg stop path drops tracks, clears state, plays the sound.
-              void toggleScreenShareRef.current?.();
-            }
+            handleNativeShareEnded(rawPayload, sfuRef.current, "backend");
           },
         );
         if (cancelled) dispose();
@@ -5156,16 +4459,18 @@ export function useVoiceChannel({
       cancelled = true;
       if (unlisten) unlisten();
     };
-  }, []);
+  }, [handleNativeShareEnded]);
 
   // ── Toggle local preview capture ───────────────────────────────────────────
   // Stops or restarts the CEF preview MediaStream entirely for performance.
   // The native hardware share pipeline is NOT touched — only the local tile feed.
   const togglePreviewHidden = useCallback(async () => {
-    const willHide = !isPreviewHidden;
-    if (willHide) {
-      const hasReusablePreviewSource =
-        !!currentScreenSource?.sourceId && isScreenSharing;
+    const client = sfuRef.current;
+    const share = existingScreenShare(client);
+    const capture = share?.live?.capture ?? null;
+    const hasReusablePreviewSource =
+      !!currentScreenSource?.sourceId && isScreenSharing;
+    if (!isPreviewHidden) {
       const hideDecision = resolvePreviewHideState({
         isHookActive,
         hasReusablePreviewSource,
@@ -5174,105 +4479,82 @@ export function useVoiceChannel({
         voiceDispatch({
           type: "SET_PREVIEW_HIDDEN",
           payload: true,
-          stream: screenStreamRef.current ?? localScreenStream,
+          stream: capture?.stream ?? localScreenStream,
         });
         return;
       }
       // Tear down the loopback PC if active (hook shares).
-      if (isHookActive && sfuRef.current) {
-        await sfuRef.current.stopPreviewLoopback();
+      if (isHookActive && client) {
+        await client.stopPreviewLoopback();
       }
       // Stop all preview tracks to release the WGC session.
-      screenStreamRef.current?.getTracks().forEach((t) => {
-        t.onended = null;
-        t.stop();
-      });
-      screenStreamRef.current = null;
+      if (capture) {
+        capture.stream?.getTracks().forEach((t) => {
+          t.onended = null;
+          t.stop();
+        });
+        attachScreenPreview(capture, null, null);
+      }
       voiceDispatch({
         type: "SET_PREVIEW_HIDDEN",
         payload: true,
         stream: null,
       });
-    } else {
-      const hasReusablePreviewSource =
-        !!currentScreenSource?.sourceId && isScreenSharing;
-      const resumeMechanism = resolvePreviewResumeMechanism({
-        isHookActive,
-        hasReusablePreviewSource,
-      });
-
-      // When the hook is the active capture backend, feed the local preview
-      // from the hook's existing encode via a loopback PeerConnection — no
-      // second WGC capture, no border, no extra encode cost.
-      if (resumeMechanism === "desktop-loopback" && sfuRef.current) {
-        const stream = await sfuRef.current.startPreviewLoopback();
-        if (stream) {
-          screenStreamRef.current = stream;
-          voiceDispatch({ type: "SET_PREVIEW_HIDDEN", payload: false, stream });
-        } else {
-          previewLog.warn("Loopback preview failed to connect");
-        }
-        return;
-      }
-      // Re-open preview only when the selected desktop source is reusable.
-      const src = currentScreenSource;
-      const canReopenNativePreview =
-        resumeMechanism === "reopen-selected-source";
-      let openedPreview: MediaStream | null = null;
-      const outcome = await resolvePreviewResume({
-        canReopenNativePreview,
-        existingPreviewStream: screenStreamRef.current ?? localScreenStream,
-        openPreviewStream: async () => {
-          const { browserVideoConstraints, desktopMandatoryConstraints } =
-            screenShareVideoConstraints(currentScreenQuality);
-          openedPreview = await getCustomPickerDesktopStream({
-            sourceId: src!.sourceId!,
-            captureId: src!.captureId ?? undefined,
-            sourceKind: src!.sourceKind ?? undefined,
-            withAudio: false,
-            videoConstraints: browserVideoConstraints,
-            desktopMandatoryConstraints,
-          });
-          return openedPreview;
-        },
-      });
-
-      if (outcome.openedStream && outcome.stream) {
-        const previewStream = outcome.stream;
-        screenStreamRef.current = previewStream;
-        // Restore onended so closing the source still tears down native share.
-        const videoTrack = previewStream.getVideoTracks()[0];
-        if (videoTrack) {
-          videoTrack.onended = async () => {
-            if (screenStreamRef.current !== previewStream) return;
-            screenStreamRef.current = null;
-            await sfuRef.current?.stopNativeScreenShare();
-            if (sfuRef.current && myIdRef.current) {
-              sfuRef.current.stopTracks([
-                `screen-video-${myIdRef.current}`,
-                `screen-audio-${myIdRef.current}`,
-              ]);
-            }
-            voiceDispatch({
-              type: "SET_SCREEN_SHARING",
-              payload: false,
-              stream: null,
-              audio: false,
-            });
-            voiceDispatch({ type: "SET_SCREEN_SOURCE", payload: null });
-          };
-        }
-      } else if (outcome.reopenFailed) {
-        // Non-fatal; stay hidden if re-open fails.
-        previewLog.warn("Failed to re-open preview stream");
-      }
-      voiceDispatch({
-        type: "SET_PREVIEW_HIDDEN",
-        payload: outcome.isPreviewHidden,
-        stream: outcome.stream,
-      });
+      return;
     }
+
+    const resumeMechanism = resolvePreviewResumeMechanism({
+      isHookActive,
+      hasReusablePreviewSource,
+    });
+    // When the hook is the active capture backend, feed the local preview
+    // from the hook's existing encode via a loopback PeerConnection — no
+    // second WGC capture, no border, no extra encode cost.
+    if (resumeMechanism === "desktop-loopback" && client) {
+      const stream = await client.startPreviewLoopback();
+      if (stream) {
+        if (capture) attachScreenPreview(capture, stream, null);
+        voiceDispatch({ type: "SET_PREVIEW_HIDDEN", payload: false, stream });
+      } else {
+        previewLog.warn("Loopback preview failed to connect");
+      }
+      return;
+    }
+    // Re-open preview only when the selected desktop source is reusable.
+    const src = currentScreenSource;
+    const outcome = await resolvePreviewResume({
+      canReopenNativePreview: resumeMechanism === "reopen-selected-source",
+      existingPreviewStream: capture?.stream ?? localScreenStream,
+      openPreviewStream: async () => {
+        const { browserVideoConstraints, desktopMandatoryConstraints } =
+          screenShareVideoConstraints(currentScreenQuality);
+        return getCustomPickerDesktopStream({
+          sourceId: src!.sourceId!,
+          captureId: src!.captureId ?? undefined,
+          sourceKind: src!.sourceKind ?? undefined,
+          withAudio: false,
+          videoConstraints: browserVideoConstraints,
+          desktopMandatoryConstraints,
+        });
+      },
+    });
+
+    if (outcome.openedStream && outcome.stream && capture) {
+      // Closing the source still ends the share.
+      attachScreenPreview(capture, outcome.stream, (ended) =>
+        share?.captureEnded(ended),
+      );
+    } else if (outcome.reopenFailed) {
+      // Non-fatal; stay hidden if re-open fails.
+      previewLog.warn("Failed to re-open preview stream");
+    }
+    voiceDispatch({
+      type: "SET_PREVIEW_HIDDEN",
+      payload: outcome.isPreviewHidden,
+      stream: outcome.stream,
+    });
   }, [
+    existingScreenShare,
     isPreviewHidden,
     isScreenSharing,
     currentScreenSource,
@@ -5308,59 +4590,15 @@ export function useVoiceChannel({
     togglePreviewHidden,
   ]);
 
+  // Browser shares flip their audio track in place; a native share restarts
+  // its pipeline with the flag flipped (serialized, latest wins). Nothing
+  // to do without a share.
   const onToggleStreamAudio = useCallback(async () => {
-    const restart = streamAudioRestartRef.current;
-    // Native hardware share: WASAPI loopback audio is not a track here, so
-    // muting a browser track would leave it publishing. Loopback starts at
-    // init with a fixed flag, so toggling it restarts the native pipeline.
-    if (restart.running || sfuRef.current?.isNativeScreenShareActive) {
-      restart.wanted = !(restart.wanted ?? isStreamingAudioRef.current);
-      if (restart.running) return;
-      restart.running = true;
-      try {
-        let applied = isStreamingAudioRef.current;
-        while (restart.wanted !== null && restart.wanted !== applied) {
-          const target = restart.wanted;
-          const source = currentScreenSourceRef.current;
-          if (!source?.sourceId || !sfuRef.current?.isNativeScreenShareActive) {
-            break;
-          }
-          await toggleScreenShareRef.current({
-            sourceId: source.sourceId,
-            captureId: source.captureId ?? undefined,
-            sourceName: source.sourceName ?? undefined,
-            sourceKind: source.sourceKind ?? undefined,
-            quality: currentScreenQuality,
-            withAudio: target,
-            changeSource: true,
-          });
-          applied = target;
-        }
-      } finally {
-        restart.running = false;
-        restart.wanted = null;
-      }
-      return;
-    }
-    const next = !isStreamingAudio;
-    // CEF path: just enable/disable the audio track.
-    if (screenStreamRef.current) {
-      screenStreamRef.current
-        .getAudioTracks()
-        .forEach((t) => (t.enabled = next));
-    }
-    voiceDispatch({
-      type: "SET_SCREEN_SHARING",
-      payload: isScreenSharing,
-      stream: localScreenStream,
-      audio: next,
-    });
-  }, [
-    isStreamingAudio,
-    isScreenSharing,
-    localScreenStream,
-    currentScreenQuality,
-  ]);
+    const share = existingScreenShare(sfuRef.current);
+    if (!share) return;
+    share.toggleAudio();
+    await share.idle();
+  }, [existingScreenShare]);
 
   const onToggleWatch = useCallback((streamerUserId: string) => {
     const nextWatching = !watchedStreamsRef.current[streamerUserId];
