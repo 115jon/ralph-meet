@@ -41,9 +41,30 @@ reopened.
 
 - [ ] iOS video keepalive: iOS has no black-frame source yet
       (`VideoKeepalivePool.supported` is Android only), so camera or share
-      off on an iPhone closes the publication, and a web Chrome viewer
-      pulling the next one can hit the SFU's recycled-MID failure (no video
-      until they rejoin). Add a native iOS keepalive source.
+      off on an iPhone closes the publication and the next one is a new SFU
+      track. Viewers now pull that track on a fresh connection, and a
+      camera that still shows nothing is pulled again once and then shown
+      as "Video unavailable" (`@ralph/voice-media` RemoteVideoHealth), so
+      no tile stays black; the keepalive is what makes turning it back on
+      instant (same SFU track, no re-pull). Needs a Mac with Xcode and an
+      iPhone to build and test; mirror Android's
+      `KeepaliveCaptureController.java` in
+      `patches/react-native-webrtc@155.0.1.patch`: - `ios/RCTWebRTC/KeepaliveCaptureController.{h,m}`: a
+      `CaptureController` subclass owning an `RTCVideoCapturer` that
+      opens no camera; `startCapture` starts a `dispatch_source` timer
+      that every 1 s hands its delegate
+      (`capturer:didCaptureVideoFrame:`) one 160x96 black frame (an
+      `RTCI420Buffer`, Y 16, U and V 128, made once and reused, rotation
+      0, timestamp from `CACurrentMediaTime`); `stopCapture` cancels it.
+      `deviceId` is `yap:video-keepalive`. - `WebRTCModule+RTCMediaStream.m` `createVideoTrack:`: when
+      `constraints[@"video"][@"deviceId"]` is `yap:video-keepalive`, make
+      the track with `createVideoTrackWithCaptureController:` and that
+      controller instead of a camera (the Java hook in
+      `GetUserMediaImpl.java` is the model), with no camera permission
+      asked. - `features/voice/keepalive.ts`: `supported` for iOS too. - Test: an iPhone turns its camera off and on in a call with a web
+      Chrome viewer and an Android viewer; the camera comes back within a
+      second with no re-pull (the viewer's log shows no new pull of the
+      `cam-video-` alias), and the SFU keeps the track for minutes off.
 
 ## Later (from the audit)
 
