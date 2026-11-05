@@ -1,7 +1,7 @@
 // Moderator voice moves in the MeetingRoom: the source room hands the user's
-// voice session the move and ends it (VOICE_MOVE_PATH), the global gateway
-// takes them off the source roster (VOICE_MOVE_OUT_PATH), and a move grant
-// stands in for CONNECT on the target's VoiceChannelJoin.
+// voice session the move and ends it (VOICE_MOVE_PATH); its roster push takes
+// them off the sidebar (voice-roster.worker.test.ts), and the global gateway
+// keeps each user's latest move grant for the target's tickets.
 
 import { env } from "cloudflare:workers";
 import { runInDurableObject } from "cloudflare:test";
@@ -18,11 +18,9 @@ import {
   createRealtimeAdmissionContext,
 } from "../realtime-admission";
 import {
-  serializeVoiceMoveOutRequest,
   serializeVoiceMoveRequest,
   VOICE_MOVE_GRANT_PATH,
   VOICE_MOVE_GRANT_USE_PATH,
-  VOICE_MOVE_OUT_PATH,
   VOICE_MOVE_PATH,
   type VoiceMoveNotice,
 } from "../voice-move";
@@ -466,7 +464,7 @@ async function settle(socket: WebSocket) {
 }
 
 describe("MeetingRoom voice move (global gateway)", () => {
-  it("lets a move grant stand in for CONNECT on VoiceChannelJoin", async () => {
+  it("adds nobody on a VoiceChannelJoin, with or without a move grant", async () => {
     const userId = `grant-user-${crypto.randomUUID()}`;
     const { serverId, channelId } = await seedServerVoiceChannel({
       userId,
@@ -475,59 +473,33 @@ describe("MeetingRoom voice move (global gateway)", () => {
     const roomName = crypto.randomUUID();
     const socket = await openSocket(roomName, "global", userId);
     const ready = await identify(socket);
-
-    const refused = nextOp(socket, 18);
-    socket.send(JSON.stringify({ op: 33, d: { channel_id: channelId } }));
-    await expect(refused).resolves.toMatchObject({ d: { code: 4003 } });
+    const frames: Frame[] = [];
+    socket.addEventListener("message", (event) => {
+      frames.push(JSON.parse(event.data as string) as Frame);
+    });
 
     const expiresAt = Date.now() + 60_000;
-    const grantFor = (channel: string, jti: string, subject = userId) =>
-      issueVoiceMoveGrant(
-        { jti, subject, serverId, channelId: channel, expiresAt },
-        env.REALTIME_TICKET_SECRET,
-      );
     await recordGrant(roomName, userId, "move-1", channelId, expiresAt);
-    const join = (grant?: string) =>
-      socket.send(
-        JSON.stringify({
-          op: 33,
-          d: { channel_id: channelId, move_grant: grant },
-        }),
-      );
-    // A grant for someone else, or another channel, is no grant.
-    for (const grant of [
-      await grantFor(channelId, "move-1", "someone-else"),
-      await grantFor("other-channel", "move-1"),
-    ]) {
-      const wrong = nextOp(socket, 18);
-      join(grant);
-      await expect(wrong).resolves.toMatchObject({ d: { code: 4003 } });
-    }
-
-    const grant = await grantFor(channelId, "move-1");
-    join(grant);
-    await vi.waitFor(
-      async () => {
-        expect(await sessionChannel(roomName, ready.participant_id)).toBe(
-          channelId,
-        );
-      },
-      { timeout: 5_000, interval: 5 },
+    const grant = await issueVoiceMoveGrant(
+      { jti: "move-1", subject: userId, serverId, channelId, expiresAt },
+      env.REALTIME_TICKET_SECRET,
     );
-
-    // The client re-sends the join while connected: still in, no grant.
-    join();
+    // An old client's join, before and after a move: the roster is the
+    // room's, so neither puts the user on it, and neither is refused.
+    socket.send(JSON.stringify({ op: 33, d: { channel_id: channelId } }));
+    socket.send(
+      JSON.stringify({
+        op: 33,
+        d: { channel_id: channelId, move_grant: grant },
+      }),
+    );
     await settle(socket);
+    expect(frames.filter((frame) => frame.op === 18)).toEqual([]);
+    expect(await isRosterMember(roomName, channelId, userId)).toBeFalsy();
+    // It only names the channel its op 15 hints are for.
     expect(await sessionChannel(roomName, ready.participant_id)).toBe(
       channelId,
     );
-
-    // Leave, then try the same grant again: spent.
-    socket.send(JSON.stringify({ op: 34, d: { channel_id: channelId } }));
-    await settle(socket);
-    const replay = nextOp(socket, 18);
-    join(grant);
-    await expect(replay).resolves.toMatchObject({ d: { code: 4003 } });
 
     socket.close();
   });
@@ -554,17 +526,8 @@ describe("MeetingRoom voice move (global gateway)", () => {
       env.REALTIME_TICKET_SECRET,
     );
     const socket = await openSocket(roomName, "global", userId);
-    const ready = await identify(socket);
-
-    const refused = nextOp(socket, 18);
-    socket.send(
-      JSON.stringify({
-        op: 33,
-        d: { channel_id: b.channelId, move_grant: grantB },
-      }),
-    );
-    await expect(refused).resolves.toMatchObject({ d: { code: 4003 } });
-    expect(await sessionChannel(roomName, ready.participant_id)).toBeNull();
+    await identify(socket);
+    expect(grantB).toBeTruthy();
 
     // Tickets: B is dead, C spends once per audience.
     const use = (jti: string, channel: string, kind: "room" | "voice") =>
@@ -592,45 +555,6 @@ describe("MeetingRoom voice move (global gateway)", () => {
     await expect(use("move-c", "channel-c", "voice")).resolves.toEqual({
       ok: true,
     });
-
-    socket.close();
-  });
-
-  it("takes the moved user off the source roster", async () => {
-    const userId = `roster-user-${crypto.randomUUID()}`;
-    const { channelId } = await seedServerVoiceChannel({
-      userId,
-      permissions: PERMISSIONS.VIEW_CHANNELS | PERMISSIONS.CONNECT,
-    });
-    const roomName = crypto.randomUUID();
-    const socket = await openSocket(roomName, "global", userId);
-    const ready = await identify(socket);
-    socket.send(JSON.stringify({ op: 33, d: { channel_id: channelId } }));
-    await vi.waitFor(
-      async () => {
-        expect(await isRosterMember(roomName, channelId, userId)).toBe(true);
-      },
-      { timeout: 5_000, interval: 5 },
-    );
-
-    const moveOut = (channel: string) =>
-      meetingRoom(roomName)
-        .fetch(`https://internal${VOICE_MOVE_OUT_PATH}`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: serializeVoiceMoveOutRequest(userId, channel),
-        })
-        .then((response) => response.json());
-
-    // Another channel: the client already switched, nothing to clear.
-    await expect(moveOut("some-other-channel")).resolves.toEqual({
-      cleared: 0,
-    });
-    expect(await isRosterMember(roomName, channelId, userId)).toBe(true);
-
-    await expect(moveOut(channelId)).resolves.toEqual({ cleared: 1 });
-    expect(await isRosterMember(roomName, channelId, userId)).toBeFalsy();
-    expect(await sessionChannel(roomName, ready.participant_id)).toBeNull();
 
     socket.close();
   });

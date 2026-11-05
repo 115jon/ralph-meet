@@ -128,7 +128,7 @@ describe("POST /api/voice/move", () => {
     vi.spyOn(console, "warn").mockImplementation(() => {});
   });
 
-  it("moves the member: tells the source room, clears the roster, audits", async () => {
+  it("moves the member: records the grant, tells the source room, audits", async () => {
     seed();
     const response = await move(validBody);
 
@@ -138,10 +138,11 @@ describe("POST /api/voice/move", () => {
       sessions: 1,
     });
     // The grant is live with the gateway before the room tells the client.
+    // No third call: ending the sessions changes the room's roster, which
+    // the room pushes to the gateway itself (realtime/VOICE_ROSTER.md).
     expect(doCalls.map(({ room, path }) => [room, path])).toEqual([
       ["global-gateway", "/voice-move-grant"],
       [`voice-${SERVER}-${FROM}`, "/voice-move"],
-      ["global-gateway", "/voice-move-out"],
     ]);
     const notice = doCalls[1].body as {
       user_id: string;
@@ -166,7 +167,6 @@ describe("POST /api/voice/move", () => {
       channel_id: TO,
       expires_at: grant?.expiresAt,
     });
-    expect(doCalls[2].body).toEqual({ user_id: TARGET, channel_id: FROM });
     db.assertCalledWith("INSERT INTO server_audit_logs", [
       expect.any(String),
       SERVER,

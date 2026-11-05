@@ -44,19 +44,33 @@ import {
   resolveChannelAccessForUsers,
 } from "../src/lib/channel-access";
 import { PERMISSIONS } from "../src/lib/permissions";
-import { openVoiceMoveGrant } from "../src/lib/voice/voice-move-grant";
 import {
   parseVoiceMoveGrantRecord,
   parseVoiceMoveGrantUse,
-  parseVoiceMoveOutRequest,
   parseVoiceMoveRequest,
   VOICE_MOVE_GRANT_PATH,
   VOICE_MOVE_GRANT_USE_PATH,
-  VOICE_MOVE_OUT_PATH,
   VOICE_MOVE_PATH,
   VoiceMoveGrantLedger,
   type VoiceMoveNotice,
 } from "./voice-move";
+import {
+  buildVoiceRosterMembers,
+  isNewerVoiceRoster,
+  nextVoiceRosterSeq,
+  parseVoiceRosterPull,
+  parseVoiceRosterSnapshot,
+  resolveRoomVoiceChannelId,
+  voiceRosterFingerprint,
+  VoiceRosterPusher,
+  VOICE_ROSTER_GATEWAY,
+  VOICE_ROSTER_HINT_MIN_AGE_MS,
+  VOICE_ROSTER_PATH,
+  VOICE_ROSTER_PULL_PATH,
+  VOICE_ROSTER_PUSH_ALARM_RETRY_MS,
+  VOICE_ROSTER_REVALIDATE_MS,
+  type VoiceRosterSnapshot,
+} from "./voice-roster";
 import {
   consumeRealtimeTicketNonce,
   getRealtimeAdmissionFromHeaders,
@@ -129,6 +143,8 @@ interface Env {
   BACKGROUND_TASKS?: Queue<BackgroundTaskEnvelope>;
   DEBUG?: string;
   VOICE_ROOM?: DurableObjectNamespace;
+  /** This class's own namespace: rooms push rosters to the global gateway. */
+  MEETING_ROOM?: DurableObjectNamespace;
   /** Service-account JSON for FCM; unset = no call ring pushes. */
   FCM_SERVICE_ACCOUNT?: string;
   /** Verifies voice move grants on VoiceChannelJoin (the ticket secret). */
@@ -223,6 +239,13 @@ interface WsAttachment {
   /** Client can merge profile-less VOICE_CHANNEL_STATE_UPDATE members. */
   supports_voice_state_deltas?: boolean;
   standby?: boolean;
+  /** Room: when this session joined voice (Identify or standby promotion). */
+  voice_joined_at?: number;
+  /**
+   * Room: arrival order of that join (nextVoiceJoinOrder). One voice session
+   * per user: the newest join wins, whichever Identify finishes first.
+   */
+  voice_join_order?: number;
 }
 
 interface ReplayEntry {
@@ -260,6 +283,25 @@ interface VoiceChannelMember {
   spatial_audio_enabled?: boolean;
   spatial_audio_high_fidelity?: boolean;
   joined_at?: number;
+}
+
+/** Fields a client sets for its member over the global socket (op 15). */
+interface VoiceMemberHint {
+  stream_preview_url?: string | null;
+  spatial_audio_enabled?: boolean;
+  spatial_audio_high_fidelity?: boolean;
+}
+
+/** Global gateway: where one channel's roster comes from (vc:source:<id>). */
+interface VoiceRosterSource {
+  /** The room object that owns the channel; null for a pre-push entry. */
+  roomSlug: string | null;
+  /** Seq of the last snapshot applied; older or equal ones are ignored. */
+  seq: number;
+  /** When a push, a pull or a re-sent seq last confirmed the roster. */
+  confirmedAt: number;
+  /** Per member: VoiceMemberHint fields a client set (op 15, global). */
+  hints?: Record<string, VoiceMemberHint>;
 }
 
 interface ProfileIdentity {
@@ -307,6 +349,17 @@ const REPLACED_VOICE_SESSION_TTL_MS = 60 * 60 * 1000;
 const REPLACED_VOICE_SESSIONS_STORAGE_KEY = "replacedVoiceSessions";
 /** Close reason (with CloseCode.SessionReplaced) when voice moves device. */
 const VOICE_SESSION_REPLACED_REASON = "Voice moved to another device";
+/** Room: its roster state (channel id, seq, fingerprints, retry deadline). */
+const VOICE_ROSTER_STATE_STORAGE_KEY = "vc:roster";
+/** Global: per-channel VoiceRosterSource records. */
+const VOICE_ROSTER_SOURCE_PREFIX = "vc:source:";
+/**
+ * Global: a sidebar entry stored before rooms pushed rosters (no source) is
+ * kept this long for its room to push, then dropped.
+ */
+const VOICE_ROSTER_LEGACY_GRACE_MS = 120_000;
+/** Global: an emptied channel keeps its last seq this long (late pushes). */
+const VOICE_ROSTER_TOMBSTONE_MS = 10 * 60 * 1000;
 /** Moved sessions' VoiceMove notices, replayed to a Resume of one. */
 const MOVED_VOICE_SESSIONS_STORAGE_KEY = "movedVoiceSessions";
 const MAX_GATEWAY_FRAME_BYTES = 1_000_000;
@@ -400,6 +453,49 @@ export class MeetingRoom extends DurableObject<Env> {
   private deletedVcKeys: Set<string> = new Set();
   /** Serializes shared-state storage writes while keeping the hot path in memory. */
   private durableStateWrite: Promise<void> = Promise.resolve();
+
+  // ── Voice roster authority (realtime/VOICE_ROSTER.md) ──────────────────
+  // Room objects own their channel's roster and push it to the global
+  // gateway; the global gateway mirrors it into voiceChannelMembers.
+
+  /** Room: the voice channel this room reports its roster for. */
+  private voiceRosterChannelId: string | null = null;
+  /** Room: seq of the last roster snapshot built (strictly increasing). */
+  private voiceRosterSeq = 0;
+  /** Room: fingerprint of the snapshot that holds voiceRosterSeq. */
+  private voiceRosterFingerprint: string | null = null;
+  /** Room: fingerprint the global gateway last acknowledged. */
+  private voiceRosterDelivered: string | null = null;
+  /** Room: when the roster last went from empty to non-empty. */
+  private voiceRosterStartedAt: number | null = null;
+  /** Room: a push ran out of retries; the alarm tries again from here. */
+  private voiceRosterRetryAt: number | null = null;
+  /** Room: arrival order of the last voice join (see voice_join_order). */
+  private lastVoiceJoinOrder = 0;
+  private readonly voiceRosterPusher = new VoiceRosterPusher({
+    send: () => this.pushVoiceRoster(),
+    onDelivered: () => {
+      if (this.voiceRosterRetryAt !== null) {
+        this.voiceRosterRetryAt = null;
+        this.persistVoiceRosterState();
+        this.flushDirtyStorage();
+      }
+    },
+    onGiveUp: () => {
+      meetingLog.warn("Voice roster push failed; the alarm will retry");
+      this.voiceRosterRetryAt = Date.now() + VOICE_ROSTER_PUSH_ALARM_RETRY_MS;
+      this.persistVoiceRosterState();
+      this.flushDirtyStorage();
+      this.ctx.waitUntil(this.scheduleAlarm());
+    },
+    waitUntil: (promise) => this.ctx.waitUntil(promise),
+  });
+  /** Global: where each channel's roster comes from, and how fresh it is. */
+  private voiceRosterSources = new Map<string, VoiceRosterSource>();
+  /** Global: channels with a roster pull in flight. */
+  private voiceRosterPulls = new Set<string>();
+  /** Global: when each channel's roster was last pulled (success or not). */
+  private voiceRosterPullAttempts = new Map<string, number>();
 
   constructor(
     public ctx: DurableObjectState<{}>,
@@ -498,6 +594,57 @@ export class MeetingRoom extends DurableObject<Env> {
         }
         if (memberMap.size > 0) {
           this.voiceChannelMembers.set(channelId, memberMap);
+        }
+      }
+
+      // Global: where each mirrored roster comes from. An entry with no
+      // source predates room pushes (it came from a client's op 33): its
+      // room gets VOICE_ROSTER_LEGACY_GRACE_MS to push, then it is dropped.
+      const sourceEntries = await this.ctx.storage.list({
+        prefix: VOICE_ROSTER_SOURCE_PREFIX,
+      });
+      for (const [key, value] of sourceEntries) {
+        const source = this.normalizeVoiceRosterSource(value);
+        if (source) {
+          this.voiceRosterSources.set(
+            key.slice(VOICE_ROSTER_SOURCE_PREFIX.length),
+            source,
+          );
+        }
+      }
+      const bootedAt = Date.now();
+      for (const channelId of this.voiceChannelMembers.keys()) {
+        if (!this.voiceRosterSources.has(channelId)) {
+          this.voiceRosterSources.set(channelId, {
+            roomSlug: null,
+            seq: 0,
+            confirmedAt: bootedAt,
+          });
+        }
+      }
+
+      // Room: its roster state.
+      const rosterState = (await this.ctx.storage.get(
+        VOICE_ROSTER_STATE_STORAGE_KEY,
+      )) as Record<string, unknown> | undefined;
+      if (rosterState) {
+        if (typeof rosterState.channel_id === "string") {
+          this.voiceRosterChannelId = rosterState.channel_id;
+        }
+        if (typeof rosterState.seq === "number") {
+          this.voiceRosterSeq = rosterState.seq;
+        }
+        if (typeof rosterState.fingerprint === "string") {
+          this.voiceRosterFingerprint = rosterState.fingerprint;
+        }
+        if (typeof rosterState.delivered === "string") {
+          this.voiceRosterDelivered = rosterState.delivered;
+        }
+        if (typeof rosterState.started_at === "number") {
+          this.voiceRosterStartedAt = rosterState.started_at;
+        }
+        if (typeof rosterState.retry_at === "number") {
+          this.voiceRosterRetryAt = rosterState.retry_at;
         }
       }
 
@@ -602,23 +749,32 @@ export class MeetingRoom extends DurableObject<Env> {
         log.error("Failed to restore spatial audio states", error);
       }
 
-      // Sync voice_channel_id on sessions from the stored voice members
-      for (const [ws, session] of this.sessions) {
-        await this.restoreSessionSubscriptions(ws, session);
+      // Subscriptions came back with each socket's attachment (above). They
+      // are not re-checked against D1 here: this runs on every wake from
+      // hibernation, blocks every message until it finishes, and one D1
+      // query per subscription per session could run into the 30 s limit,
+      // which resets the object and drops every socket. Resume re-checks a
+      // returning session's subscriptions; channel and server dispatches
+      // check access when they are sent.
+
+      if (this.roomSlug === VOICE_ROSTER_GATEWAY) {
+        // Pull rosters the rooms may have changed while this object was
+        // gone (a push that failed for good, a room that was reset).
+        this.ctx.waitUntil(
+          this.revalidateVoiceRosters(VOICE_ROSTER_REVALIDATE_MS / 2),
+        );
+      } else if (this.voiceRosterChannelId) {
+        // Sessions that did not survive a reset change the roster.
+        this.syncVoiceRoster();
+        this.flushDirtyStorage();
       }
-
-      // Each session's voice_channel_id comes back with its attachment. It is
-      // not derived from the members: they are one entry per user, and every
-      // other session of that user (a chat tab, a phone not in voice) would
-      // then count as in the channel and keep a departed device's entry.
-
-      // Reconcile: remove voice members that have no live session
-      this.reconcileVoiceMembers();
 
       if (
         this.sessions.size > 0 ||
         this.resumableSessionExpiry.size > 0 ||
-        this.pendingCalls.size > 0
+        this.pendingCalls.size > 0 ||
+        this.voiceRosterSources.size > 0 ||
+        this.voiceRosterRetryAt !== null
       ) {
         this.ctx.waitUntil(this.scheduleAlarm());
       }
@@ -667,6 +823,20 @@ export class MeetingRoom extends DurableObject<Env> {
       if (!consumed.ok) {
         log.warn(`Realtime admission refused: ${consumed.reason}`);
         return new Response("Unauthorized", { status: 401 });
+      }
+      if (
+        expectedAudience === "room" &&
+        admission.accessMode === "authenticated" &&
+        !this.voiceRosterChannelId
+      ) {
+        // The channel this room reports its roster for: from the ticket,
+        // which the worker issued after checking the channel.
+        const channelId = resolveRoomVoiceChannelId(this.roomSlug, admission);
+        if (channelId) {
+          this.voiceRosterChannelId = channelId;
+          this.persistVoiceRosterState();
+          this.flushDirtyStorage();
+        }
       }
 
       const pair = new WebSocketPair();
@@ -756,6 +926,47 @@ export class MeetingRoom extends DurableObject<Env> {
       }
     }
 
+    // Room -> global gateway: the room's roster changed.
+    if (url.pathname === VOICE_ROSTER_PATH && request.method === "POST") {
+      const snapshot = parseVoiceRosterSnapshot(
+        await request.json().catch(() => null),
+      );
+      if (!snapshot || this.roomSlug !== VOICE_ROSTER_GATEWAY) {
+        return Response.json({ error: "invalid" }, { status: 400 });
+      }
+      const applied = await this.applyVoiceRosterSnapshot(snapshot);
+      this.flushDirtyStorage();
+      return Response.json({ applied });
+    }
+
+    // Global gateway -> room: what is the roster now?
+    if (url.pathname === VOICE_ROSTER_PULL_PATH && request.method === "POST") {
+      const pull = parseVoiceRosterPull(await request.json().catch(() => null));
+      if (!pull || this.roomSlug === VOICE_ROSTER_GATEWAY) {
+        return Response.json({ error: "invalid" }, { status: 400 });
+      }
+      if (this.roomSlug === "unknown") {
+        // Never admitted a socket since its storage was written: the pull
+        // was addressed to this object by its slug.
+        this.roomSlug = pull.roomSlug;
+        this.ctx.storage.put("roomSlug", this.roomSlug).catch(() => {});
+      }
+      if (!this.voiceRosterChannelId) {
+        // A room that has not admitted a ticket naming its channel since it
+        // started reporting: the gateway's record came from this room.
+        this.voiceRosterChannelId = pull.channelId;
+      }
+      if (this.voiceRosterChannelId !== pull.channelId) {
+        return Response.json({ error: "channel_mismatch" }, { status: 409 });
+      }
+      const snapshot = this.currentVoiceRoster();
+      // The answer delivers this snapshot; no push needed for it.
+      this.voiceRosterDelivered = this.voiceRosterFingerprint;
+      this.persistVoiceRosterState();
+      this.flushDirtyStorage();
+      return Response.json(snapshot);
+    }
+
     if (
       url.pathname === VOICE_JOIN_GRANT_CHECK_PATH &&
       request.method === "POST"
@@ -799,15 +1010,25 @@ export class MeetingRoom extends DurableObject<Env> {
         let userMatchedScope = false;
         let exactSessionMatched = false;
 
-        for (const attachment of this.sessions.values()) {
-          if (attachment.user_id !== userId) continue;
-          if (requireChannelMatch && attachment.voice_channel_id !== channelId)
-            continue;
+        if (requireChannelMatch && this.roomSlug === VOICE_ROSTER_GATEWAY) {
+          // Who is in the channel is the room's roster, mirrored here; a
+          // chat session's own say (op 33) no longer counts.
+          userMatchedScope =
+            this.voiceChannelMembers.get(channelId)?.has(userId) ?? false;
+        } else {
+          for (const attachment of this.sessions.values()) {
+            if (attachment.user_id !== userId) continue;
+            if (
+              requireChannelMatch &&
+              attachment.voice_channel_id !== channelId
+            )
+              continue;
 
-          userMatchedScope = true;
-          if (sessionId && attachment.id === sessionId) {
-            exactSessionMatched = true;
-            break;
+            userMatchedScope = true;
+            if (sessionId && attachment.id === sessionId) {
+              exactSessionMatched = true;
+              break;
+            }
           }
         }
 
@@ -895,21 +1116,6 @@ export class MeetingRoom extends DurableObject<Env> {
           use.use,
         ),
       });
-    }
-
-    // The same move, on the global gateway: take the user off the source
-    // channel's roster even if their client never switches (offline, old).
-    if (url.pathname === VOICE_MOVE_OUT_PATH && request.method === "POST") {
-      const move = parseVoiceMoveOutRequest(
-        await request.json().catch(() => null),
-      );
-      if (!move) return Response.json({ error: "invalid" }, { status: 400 });
-      const cleared = this.clearVoiceChannelForUser(
-        move.userId,
-        move.channelId,
-      );
-      this.flushDirtyStorage();
-      return Response.json({ cleared });
     }
 
     if (url.pathname === "/disconnect-session" && request.method === "POST") {
@@ -1101,7 +1307,7 @@ export class MeetingRoom extends DurableObject<Env> {
         break;
 
       case Op.VoiceChannelJoin:
-        await this.handleVoiceChannelJoin(ws, msg.d);
+        this.handleVoiceChannelJoin(ws, msg.d);
         break;
 
       case Op.VoiceChannelLeave:
@@ -1227,8 +1433,20 @@ export class MeetingRoom extends DurableObject<Env> {
         await this.expirePendingCall(pending);
       }
 
-      // Reconcile voice members against live sessions
-      this.reconcileVoiceMembers();
+      if (this.roomSlug === VOICE_ROSTER_GATEWAY) {
+        // Mirrored rosters: drop pre-push entries no room claimed, forget
+        // emptied channels' seqs, and pull any channel gone quiet.
+        this.pruneVoiceRosterSources(now);
+        await this.revalidateVoiceRosters(VOICE_ROSTER_REVALIDATE_MS);
+      } else if (
+        this.voiceRosterRetryAt !== null &&
+        this.voiceRosterRetryAt <= now
+      ) {
+        // Pushed back again if this attempt also runs out of retries.
+        this.voiceRosterRetryAt = now + VOICE_ROSTER_PUSH_ALARM_RETRY_MS;
+        this.persistVoiceRosterState();
+        this.voiceRosterPusher.request();
+      }
 
       // Flush any dirty storage accumulated during alarm processing
       this.flushDirtyStorage();
@@ -1240,7 +1458,9 @@ export class MeetingRoom extends DurableObject<Env> {
       if (
         this.sessions.size > 0 ||
         this.resumableSessionExpiry.size > 0 ||
-        this.pendingCalls.size > 0
+        this.pendingCalls.size > 0 ||
+        this.voiceRosterSources.size > 0 ||
+        this.voiceRosterRetryAt !== null
       ) {
         await this.scheduleAlarm(true);
       }
@@ -1259,6 +1479,25 @@ export class MeetingRoom extends DurableObject<Env> {
     }
     for (const pending of this.pendingCalls.values()) {
       deadlines.push(pending.expiresAt);
+    }
+    for (const [channelId, source] of this.voiceRosterSources) {
+      if (source.roomSlug === null) {
+        deadlines.push(source.confirmedAt + VOICE_ROSTER_LEGACY_GRACE_MS);
+      } else if (this.voiceChannelMembers.has(channelId)) {
+        // From the last pull attempt too: a room that does not answer is
+        // asked again a minute later, not in a loop.
+        deadlines.push(
+          Math.max(
+            source.confirmedAt,
+            this.voiceRosterPullAttempts.get(channelId) ?? 0,
+          ) + VOICE_ROSTER_REVALIDATE_MS,
+        );
+      } else {
+        deadlines.push(source.confirmedAt + VOICE_ROSTER_TOMBSTONE_MS);
+      }
+    }
+    if (this.voiceRosterRetryAt !== null) {
+      deadlines.push(this.voiceRosterRetryAt);
     }
 
     return getNextVoicePresenceAlarmTime(
@@ -1310,6 +1549,9 @@ export class MeetingRoom extends DurableObject<Env> {
 
   /** Flush all dirty storage keys in a single batch put */
   private flushDirtyStorage() {
+    // Every message, close, alarm and internal request ends here: the place
+    // to notice that this room's voice roster changed.
+    this.syncVoiceRoster();
     // Delete any per-channel voice member keys that were removed
     if (this.deletedVcKeys.size > 0) {
       const keys = [...this.deletedVcKeys];
@@ -1351,6 +1593,9 @@ export class MeetingRoom extends DurableObject<Env> {
   // ── Helpers ────────────────────────────────────────────────────────────
 
   private persist(ws: WebSocket, data: WsAttachment) {
+    // A socket that closed (or whose session was ended) never comes back:
+    // a persist that finishes after an await must not re-add it.
+    if (this.closedSockets.has(ws)) return;
     const wasEmpty = this.sessions.size === 0;
     const admission =
       data.admission ?? this.getSessionAdmission(ws) ?? undefined;
@@ -1808,216 +2053,6 @@ export class MeetingRoom extends DurableObject<Env> {
     }
   }
 
-  /**
-   * Whether a live session of `userId` other than `exceptSessionId` is in
-   * `channelId`. Sessions held for resume do not count: a leave from a live
-   * device is the user's leave, and a held device that resumes is put back
-   * in the channel by handleResume (markVoiceMemberConnected).
-   */
-  private hasOtherVoiceChannelSession(
-    userId: string,
-    channelId: string,
-    exceptSessionId: string,
-  ): boolean {
-    for (const session of this.sessions.values()) {
-      if (
-        session.id !== exceptSessionId &&
-        session.user_id === userId &&
-        session.voice_channel_id === channelId
-      ) {
-        return true;
-      }
-    }
-    return false;
-  }
-
-  private ensureVoiceChannelMembers(channelId: string, startedAt = Date.now()) {
-    let members = this.voiceChannelMembers.get(channelId);
-    if (!members) {
-      members = new Map();
-      this.voiceChannelMembers.set(channelId, members);
-      this.voiceChannelStartedAt.set(channelId, startedAt);
-      this.persistVoiceChannelStartedAt();
-    }
-    return members;
-  }
-
-  private markVoiceMemberConnected(
-    channelId: string,
-    session: WsAttachment,
-    joinedAt?: number,
-  ) {
-    if (!session.user_id) return;
-
-    const members = this.ensureVoiceChannelMembers(
-      channelId,
-      joinedAt ?? Date.now(),
-    );
-    const existing = members.get(session.user_id);
-    const canonicalIdentity = existing
-      ? {
-          name: existing.name,
-          username: existing.username,
-          display_name: existing.display_name ?? null,
-          avatar_url: existing.avatar_url ?? null,
-          avatar_display: existing.avatar_display ?? null,
-        }
-      : this.getCanonicalProfileIdentity(session.user_id);
-    if (canonicalIdentity)
-      this.setSessionProfileIdentity(session, canonicalIdentity);
-    members.set(session.user_id, {
-      ...existing,
-      user_id: session.user_id,
-      name: session.name,
-      username: session.username,
-      display_name: session.display_name,
-      avatar_url: session.avatar_url,
-      avatar_display: session.avatar_display,
-      stream_preview_url: session.stream_preview_url,
-      connected: true,
-      connection_state: "connected",
-      disconnected_at: null,
-      reconnect_expires_at: null,
-      self_mute: session.self_mute,
-      self_deaf: session.self_deaf,
-      self_video: session.self_video,
-      self_stream: session.self_stream,
-      self_stream_audio: session.self_stream_audio,
-      spatial_audio_enabled: session.spatial_audio_enabled,
-      spatial_audio_high_fidelity: session.spatial_audio_high_fidelity,
-      joined_at:
-        existing?.joined_at ??
-        joinedAt ??
-        this.voiceChannelStartedAt.get(channelId) ??
-        Date.now(),
-    });
-    this.persistVoiceChannelMembers();
-  }
-
-  private markVoiceMemberReconnecting(
-    session: WsAttachment,
-    disconnectedAt: number,
-    excludeWs?: WebSocket,
-  ) {
-    if (!session.voice_channel_id || !session.user_id) return;
-    // The user is still connected through another session in the channel.
-    if (
-      this.hasOtherVoiceChannelSession(
-        session.user_id,
-        session.voice_channel_id,
-        session.id,
-      )
-    ) {
-      return;
-    }
-
-    const members = this.ensureVoiceChannelMembers(session.voice_channel_id);
-    const existing = members.get(session.user_id);
-    const canonicalIdentity = existing
-      ? {
-          name: existing.name,
-          username: existing.username,
-          display_name: existing.display_name ?? null,
-          avatar_url: existing.avatar_url ?? null,
-          avatar_display: existing.avatar_display ?? null,
-        }
-      : this.getCanonicalProfileIdentity(session.user_id);
-    if (canonicalIdentity)
-      this.setSessionProfileIdentity(session, canonicalIdentity);
-    members.set(session.user_id, {
-      ...existing,
-      user_id: session.user_id,
-      name: existing ? existing.name : session.name,
-      username: existing ? existing.username : session.username,
-      display_name: existing ? existing.display_name : session.display_name,
-      avatar_url: existing ? existing.avatar_url : session.avatar_url,
-      avatar_display: existing
-        ? existing.avatar_display
-        : session.avatar_display,
-      stream_preview_url: session.stream_preview_url,
-      connected: false,
-      connection_state: "reconnecting",
-      disconnected_at: disconnectedAt,
-      reconnect_expires_at: disconnectedAt + RESUME_GRACE_PERIOD_MS,
-      self_mute: session.self_mute,
-      self_deaf: session.self_deaf,
-      self_video: session.self_video,
-      self_stream: session.self_stream,
-      self_stream_audio: session.self_stream_audio,
-      spatial_audio_enabled: session.spatial_audio_enabled,
-      spatial_audio_high_fidelity: session.spatial_audio_high_fidelity,
-      joined_at:
-        existing?.joined_at ??
-        this.voiceChannelStartedAt.get(session.voice_channel_id) ??
-        disconnectedAt,
-    });
-    this.persistVoiceChannelMembers();
-    this.ctx.waitUntil(
-      this.broadcastVoiceChannelState(session.voice_channel_id, excludeWs),
-    );
-  }
-
-  /**
-   * Remove voice channel members that no session is in: a member stays while
-   * a live session of the user, or one held for resume within grace, has
-   * that voice_channel_id. Any session of the user is not enough: their chat
-   * tab or a phone that never joined would keep a departed device's entry.
-   */
-  private reconcileVoiceMembers() {
-    const now = Date.now();
-    const membership = (userId: string, channelId: string) =>
-      `${userId}\n${channelId}`;
-    const activeMemberships = new Set<string>();
-    for (const [, session] of this.sessions) {
-      if (session.user_id && session.voice_channel_id) {
-        activeMemberships.add(
-          membership(session.user_id, session.voice_channel_id),
-        );
-      }
-    }
-    // Also include resumable sessions (disconnected but within grace period)
-    for (const [sessionId, disconnectedAt] of this.resumableSessionExpiry) {
-      if (now - disconnectedAt >= RESUME_GRACE_PERIOD_MS) continue;
-      const resumable = this.resumableSessions.get(sessionId);
-      if (resumable?.user_id && resumable.voice_channel_id) {
-        activeMemberships.add(
-          membership(resumable.user_id, resumable.voice_channel_id),
-        );
-      }
-    }
-
-    let changed = false;
-    const changedChannelIds = new Set<string>();
-    for (const [channelId, members] of this.voiceChannelMembers) {
-      for (const [userId] of members) {
-        if (!activeMemberships.has(membership(userId, channelId))) {
-          members.delete(userId);
-          changed = true;
-          changedChannelIds.add(channelId);
-          log.info(
-            `Reconcile: removed stale voice member ${userId} from channel ${channelId}`,
-          );
-        }
-      }
-      if (members.size === 0) {
-        this.voiceChannelMembers.delete(channelId);
-        this.deleteVoiceChannelStorage(channelId);
-        this.voiceChannelStartedAt.delete(channelId);
-        this.persistVoiceChannelStartedAt();
-        this.finishActiveCall(channelId);
-        changed = true;
-        changedChannelIds.add(channelId);
-      }
-    }
-
-    if (changed) {
-      this.persistVoiceChannelMembers();
-      for (const channelId of changedChannelIds) {
-        this.ctx.waitUntil(this.broadcastVoiceChannelState(channelId));
-      }
-    }
-  }
-
   private getSession(ws: WebSocket): WsAttachment | undefined {
     return this.sessions.get(ws);
   }
@@ -2201,10 +2236,8 @@ export class MeetingRoom extends DurableObject<Env> {
       return false;
     }
 
-    if (resumable.voice_channel_id) {
-      this.removeFromVoiceChannel(resumable);
-      delete resumable.voice_channel_id;
-    }
+    // A room's roster drops the held session once it is gone (flush).
+    delete resumable.voice_channel_id;
 
     if (resumable.user_id) {
       this.cleanupCallsForUser(resumable.user_id, "disconnected");
@@ -2227,6 +2260,501 @@ export class MeetingRoom extends DurableObject<Env> {
       });
     }
 
+    return true;
+  }
+
+  // ── Voice rosters: room side ───────────────────────────────────────────
+  // realtime/VOICE_ROSTER.md. The room is the authority on its channel's
+  // voice roster; every change goes to the global gateway as a full
+  // snapshot with a strictly increasing seq.
+
+  private persistVoiceRosterState(): void {
+    this.markDirty(VOICE_ROSTER_STATE_STORAGE_KEY, {
+      channel_id: this.voiceRosterChannelId,
+      seq: this.voiceRosterSeq,
+      fingerprint: this.voiceRosterFingerprint,
+      delivered: this.voiceRosterDelivered,
+      started_at: this.voiceRosterStartedAt,
+      retry_at: this.voiceRosterRetryAt,
+    });
+  }
+
+  /** The arrival order of a voice join, taken before Identify yields. */
+  private nextVoiceJoinOrder(): number {
+    this.lastVoiceJoinOrder = nextVoiceRosterSeq(this.lastVoiceJoinOrder);
+    return this.lastVoiceJoinOrder;
+  }
+
+  /**
+   * The room's roster now. A changed roster gets the next seq (and the room
+   * remembers it); an unchanged one keeps its seq, so a re-sent snapshot is
+   * a duplicate the gateway ignores.
+   */
+  private currentVoiceRoster(now = Date.now()): VoiceRosterSnapshot {
+    const channelId = this.voiceRosterChannelId ?? "";
+    const liveIds = new Set<string>();
+    for (const [ws, session] of this.sessions) {
+      liveIds.add(session.id);
+      // Sessions from before joins were stamped: stamp them once, so the
+      // roster (and its fingerprint) stays the same from call to call.
+      if (!session.standby && session.voice_joined_at === undefined) {
+        session.voice_joined_at = this.voiceRosterStartedAt ?? now;
+        this.persist(ws, session);
+      }
+    }
+    const held: Array<{ session: WsAttachment; disconnectedAt: number }> = [];
+    let heldStamped = false;
+    for (const [id, session] of this.resumableSessions) {
+      if (liveIds.has(id)) continue;
+      const disconnectedAt = this.resumableSessionExpiry.get(id);
+      if (disconnectedAt === undefined) continue;
+      if (!session.standby && session.voice_joined_at === undefined) {
+        session.voice_joined_at = this.voiceRosterStartedAt ?? disconnectedAt;
+        heldStamped = true;
+      }
+      held.push({ session, disconnectedAt });
+    }
+    if (heldStamped) this.persistResumableSessions();
+
+    const members = buildVoiceRosterMembers(this.sessions.values(), held, {
+      graceMs: RESUME_GRACE_PERIOD_MS,
+      now,
+      fallbackJoinedAt: this.voiceRosterStartedAt ?? now,
+    });
+    const startedBefore = this.voiceRosterStartedAt;
+    if (members.length === 0) {
+      this.voiceRosterStartedAt = null;
+    } else if (this.voiceRosterStartedAt === null) {
+      this.voiceRosterStartedAt = Math.min(
+        now,
+        ...members.map((member) => member.joined_at),
+      );
+    }
+    const startedAt = this.voiceRosterStartedAt;
+    const fingerprint = voiceRosterFingerprint({
+      channel_id: channelId,
+      started_at: startedAt,
+      members,
+    });
+    if (
+      fingerprint !== this.voiceRosterFingerprint ||
+      startedAt !== startedBefore
+    ) {
+      if (fingerprint !== this.voiceRosterFingerprint) {
+        this.voiceRosterSeq = nextVoiceRosterSeq(this.voiceRosterSeq, now);
+        this.voiceRosterFingerprint = fingerprint;
+      }
+      this.persistVoiceRosterState();
+    }
+    return {
+      channel_id: channelId,
+      room_slug: this.roomSlug,
+      seq: this.voiceRosterSeq,
+      started_at: startedAt,
+      members,
+    };
+  }
+
+  /** Room: push the roster if it changed since the gateway last took it. */
+  private syncVoiceRoster(): void {
+    if (
+      !this.voiceRosterChannelId ||
+      this.roomSlug === VOICE_ROSTER_GATEWAY ||
+      this.roomSlug === "unknown"
+    ) {
+      return;
+    }
+    this.currentVoiceRoster();
+    if (this.voiceRosterFingerprint !== this.voiceRosterDelivered) {
+      this.voiceRosterPusher.request();
+    }
+  }
+
+  /** One push attempt (VoiceRosterPusher retries); true once delivered. */
+  private async pushVoiceRoster(): Promise<boolean> {
+    const namespace = this.env.MEETING_ROOM;
+    if (!namespace || !this.voiceRosterChannelId) return true;
+    const snapshot = this.currentVoiceRoster();
+    const fingerprint = this.voiceRosterFingerprint;
+    if (fingerprint === this.voiceRosterDelivered) return true;
+    const response = await namespace
+      .get(namespace.idFromName(VOICE_ROSTER_GATEWAY))
+      .fetch(`https://internal${VOICE_ROSTER_PATH}`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(snapshot),
+      });
+    await response.body?.cancel();
+    if (!response.ok) {
+      meetingLog.warn(`Voice roster push rejected: status=${response.status}`);
+      return false;
+    }
+    this.voiceRosterDelivered = fingerprint;
+    this.persistVoiceRosterState();
+    this.flushDirtyStorage();
+    return true;
+  }
+
+  // ── Voice rosters: global gateway side ─────────────────────────────────
+  // voiceChannelMembers mirrors the rooms' rosters. Nothing a client sends
+  // here adds or removes a member: op 33/34 are hints that may trigger a
+  // pull, and op 15 only sets VoiceMemberHint fields on an existing member.
+
+  private normalizeVoiceRosterSource(value: unknown): VoiceRosterSource | null {
+    if (!this.isPlainObject(value)) return null;
+    const { roomSlug, seq, confirmedAt, hints } = value;
+    if (
+      (roomSlug !== null && typeof roomSlug !== "string") ||
+      typeof seq !== "number" ||
+      typeof confirmedAt !== "number"
+    ) {
+      return null;
+    }
+    return {
+      roomSlug,
+      seq,
+      confirmedAt,
+      ...(this.isPlainObject(hints)
+        ? { hints: hints as Record<string, VoiceMemberHint> }
+        : {}),
+    };
+  }
+
+  private persistVoiceRosterSource(channelId: string): void {
+    const key = `${VOICE_ROSTER_SOURCE_PREFIX}${channelId}`;
+    const source = this.voiceRosterSources.get(channelId);
+    if (!source) {
+      this.dirtyStorage.delete(key);
+      this.deletedVcKeys.add(key);
+      return;
+    }
+    this.deletedVcKeys.delete(key);
+    this.markDirty(key, source);
+  }
+
+  private applyVoiceMemberHint(
+    member: VoiceChannelMember,
+    hint: VoiceMemberHint | undefined,
+  ): void {
+    if (!hint) return;
+    if (hint.stream_preview_url !== undefined) {
+      member.stream_preview_url = hint.stream_preview_url;
+    }
+    if (hint.spatial_audio_enabled !== undefined) {
+      member.spatial_audio_enabled = hint.spatial_audio_enabled;
+    }
+    if (hint.spatial_audio_high_fidelity !== undefined) {
+      member.spatial_audio_high_fidelity = hint.spatial_audio_high_fidelity;
+    }
+  }
+
+  /**
+   * Applies a room's snapshot when its seq is newer than the last applied
+   * one for the channel (else a no-op; an equal seq only confirms). Returns
+   * whether it was applied.
+   */
+  private applyVoiceRosterSnapshot(snapshot: VoiceRosterSnapshot): boolean {
+    const now = Date.now();
+    const channelId = snapshot.channel_id;
+    const source = this.voiceRosterSources.get(channelId);
+    if (source?.roomSlug && source.roomSlug !== snapshot.room_slug) {
+      meetingLog.warn(
+        `Voice roster for ${channelId} from ${snapshot.room_slug} ignored; it belongs to ${source.roomSlug}`,
+      );
+      return false;
+    }
+    const lastSeq = source?.roomSlug ? source.seq : undefined;
+    if (!isNewerVoiceRoster(lastSeq, snapshot.seq)) {
+      if (source && snapshot.seq === source.seq) {
+        source.confirmedAt = now;
+        this.persistVoiceRosterSource(channelId);
+      }
+      return false;
+    }
+
+    const hints = { ...source?.hints };
+    const next = new Map<string, VoiceChannelMember>();
+    for (const rosterMember of snapshot.members) {
+      const identity = this.profileIdentities.get(rosterMember.user_id);
+      const member: VoiceChannelMember = identity
+        ? { ...rosterMember, ...identity }
+        : { ...rosterMember };
+      this.applyVoiceMemberHint(member, hints[rosterMember.user_id]);
+      next.set(rosterMember.user_id, member);
+    }
+    for (const userId of Object.keys(hints)) {
+      if (!next.has(userId)) delete hints[userId];
+    }
+    this.voiceRosterSources.set(channelId, {
+      roomSlug: snapshot.room_slug,
+      seq: snapshot.seq,
+      confirmedAt: now,
+      ...(Object.keys(hints).length > 0 ? { hints } : {}),
+    });
+    this.persistVoiceRosterSource(channelId);
+    this.replaceVoiceChannelMembers(channelId, next, snapshot.started_at);
+    if (this.voiceRosterSources.size === 1) {
+      this.ctx.waitUntil(this.scheduleAlarm());
+    }
+    return true;
+  }
+
+  /**
+   * Sets a channel's mirrored members and does what a change means here:
+   * the sidebar update, a ring the callee answered by joining, a ring or an
+   * answered call whose channel emptied.
+   */
+  private replaceVoiceChannelMembers(
+    channelId: string,
+    next: Map<string, VoiceChannelMember>,
+    startedAt: number | null,
+  ): boolean {
+    const previous =
+      this.voiceChannelMembers.get(channelId) ??
+      new Map<string, VoiceChannelMember>();
+    const inserted = [...next.keys()].filter((id) => !previous.has(id));
+    const profileChanged = [...next].some(([id, member]) => {
+      const before = previous.get(id);
+      return (
+        !!before &&
+        (before.name !== member.name ||
+          before.username !== member.username ||
+          (before.display_name ?? null) !== (member.display_name ?? null) ||
+          (before.avatar_url ?? null) !== (member.avatar_url ?? null) ||
+          (before.avatar_display ?? null) !== (member.avatar_display ?? null))
+      );
+    });
+    const sameMembers =
+      previous.size === next.size &&
+      [...next].every(
+        ([id, member]) =>
+          JSON.stringify(previous.get(id)) === JSON.stringify(member),
+      );
+    const startedBefore = this.voiceChannelStartedAt.get(channelId) ?? null;
+    const startedNow =
+      next.size > 0 ? (startedAt ?? startedBefore ?? Date.now()) : null;
+    if (sameMembers && startedBefore === startedNow) return false;
+
+    if (next.size === 0) {
+      this.voiceChannelMembers.delete(channelId);
+      this.deleteVoiceChannelStorage(channelId);
+      this.voiceChannelStartedAt.delete(channelId);
+      this.persistVoiceChannelStartedAt();
+      if (previous.size > 0) {
+        this.cancelAbandonedRing(channelId);
+        this.finishActiveCall(channelId);
+      }
+    } else {
+      this.voiceChannelMembers.set(channelId, next);
+      this.voiceChannelStartedAt.set(channelId, startedNow ?? Date.now());
+      this.persistVoiceChannelStartedAt();
+      this.persistVoiceChannelMembers();
+    }
+    for (const userId of inserted) this.acceptRingOnJoin(userId, channelId);
+    if (previous.size > 0 || next.size > 0) {
+      this.ctx.waitUntil(
+        this.broadcastVoiceChannelState(
+          channelId,
+          undefined,
+          inserted.length > 0 || profileChanged,
+        ),
+      );
+    }
+    return true;
+  }
+
+  /** The callee joined the ringing DM's voice instead of pressing Accept. */
+  private acceptRingOnJoin(userId: string, channelId: string): void {
+    const pending = this.pendingCalls.get(userId);
+    if (!pending || pending.channelId !== channelId) return;
+    log.info(`Callee joined the ringing DM: accepting call ${pending.callId}`);
+    const callId = pending.callId;
+    clearTimeout(pending.timeout);
+    this.pendingCalls.delete(userId);
+    this.persistPendingCalls();
+    // A late Op 37 (CallAccept) for this call is then a no-op.
+    this.acceptedCalls.add(callId);
+    setTimeout(() => this.acceptedCalls.delete(callId), 10000);
+    const evt = {
+      op: Op.Dispatch,
+      d: {
+        event: "CALL_RING_STOP",
+        data: { call_id: callId, reason: "accepted" },
+      },
+    };
+    this.broadcastToUser(pending.callerId, evt);
+    this.broadcastToUser(pending.calleeId, evt);
+    this.settleRing(pending, "accepted");
+  }
+
+  /** The DM's voice emptied while it rang (the caller gave up). */
+  private cancelAbandonedRing(channelId: string): void {
+    for (const call of this.pendingCalls.values()) {
+      if (call.channelId !== channelId) continue;
+      log.info(`DM Call ${call.callId} emptied during ring, cancelling`);
+      clearTimeout(call.timeout);
+      this.pendingCalls.delete(call.calleeId);
+      this.persistPendingCalls();
+      const endMsg = {
+        op: Op.Dispatch,
+        d: {
+          event: "CALL_RING_STOP",
+          data: { call_id: call.callId, reason: "abandoned" },
+        },
+      };
+      this.broadcastToUser(call.callerId, endMsg);
+      this.broadcastToUser(call.calleeId, endMsg);
+      this.settleRing(call, "abandoned");
+      return;
+    }
+  }
+
+  /**
+   * Drops pre-push entries whose room never claimed them, and forgets the
+   * seq of channels empty for VOICE_ROSTER_TOMBSTONE_MS.
+   */
+  private pruneVoiceRosterSources(now: number): void {
+    for (const [channelId, source] of [...this.voiceRosterSources]) {
+      if (source.roomSlug === null) {
+        if (now - source.confirmedAt < VOICE_ROSTER_LEGACY_GRACE_MS) continue;
+        log.info(`Dropping unclaimed voice roster for ${channelId}`);
+        this.voiceRosterSources.delete(channelId);
+        this.persistVoiceRosterSource(channelId);
+        this.replaceVoiceChannelMembers(channelId, new Map(), null);
+        continue;
+      }
+      if (
+        !this.voiceChannelMembers.has(channelId) &&
+        now - source.confirmedAt >= VOICE_ROSTER_TOMBSTONE_MS
+      ) {
+        this.voiceRosterSources.delete(channelId);
+        this.voiceRosterPullAttempts.delete(channelId);
+        this.persistVoiceRosterSource(channelId);
+      }
+    }
+  }
+
+  /** Pulls every non-empty channel no push or pull confirmed in `minAgeMs`. */
+  private async revalidateVoiceRosters(minAgeMs: number): Promise<void> {
+    const now = Date.now();
+    const pulls: Promise<void>[] = [];
+    for (const [channelId, source] of this.voiceRosterSources) {
+      if (!source.roomSlug || !this.voiceChannelMembers.has(channelId)) {
+        continue;
+      }
+      const last = Math.max(
+        source.confirmedAt,
+        this.voiceRosterPullAttempts.get(channelId) ?? 0,
+      );
+      if (now - last < minAgeMs) continue;
+      pulls.push(this.pullVoiceRoster(channelId, source.roomSlug));
+    }
+    if (pulls.length === 0) return;
+    await Promise.all(pulls);
+    this.flushDirtyStorage();
+  }
+
+  private async pullVoiceRoster(
+    channelId: string,
+    roomSlug: string,
+  ): Promise<void> {
+    const namespace = this.env.MEETING_ROOM;
+    if (!namespace || this.voiceRosterPulls.has(channelId)) return;
+    this.voiceRosterPulls.add(channelId);
+    this.voiceRosterPullAttempts.set(channelId, Date.now());
+    try {
+      const response = await namespace
+        .get(namespace.idFromName(roomSlug))
+        .fetch(`https://internal${VOICE_ROSTER_PULL_PATH}`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            channel_id: channelId,
+            room_slug: roomSlug,
+          }),
+        });
+      if (!response.ok) {
+        await response.body?.cancel();
+        meetingLog.warn(
+          `Voice roster pull for ${channelId} failed: status=${response.status}`,
+        );
+        return;
+      }
+      const snapshot = parseVoiceRosterSnapshot(
+        await response.json().catch(() => null),
+      );
+      if (
+        snapshot &&
+        snapshot.channel_id === channelId &&
+        snapshot.room_slug === roomSlug
+      ) {
+        this.applyVoiceRosterSnapshot(snapshot);
+      }
+    } catch (error) {
+      meetingLog.warn(`Voice roster pull for ${channelId} failed`, error);
+    } finally {
+      this.voiceRosterPulls.delete(channelId);
+    }
+  }
+
+  /**
+   * A client's op 33/34 (released mobile, older desktop and web builds):
+   * never a membership change, only a reason to pull the room's roster if
+   * the gateway has not heard from it for a while.
+   */
+  private hintVoiceRoster(channelId: string): void {
+    const source = this.voiceRosterSources.get(channelId);
+    if (!source?.roomSlug) return;
+    const last = Math.max(
+      source.confirmedAt,
+      this.voiceRosterPullAttempts.get(channelId) ?? 0,
+    );
+    if (Date.now() - last < VOICE_ROSTER_HINT_MIN_AGE_MS) return;
+    this.ctx.waitUntil(
+      this.pullVoiceRoster(channelId, source.roomSlug).then(() =>
+        this.flushDirtyStorage(),
+      ),
+    );
+  }
+
+  /**
+   * The channel a global session's op 15 is about: the one its op 33 named
+   * if the room has the user there, else the only channel the user is in.
+   */
+  private resolveVoiceHintChannel(session: WsAttachment): string | null {
+    const userId = session.user_id;
+    if (!userId) return null;
+    const hinted = session.voice_channel_id;
+    if (hinted && this.voiceChannelMembers.get(hinted)?.has(userId)) {
+      return hinted;
+    }
+    let found: string | null = null;
+    for (const [channelId, members] of this.voiceChannelMembers) {
+      if (!members.has(userId)) continue;
+      if (found) return null;
+      found = channelId;
+    }
+    return found;
+  }
+
+  /** Records hint fields for a member the room has; true if it changed. */
+  private setVoiceMemberHint(
+    channelId: string,
+    userId: string,
+    patch: VoiceMemberHint,
+  ): boolean {
+    const member = this.voiceChannelMembers.get(channelId)?.get(userId);
+    const source = this.voiceRosterSources.get(channelId);
+    if (!member || !source) return false;
+    source.hints = {
+      ...source.hints,
+      [userId]: { ...source.hints?.[userId], ...patch },
+    };
+    this.persistVoiceRosterSource(channelId);
+    const before = JSON.stringify(member);
+    this.applyVoiceMemberHint(member, patch);
+    if (JSON.stringify(member) === before) return false;
+    this.persistVoiceChannelMembers();
     return true;
   }
 
@@ -2326,7 +2854,7 @@ export class MeetingRoom extends DurableObject<Env> {
   private replaceOtherVoiceSessions(
     ws: WebSocket,
     session: WsAttachment,
-  ): void {
+  ): boolean {
     const userId = session.user_id;
     if (
       !userId ||
@@ -2334,7 +2862,40 @@ export class MeetingRoom extends DurableObject<Env> {
       !this.grantsVoiceJoins ||
       session.admission?.accessMode !== "authenticated"
     ) {
-      return;
+      return false;
+    }
+    // Newest join wins, by arrival: an Identify that started before another
+    // one of this user's but finished after it is the one replaced.
+    const order = session.voice_join_order ?? 0;
+    for (const [otherWs, other] of this.sessions) {
+      if (
+        otherWs !== ws &&
+        other.id !== session.id &&
+        other.user_id === userId &&
+        !other.standby &&
+        (other.voice_join_order ?? 0) > order
+      ) {
+        meetingLog.info(
+          `Voice join ${session.id} finished after newer join ${other.id}; it is replaced`,
+        );
+        this.rememberReplacedVoiceSession(session.id);
+        this.persistReplacedVoiceSessions();
+        this.sendTo(ws, {
+          op: Op.Error,
+          d: {
+            code: CloseCode.SessionReplaced,
+            message: VOICE_SESSION_REPLACED_REASON,
+          },
+        });
+        // handleLeave does all its work before it returns.
+        void this.handleLeave(ws, true, false, true);
+        try {
+          ws.close(CloseCode.SessionReplaced, VOICE_SESSION_REPLACED_REASON);
+        } catch {
+          /* already closed */
+        }
+        return true;
+      }
     }
     let remembered = false;
     for (const [otherWs, other] of [...this.sessions]) {
@@ -2379,7 +2940,6 @@ export class MeetingRoom extends DurableObject<Env> {
       );
       this.rememberReplacedVoiceSession(id);
       remembered = true;
-      if (resumable.voice_channel_id) this.removeFromVoiceChannel(resumable);
       this.revokeVoiceJoin(resumable, true);
       this.resumableSessions.delete(id);
       this.replayBuffers.delete(id);
@@ -2396,6 +2956,7 @@ export class MeetingRoom extends DurableObject<Env> {
       });
     }
     if (remembered) this.persistReplacedVoiceSessions();
+    return false;
   }
 
   // ── Moderator moves ────────────────────────────────────────────────────
@@ -2445,7 +3006,6 @@ export class MeetingRoom extends DurableObject<Env> {
         movedAt: Date.now(),
       });
       moved += 1;
-      if (resumable.voice_channel_id) this.removeFromVoiceChannel(resumable);
       this.revokeVoiceJoin(resumable, true, true);
       this.resumableSessions.delete(id);
       this.replayBuffers.delete(id);
@@ -2479,54 +3039,6 @@ export class MeetingRoom extends DurableObject<Env> {
       MOVED_VOICE_SESSIONS_STORAGE_KEY,
       Object.fromEntries(this.movedVoiceSessions),
     );
-  }
-
-  /**
-   * Global gateway: takes `userId` off `channelId`'s roster on every session
-   * (live or held) that is in it. A session already in another channel (the
-   * client switched first) is left alone.
-   */
-  private clearVoiceChannelForUser(userId: string, channelId: string): number {
-    let cleared = 0;
-    for (const [ws, session] of this.sessions) {
-      if (session.user_id !== userId || session.voice_channel_id !== channelId)
-        continue;
-      this.removeFromVoiceChannel(session);
-      session.voice_channel_id = undefined;
-      this.persist(ws, session);
-      cleared += 1;
-    }
-    let heldChanged = false;
-    for (const resumable of this.resumableSessions.values()) {
-      if (
-        resumable.user_id !== userId ||
-        resumable.voice_channel_id !== channelId
-      )
-        continue;
-      delete resumable.voice_channel_id;
-      heldChanged = true;
-      cleared += 1;
-    }
-    if (heldChanged) this.persistResumableSessions();
-    // Held sessions never count as "another device in the channel", so the
-    // member entry can outlive the live sessions above: drop what is left.
-    const members = this.voiceChannelMembers.get(channelId);
-    if (
-      cleared > 0 &&
-      members?.has(userId) &&
-      !this.hasOtherVoiceChannelSession(userId, channelId, "")
-    ) {
-      members.delete(userId);
-      if (members.size === 0) {
-        this.voiceChannelMembers.delete(channelId);
-        this.deleteVoiceChannelStorage(channelId);
-        this.voiceChannelStartedAt.delete(channelId);
-        this.persistVoiceChannelStartedAt();
-      }
-      this.persistVoiceChannelMembers();
-      this.ctx.waitUntil(this.broadcastVoiceChannelState(channelId));
-    }
-    return cleared;
   }
 
   private rememberReplacedVoiceSession(participantId: string): void {
@@ -2818,6 +3330,11 @@ export class MeetingRoom extends DurableObject<Env> {
         return;
       }
       const participantId = admission.participantId;
+      // Join order is taken on arrival, before any await: of two Identifies
+      // of one user, the one that arrived last wins, whichever finishes first.
+      const voiceJoinOrder =
+        d.standby !== true ? this.nextVoiceJoinOrder() : undefined;
+      const voiceJoinedAt = d.standby !== true ? Date.now() : undefined;
       // Grant voice before the slow profile/TURN/D1 work below, so a voice
       // Identify sent straight from the ticket bootstrap waits only for this
       // message to arrive, not for Ready. Standby sessions never get a grant.
@@ -2934,6 +3451,9 @@ export class MeetingRoom extends DurableObject<Env> {
         tracks: [],
         supports_voice_state_deltas: d.supports_voice_state_deltas === true,
         standby: d.standby === true,
+        ...(voiceJoinOrder !== undefined
+          ? { voice_join_order: voiceJoinOrder, voice_joined_at: voiceJoinedAt }
+          : {}),
         last_heartbeat: Date.now(),
         seq: 0,
         outbound_seq: 0,
@@ -2943,8 +3463,9 @@ export class MeetingRoom extends DurableObject<Env> {
 
       this.persist(ws, attachment);
 
-      // This join takes over the user's voice sessions on other devices.
-      this.replaceOtherVoiceSessions(ws, attachment);
+      // This join takes over the user's voice sessions on other devices,
+      // unless a newer join of theirs finished first: then this one ends.
+      if (this.replaceOtherVoiceSessions(ws, attachment)) return;
 
       // Build roster (after the takeover, so no replaced session is in it)
       const participants = this.buildRoomRoster(ws);
@@ -3073,8 +3594,7 @@ export class MeetingRoom extends DurableObject<Env> {
     ws: WebSocket,
     voiceJoin: { participantId: string; subject: string } | null,
   ): boolean {
-    const closed =
-      ws.readyState !== WebSocket.OPEN || this.closedSockets.has(ws);
+    const closed = this.isSocketClosed(ws);
     if (!closed && !this.getSession(ws)) return false;
     meetingLog.info(
       closed
@@ -3092,6 +3612,11 @@ export class MeetingRoom extends DurableObject<Env> {
       );
     }
     return true;
+  }
+
+  /** Closed, or its close or error was delivered (or handleLeave ran). */
+  private isSocketClosed(ws: WebSocket): boolean {
+    return ws.readyState !== WebSocket.OPEN || this.closedSockets.has(ws);
   }
 
   // ── Op 3: Heartbeat ────────────────────────────────────────────────────
@@ -3258,21 +3783,15 @@ export class MeetingRoom extends DurableObject<Env> {
       }
 
       await this.restoreSessionSubscriptions(ws, resumedAttachment);
-
-      // Re-add to voice channel members if the session was in a VC.
-      // During handleLeave, we now defer voice channel cleanup for resumable
-      // sessions — but if reconcileVoiceMembers() ran during the disconnect
-      // window (or a future code path removed them), re-ensure membership.
-      if (resumedAttachment.voice_channel_id && resumedAttachment.user_id) {
-        this.markVoiceMemberConnected(
-          resumedAttachment.voice_channel_id,
-          resumedAttachment,
-        );
-        this.persist(ws, resumedAttachment);
-        await this.broadcastVoiceChannelState(
-          resumedAttachment.voice_channel_id,
-        );
+      if (this.isSocketClosed(ws)) {
+        // Closed while its subscriptions were checked: webSocketClose held
+        // the session for resume again, and nothing here may re-add it.
+        meetingLog.info("Resume abandoned: socket closed while resuming");
+        return;
       }
+
+      // A room's roster now shows the session connected again (flush); the
+      // global gateway's voice members come from the rooms, not from here.
 
       // Replay retained messages after subscription restoration. Events arriving
       // during restoration are queued and become part of this same ordered batch.
@@ -3421,6 +3940,9 @@ export class MeetingRoom extends DurableObject<Env> {
         session.standby = false;
         if (d.self_mute !== undefined) session.self_mute = d.self_mute;
         if (d.self_deaf !== undefined) session.self_deaf = d.self_deaf;
+        // A promotion is a join now: the newest one for this user.
+        session.voice_joined_at = Date.now();
+        session.voice_join_order = this.nextVoiceJoinOrder();
         this.persist(ws, session);
         this.pushVoiceJoinGrant(session.id, session.admission?.subject, true);
         this.replaceOtherVoiceSessions(ws, session);
@@ -3495,8 +4017,18 @@ export class MeetingRoom extends DurableObject<Env> {
       session.spatial_audio_enabled = d.spatial_audio_enabled;
     if (d.spatial_audio_high_fidelity !== undefined)
       session.spatial_audio_high_fidelity = d.spatial_audio_high_fidelity;
-    const spatialRoomKey = session.voice_channel_id || this.roomSlug;
+    // Global socket: mute, deafen, camera and share here no longer reach the
+    // sidebar (the room's op 15 does, through its roster). The preview and
+    // spatial fields still do, as hints on the member the room reported.
+    const hintChannel =
+      this.roomSlug === VOICE_ROSTER_GATEWAY
+        ? this.resolveVoiceHintChannel(session)
+        : null;
+    const spatialRoomKey =
+      hintChannel ?? (session.voice_channel_id || this.roomSlug);
+    let sidebarChanged = false;
     if (isSpatialAudioState(d.spatial_audio_state)) {
+      sidebarChanged = hintChannel !== null;
       const nextSpatialAudioState = {
         ...d.spatial_audio_state,
         updatedBy: session.user_id || session.id,
@@ -3505,9 +4037,20 @@ export class MeetingRoom extends DurableObject<Env> {
       this.spatialAudioStates.set(spatialRoomKey, nextSpatialAudioState);
       this.persistSpatialAudioState(spatialRoomKey, nextSpatialAudioState);
     }
-    // Also update the voice channel sidebar state if user is in a VC
-    if (session.voice_channel_id && session.user_id) {
-      this.markVoiceMemberConnected(session.voice_channel_id, session);
+    if (hintChannel && session.user_id) {
+      const hint: VoiceMemberHint = {};
+      if (d.stream_preview_url !== undefined)
+        hint.stream_preview_url = d.stream_preview_url;
+      if (d.spatial_audio_enabled !== undefined)
+        hint.spatial_audio_enabled = d.spatial_audio_enabled;
+      if (d.spatial_audio_high_fidelity !== undefined)
+        hint.spatial_audio_high_fidelity = d.spatial_audio_high_fidelity;
+      if (
+        Object.keys(hint).length > 0 &&
+        this.setVoiceMemberHint(hintChannel, session.user_id, hint)
+      ) {
+        sidebarChanged = true;
+      }
     }
     this.persist(ws, session);
 
@@ -3517,10 +4060,8 @@ export class MeetingRoom extends DurableObject<Env> {
       this.spatialAudioStates.get(spatialRoomKey),
     );
 
-    if (session.voice_channel_id && session.user_id) {
-      this.ctx.waitUntil(
-        this.broadcastVoiceChannelState(session.voice_channel_id),
-      );
+    if (hintChannel && sidebarChanged) {
+      this.ctx.waitUntil(this.broadcastVoiceChannelState(hintChannel));
     }
   }
 
@@ -3636,6 +4177,8 @@ export class MeetingRoom extends DurableObject<Env> {
   ) {
     const session = this.getSession(ws);
     if (!session) return;
+    // The socket is done: no later persist may bring the session back.
+    this.closedSockets.add(ws);
 
     // Broadcast updated presence/platform state before cleanup
     if (session.user_id && !session.standby) {
@@ -3670,20 +4213,12 @@ export class MeetingRoom extends DurableObject<Env> {
       );
     }
 
-    // For abrupt WebSocket closes (not intentional), defer voice channel cleanup
-    // so the sidebar doesn't flash empty for other users during reconnect.
-    // The alarm's reconcileVoiceMembers() will clean up if resume never happens.
-    // For intentional disconnects (Op.ClientDisconnect), always clean up immediately.
+    // In a room, the roster (flushed at the end of this cycle) shows an
+    // abrupt close as reconnecting while the session is held for resume,
+    // and drops an intentional leave at once. A global session's close
+    // does not touch voice members: they come from the rooms.
     const now = Date.now();
-
-    if (session.voice_channel_id) {
-      if (intentional) {
-        this.removeFromVoiceChannel(session);
-        delete session.voice_channel_id;
-      } else {
-        this.markVoiceMemberReconnecting(session, now, ws);
-      }
-    }
+    if (intentional) delete session.voice_channel_id;
 
     // Clean up calls — cancel pending or end active
     if (session.user_id && !session.standby) {
@@ -3724,8 +4259,8 @@ export class MeetingRoom extends DurableObject<Env> {
     // period. Broadcasting "leave" prematurely causes other clients to remove
     // the participant from their local state, but the voice channel membership
     // is deferred — leading to a desync between the VC view (shows user left)
-    // and the sidebar (still shows user present). The alarm's reconcileVoiceMembers
-    // will clean up and broadcast leave if the resume never happens.
+    // and the sidebar (still shows user present). The alarm broadcasts the
+    // leave when the resume grace runs out.
     if (intentional && !session.standby) {
       this.broadcast(
         {
@@ -4243,14 +4778,18 @@ export class MeetingRoom extends DurableObject<Env> {
     this.persist(ws, session);
   }
 
+  /**
+   * Re-checks a resuming session's subscriptions against D1, then applies
+   * the ones still allowed in one synchronous step. Nothing is touched if
+   * the socket closed during the checks (its close already held the
+   * session), so a late apply cannot re-add a dead socket.
+   */
   private async restoreSessionSubscriptions(
     ws: WebSocket,
     session: WsAttachment,
   ) {
-    this.cleanupChannelSubscriptions(ws);
-    this.cleanupServerSubscriptions(ws);
-
     const validChannels: string[] = [];
+    const validServers: string[] = [];
     if (session.user_id) {
       for (const channelId of session.subscribed_channels ?? []) {
         const access = await resolveChannelAccess(
@@ -4261,17 +4800,7 @@ export class MeetingRoom extends DurableObject<Env> {
         if (!access || !hasChannelPermission(access, PERMISSIONS.VIEW_CHANNELS))
           continue;
         validChannels.push(channelId);
-        let subscribers = this.channelSubscriptions.get(channelId);
-        if (!subscribers) {
-          subscribers = new Set();
-          this.channelSubscriptions.set(channelId, subscribers);
-        }
-        subscribers.add(ws);
       }
-    }
-
-    const validServers: string[] = [];
-    if (session.user_id) {
       for (const serverId of session.subscribed_servers ?? []) {
         const member = await this.env.DB.prepare(
           "SELECT 1 FROM server_members WHERE server_id = ? AND user_id = ? LIMIT 1",
@@ -4281,316 +4810,67 @@ export class MeetingRoom extends DurableObject<Env> {
           .catch(() => null);
         if (!member) continue;
         validServers.push(serverId);
-        let subscribers = this.serverSubscriptions.get(serverId);
-        if (!subscribers) {
-          subscribers = new Set();
-          this.serverSubscriptions.set(serverId, subscribers);
-        }
-        subscribers.add(ws);
       }
     }
+    if (this.isSocketClosed(ws)) return;
 
+    this.cleanupChannelSubscriptions(ws);
+    this.cleanupServerSubscriptions(ws);
+    for (const channelId of validChannels) {
+      let subscribers = this.channelSubscriptions.get(channelId);
+      if (!subscribers) {
+        subscribers = new Set();
+        this.channelSubscriptions.set(channelId, subscribers);
+      }
+      subscribers.add(ws);
+    }
+    for (const serverId of validServers) {
+      let subscribers = this.serverSubscriptions.get(serverId);
+      if (!subscribers) {
+        subscribers = new Set();
+        this.serverSubscriptions.set(serverId, subscribers);
+      }
+      subscribers.add(ws);
+    }
     session.subscribed_channels = validChannels;
     session.subscribed_servers = validServers;
     this.persist(ws, session);
   }
 
-  // ── Op 33: VoiceChannelJoin ────────────────────────────────────────────
+  // ── Op 33 / 34: VoiceChannelJoin / VoiceChannelLeave (legacy hints) ───
+  // Voice membership is the room's roster (realtime/VOICE_ROSTER.md). The
+  // released mobile app, older desktop builds and older web builds still
+  // send op 33 on join and every 30 s, and op 34 on leave. Neither adds or
+  // removes a member any more, so a client cannot leave a ghost entry. Op 33
+  // only records which channel the session's op 15 hints are about, and
+  // either may make the gateway pull a roster it has not heard of lately.
 
-  private normalizeVoiceChannelStartedAt(
-    startedAt: unknown,
-  ): number | undefined {
-    if (typeof startedAt !== "number" || !Number.isFinite(startedAt))
-      return undefined;
-    const now = Date.now();
-    const maxRestoreAgeMs = 7 * 24 * 60 * 60 * 1000;
-    if (startedAt < now - maxRestoreAgeMs || startedAt > now + 60_000)
-      return undefined;
-    return startedAt;
-  }
-
-  private async handleVoiceChannelJoin(
+  private handleVoiceChannelJoin(
     ws: WebSocket,
     d: MainClientPayload<Op.VoiceChannelJoin>,
   ) {
     const session = this.requireSession(ws);
     if (!session || !d.channel_id || !session.user_id) return;
-
-    const access = await resolveChannelAccess(
-      this.env.DB,
-      session.user_id,
-      d.channel_id,
-    );
-    // Without CONNECT, a moderator's move lets the user in: its grant, spent
-    // once here, and after that the join it allowed (the client re-sends
-    // this join every 30 s while connected).
-    let canConnect =
-      !!access &&
-      (hasChannelPermission(access, PERMISSIONS.CONNECT) ||
-        session.voice_channel_id === d.channel_id);
-    if (access && !canConnect) {
-      const grant = await openVoiceMoveGrant(
-        d.move_grant,
-        this.env.REALTIME_TICKET_SECRET,
-        {
-          subject: session.user_id,
-          channelId: d.channel_id,
-          serverId: access.serverId,
-        },
-      );
-      canConnect =
-        !!grant &&
-        this.voiceMoveGrants.spend(
-          session.user_id,
-          grant.jti,
-          d.channel_id,
-          "join",
-        );
-    }
-    if (!canConnect) {
-      this.sendTo(ws, {
-        op: Op.Error,
-        d: {
-          code: CloseCode.NotAuthenticated,
-          message: "Channel not found or access denied",
-        },
-      });
-      return;
-    }
-
-    // Clients re-send this join every 30 s. A field it leaves out keeps the
-    // state the session has (Op 15 maintains it); it never resets it.
-    if (d.self_mute !== undefined) session.self_mute = d.self_mute;
-
-    // Leave previous voice channel if switching to a different one.
-    // If already in the same channel (e.g. server added us during handleCallInitiate
-    // and now the SFU join fires sendVoiceChannelJoin for the same channel), just
-    // update in-place without remove+re-add to avoid flicker.
-    if (session.voice_channel_id && session.voice_channel_id !== d.channel_id) {
-      this.removeFromVoiceChannel(session);
-    } else if (session.voice_channel_id === d.channel_id) {
-      // Already in this channel — just refresh the member and broadcast
+    if (this.roomSlug !== VOICE_ROSTER_GATEWAY) return;
+    if (session.voice_channel_id !== d.channel_id) {
+      session.voice_channel_id = d.channel_id;
       this.persist(ws, session);
-      const members = this.voiceChannelMembers.get(d.channel_id);
-      if (members?.has(session.user_id)) {
-        const member = members.get(session.user_id)!;
-        member.self_mute = session.self_mute;
-        member.self_deaf = session.self_deaf;
-        member.connected = true;
-        member.connection_state = "connected";
-        member.disconnected_at = null;
-        member.reconnect_expires_at = null;
-        const candidateStartedAt = this.normalizeVoiceChannelStartedAt(
-          d.started_at,
-        );
-        if (candidateStartedAt) {
-          member.joined_at = Math.min(
-            member.joined_at ?? candidateStartedAt,
-            candidateStartedAt,
-          );
-          const currentStartedAt = this.voiceChannelStartedAt.get(d.channel_id);
-          if (!currentStartedAt || candidateStartedAt < currentStartedAt) {
-            this.voiceChannelStartedAt.set(d.channel_id, candidateStartedAt);
-            this.persistVoiceChannelStartedAt();
-          }
-        }
-        this.ctx.waitUntil(this.broadcastVoiceChannelState(d.channel_id));
-        this.persistVoiceChannelMembers();
-      } else {
-        // The session is in the channel but its entry is gone (another
-        // device's leave or a reconcile removed it): this join restores it.
-        this.markVoiceMemberConnected(
-          d.channel_id,
-          session,
-          this.normalizeVoiceChannelStartedAt(d.started_at),
-        );
-        this.persist(ws, session);
-        this.ctx.waitUntil(
-          this.broadcastVoiceChannelState(d.channel_id, undefined, true),
-        );
-      }
-      return;
     }
-
-    // Add to new voice channel
-    session.voice_channel_id = d.channel_id;
-    session.self_video = false;
-    session.self_stream = false;
-    session.stream_preview_url = null;
-    this.persist(ws, session);
-
-    let members = this.voiceChannelMembers.get(d.channel_id);
-    if (!members) {
-      members = new Map();
-      this.voiceChannelMembers.set(d.channel_id, members);
-      // First member — record channel start time
-      const candidateStartedAt =
-        this.normalizeVoiceChannelStartedAt(d.started_at) ?? Date.now();
-      this.voiceChannelStartedAt.set(d.channel_id, candidateStartedAt);
-      this.persistVoiceChannelStartedAt();
-    }
-
-    const joinedAt =
-      this.normalizeVoiceChannelStartedAt(d.started_at) ??
-      this.voiceChannelStartedAt.get(d.channel_id) ??
-      Date.now();
-
-    const member: VoiceChannelMember = {
-      user_id: session.user_id,
-      name: session.name,
-      username: session.username,
-      display_name: session.display_name,
-      avatar_url: session.avatar_url,
-      avatar_display: session.avatar_display,
-      stream_preview_url: session.stream_preview_url,
-      connected: true,
-      connection_state: "connected",
-      disconnected_at: null,
-      reconnect_expires_at: null,
-      self_mute: session.self_mute,
-      self_deaf: session.self_deaf,
-      self_video: session.self_video,
-      self_stream: session.self_stream,
-      self_stream_audio: session.self_stream_audio,
-      joined_at: joinedAt,
-    };
-    members.set(session.user_id, member);
-
-    // Broadcast to all clients
-    this.ctx.waitUntil(
-      this.broadcastVoiceChannelState(d.channel_id, undefined, true),
-    );
-
-    // Persist to storage for hibernation resilience
-    this.persistVoiceChannelMembers();
-
-    // --- IMPLICIT CALL ACCEPT ---
-    // If the callee manually joins the voice channel instead of hitting "Accept",
-    // we should treat the call as accepted and stop the ringing.
-    const pending = this.pendingCalls.get(session.user_id);
-    if (pending && pending.channelId === d.channel_id) {
-      log.info(
-        `${session.name} manually joined ringing DM, implicitly accepting call ${pending.callId}`,
-      );
-
-      const callIdToCache = pending.callId;
-      clearTimeout(pending.timeout);
-      this.pendingCalls.delete(session.user_id);
-      this.persistPendingCalls();
-
-      // Cache the accepted call to avoid race conditions with a late Op 37 (CallAccept)
-      this.acceptedCalls.add(callIdToCache);
-      setTimeout(() => this.acceptedCalls.delete(callIdToCache), 10000);
-
-      const evt = {
-        op: Op.Dispatch,
-        d: {
-          event: "CALL_RING_STOP",
-          data: { call_id: callIdToCache, reason: "accepted" },
-        },
-      };
-      this.broadcastToUser(pending.callerId, evt);
-      this.broadcastToUser(pending.calleeId, evt);
-      this.settleRing(pending, "accepted");
-    }
-
-    log.info(`${session.name} joined voice channel ${d.channel_id}`);
+    this.hintVoiceRoster(d.channel_id);
   }
-
-  // ── Op 34: VoiceChannelLeave ───────────────────────────────────────────
 
   private handleVoiceChannelLeave(
     ws: WebSocket,
     d: MainClientPayload<Op.VoiceChannelLeave>,
   ) {
     const session = this.requireSession(ws);
-    if (!session) return;
-
-    // Protection against race conditions (e.g., leaving a previous channel after
-    // already successfully connecting to a new one or initiating a call).
-    if (
-      d?.channel_id &&
-      session.voice_channel_id &&
-      session.voice_channel_id !== d.channel_id
-    ) {
-      log.info(
-        `Ignored stale VoiceChannelLeave for ${d.channel_id}; currently in ${session.voice_channel_id}`,
-      );
-      return;
+    if (!session || this.roomSlug !== VOICE_ROSTER_GATEWAY) return;
+    const channelId = d?.channel_id ?? session.voice_channel_id;
+    if (!channelId || session.voice_channel_id === channelId) {
+      session.voice_channel_id = undefined;
+      this.persist(ws, session);
     }
-
-    this.removeFromVoiceChannel(session);
-    session.voice_channel_id = undefined;
-    this.persist(ws, session);
-  }
-
-  /** Remove a user from their current voice channel and broadcast the update */
-  private removeFromVoiceChannel(session: WsAttachment) {
-    const channelId = session.voice_channel_id;
-    if (!channelId || !session.user_id) return;
-    // Members are one entry per user: it stays while another live session of
-    // the user (a second device) is still in the channel.
-    if (
-      this.hasOtherVoiceChannelSession(session.user_id, channelId, session.id)
-    ) {
-      log.info(
-        `${session.name} left voice channel ${channelId} on one device; another is still in`,
-      );
-      return;
-    }
-
-    const members = this.voiceChannelMembers.get(channelId);
-    if (members) {
-      members.delete(session.user_id);
-      if (members.size === 0) {
-        this.voiceChannelMembers.delete(channelId);
-        this.deleteVoiceChannelStorage(channelId);
-        // Channel is now empty — clear the started_at timestamp
-        this.voiceChannelStartedAt.delete(channelId);
-        this.persistVoiceChannelStartedAt();
-      }
-    }
-
-    // Broadcast updated state (even if empty — so clients know the channel is empty)
-    this.ctx.waitUntil(this.broadcastVoiceChannelState(channelId));
-
-    if (members && members.size === 0) {
-      // If the channel is fully empty, check if there's a pending call ringing
-      // that we should also cancel (e.g., caller abandoned before answer)
-      let abandonedPendingCall: PendingCall | null = null;
-      for (const call of this.pendingCalls.values()) {
-        if (call.channelId === channelId) {
-          abandonedPendingCall = call;
-          break;
-        }
-      }
-      if (abandonedPendingCall) {
-        log.info(
-          `DM Call ${abandonedPendingCall.callId} emptied during ring, cancelling pending...`,
-        );
-        clearTimeout(abandonedPendingCall.timeout);
-        this.pendingCalls.delete(abandonedPendingCall.calleeId);
-        this.persistPendingCalls();
-
-        // Tell both parties the ring stopped
-        const endMsg = {
-          op: Op.Dispatch,
-          d: {
-            event: "CALL_RING_STOP",
-            data: { call_id: abandonedPendingCall.callId, reason: "abandoned" },
-          },
-        };
-        this.broadcastToUser(abandonedPendingCall.callerId, endMsg);
-        this.broadcastToUser(abandonedPendingCall.calleeId, endMsg);
-        this.settleRing(abandonedPendingCall, "abandoned");
-      }
-      this.finishActiveCall(channelId);
-    }
-
-    // Persist to storage for hibernation resilience
-    this.persistVoiceChannelMembers();
-
-    log.info(`${session.name} left voice channel ${channelId}`);
+    if (channelId) this.hintVoiceRoster(channelId);
   }
 
   private async handleMessageCreate(
@@ -5462,13 +5742,6 @@ export class MeetingRoom extends DurableObject<Env> {
       return;
     }
 
-    // Auto-leave caller from any voice channel
-    if (session.voice_channel_id) {
-      this.removeFromVoiceChannel(session);
-      session.voice_channel_id = undefined;
-      this.persist(ws, session);
-    }
-
     // Create pending call
     const callId = crypto.randomUUID();
     const sortedIds = [callerId, calleeId].sort();
@@ -5535,13 +5808,10 @@ export class MeetingRoom extends DurableObject<Env> {
       );
     }
 
-    // Add caller directly to the DM voice channel to establish the "Lobby"
-    if (session.voice_channel_id) {
-      this.removeFromVoiceChannel(session);
-    }
+    // The caller shows in the DM's voice once their client joins its room
+    // (the room's roster); here the channel is only their op 15 hint target.
     session.voice_channel_id = d.channel_id;
     this.persist(ws, session);
-    this.addToVoiceChannelForCall(session);
 
     // Notify caller — ringing outgoing!
     this.broadcastToUser(callerId, {
@@ -5602,18 +5872,9 @@ export class MeetingRoom extends DurableObject<Env> {
     this.pendingCalls.delete(calleeId);
     this.persistPendingCalls();
 
-    // Auto-leave callee from any previous voice channel before putting them in the DM channel
-    if (session.voice_channel_id) {
-      this.removeFromVoiceChannel(session);
-      session.voice_channel_id = undefined;
-      this.persist(ws, session);
-    }
-
-    // Add callee to voiceChannelMembers under the DM channel.
-    // (The caller is already here from handleCallInitiate)
+    // The callee shows in the DM's voice once their client joins its room.
     session.voice_channel_id = pending.channelId;
     this.persist(ws, session);
-    this.addToVoiceChannelForCall(session);
 
     // Notify both parties that ringing should stop
     this.broadcastToUser(pending.callerId, {
@@ -5689,16 +5950,8 @@ export class MeetingRoom extends DurableObject<Env> {
       this.pendingCalls.delete(pending.calleeId);
       this.persistPendingCalls();
 
-      // Also remove caller from voiceChannelMembers since they are abandoning the entire call attempt
-      const callerWs = this.findWsByUserId(pending.callerId);
-      if (callerWs) {
-        const callerSession = this.getSession(callerWs);
-        if (callerSession) {
-          this.removeFromVoiceChannel(callerSession);
-          callerSession.voice_channel_id = undefined;
-          this.persist(callerWs, callerSession);
-        }
-      }
+      // The caller leaves the DM's voice room themselves; its roster then
+      // takes them off the sidebar.
 
       this.broadcastToUser(pending.calleeId, {
         op: Op.Dispatch,
@@ -5983,59 +6236,5 @@ export class MeetingRoom extends DurableObject<Env> {
     this.settleRing(pending, "declined");
     log.info(`Call declined over REST: ${callId}`);
     return "ok";
-  }
-
-  /** Add a user to voiceChannelMembers for a call (reuses voice channel infra) */
-  private addToVoiceChannelForCall(session: WsAttachment) {
-    const channelId = session.voice_channel_id;
-    if (!channelId || !session.user_id) return;
-
-    let members = this.voiceChannelMembers.get(channelId);
-    if (!members) {
-      members = new Map();
-      this.voiceChannelMembers.set(channelId, members);
-      // First member — record channel start time
-      this.voiceChannelStartedAt.set(channelId, Date.now());
-      this.persistVoiceChannelStartedAt();
-    }
-
-    const inserted = !members.has(session.user_id);
-    const member: VoiceChannelMember = {
-      user_id: session.user_id,
-      name: session.name,
-      username: session.username,
-      display_name: session.display_name,
-      avatar_url: session.avatar_url,
-      avatar_display: session.avatar_display,
-      stream_preview_url: session.stream_preview_url,
-      connected: true,
-      connection_state: "connected",
-      disconnected_at: null,
-      reconnect_expires_at: null,
-      self_mute: session.self_mute,
-      self_deaf: session.self_deaf,
-      self_video: session.self_video,
-      self_stream: session.self_stream,
-      self_stream_audio: session.self_stream_audio,
-      spatial_audio_enabled: session.spatial_audio_enabled,
-      spatial_audio_high_fidelity: session.spatial_audio_high_fidelity,
-      joined_at: this.voiceChannelStartedAt.get(channelId) ?? Date.now(),
-    };
-    members.set(session.user_id, member);
-
-    // Broadcast to all clients
-    this.ctx.waitUntil(
-      this.broadcastVoiceChannelState(channelId, undefined, inserted),
-    );
-
-    this.persistVoiceChannelMembers();
-  }
-
-  /** Find a WebSocket by user_id */
-  private findWsByUserId(userId: string): WebSocket | null {
-    for (const [ws, session] of this.sessions) {
-      if (session.user_id === userId) return ws;
-    }
-    return null;
   }
 }
