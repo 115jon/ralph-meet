@@ -28,6 +28,28 @@
   };
   window.__vb = vb;
 
+  // ── WebSockets (so a run can drop one) ──────────────────────────────
+  const NativeWebSocket = window.WebSocket;
+  const sockets = [];
+  window.WebSocket = class extends NativeWebSocket {
+    constructor(...args) {
+      super(...args);
+      sockets.push(this);
+    }
+  };
+  /** Closes the open sockets whose URL matches, as a dropped link would. */
+  vb.dropSockets = (pattern) => {
+    const matcher = new RegExp(pattern);
+    let dropped = 0;
+    for (const socket of sockets) {
+      if (socket.readyState !== NativeWebSocket.OPEN) continue;
+      if (!matcher.test(socket.url)) continue;
+      socket.close(4000, "bench drop");
+      dropped += 1;
+    }
+    return dropped;
+  };
+
   // ── Call-socket admission requests ──────────────────────────────────
   const nativeFetch = window.fetch.bind(window);
   window.fetch = (input, init) => {

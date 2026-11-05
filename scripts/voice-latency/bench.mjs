@@ -22,6 +22,8 @@
 //   switch   connected in channel 1, click channel 2 (occupied by "other")
 //            in the sidebar, standby off; switch-warm: the same, standby on
 //   drop     connected, go offline for --drop-ms, measure the recovery
+//   room-drop  connected, close the room socket (as a dropped link would),
+//            measure its reconnect: Resume, admission requests, audio
 //   hidden   connected, hide + freeze the tab for --hidden-ms, then resume
 //
 // Network profiles (--profile, comma separated; the joiner's page only, via
@@ -352,6 +354,10 @@ async function runDisruption(kind, { joiner, listener, opts }) {
     await joiner.setNetwork("none", { offline: true });
     await sleep(opts.dropMs);
     await joiner.setNetwork("none", { offline: false });
+  } else if (kind === "room-drop") {
+    await joiner.page.evaluate(() =>
+      window.__vb.dropSockets("/api/channels/[^/]+/ws"),
+    );
   } else {
     await joiner.page.evaluate(() => window.__vb.setHidden(true));
     await joiner.cdp.send("Page.setWebLifecycleState", { state: "frozen" });
@@ -490,7 +496,11 @@ async function main() {
               ...ctx,
               standby: scenario === "switch-warm",
             });
-          } else if (scenario === "drop" || scenario === "hidden") {
+          } else if (
+            scenario === "drop" ||
+            scenario === "room-drop" ||
+            scenario === "hidden"
+          ) {
             result = await runDisruption(scenario, ctx);
           } else {
             throw new Error(`Unknown scenario ${scenario}`);
