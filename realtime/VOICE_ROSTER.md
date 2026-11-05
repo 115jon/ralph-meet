@@ -21,7 +21,11 @@ parsing) and the "Voice rosters" sections of `meeting-room.ts`.
    kind the newest join wins. Fields: profile (name, username, display name,
    avatar), `self_mute`, `self_deaf`, `self_video`, `self_stream`,
    `self_stream_audio`, spatial flags, `joined_at` (when that session joined:
-   Identify or standby promotion), and the roster's `started_at`.
+   Identify or standby promotion), and the roster's `started_at` (when the
+   roster last went from empty to non-empty: the earliest `joined_at` at that
+   moment; kept while anyone, connected or reconnecting, is on the roster; null
+   when it is empty). The room stores the roster it last built (`vc:roster`:
+   channel id, seq, members, `started_at`).
 3. Every message, close, alarm and internal request ends in
    `flushDirtyStorage`, which recomputes the roster. If it differs from what the
    gateway last acknowledged, the room pushes the whole snapshot to the gateway
@@ -56,6 +60,16 @@ gateway) is gone.
   ignored.
 - An emptied channel keeps its last seq for 10 min (late deliveries after that
   are not a concern for DO-to-DO requests).
+- The gateway tells the room the seq it holds, so a room whose seq fell below
+  it (its stored seq was lost and its host's clock is behind the one that made
+  the gateway's seq) cannot be ignored for good. The push reply is `{applied,
+seq}` (`seq` is absent when the snapshot came from a room that does not own
+  the channel). When `applied` is false and `seq` is above the pushed seq, the
+  room sets its seq to `max(seq + 1, now_ms * 1000)` and pushes again after the
+  first backoff step. The pull body carries `min_seq` (the gateway's seq); a
+  room whose seq is below it raises its seq the same way before answering. Both
+  answers then pass the normal seq check, so a pull answer that crosses a newer
+  push is still ignored.
 
 ## Failure and retry
 
@@ -69,6 +83,30 @@ gateway) is gone.
   dropped with no close events), cannot leave a sidebar entry behind for more
   than about a minute. The pull wakes the room, whose constructor rebuilds its
   sessions from surviving sockets and stored held sessions.
+
+## Room reset
+
+A reset of a room object (deploy, uncaught exception, exceeded limit) drops its
+sockets with no close events, so none of their sessions is held for resume.
+Without more, the room's next start would report an empty roster before any
+client is back: the gateway would cancel a ring (`CALL_RING_STOP` `abandoned`,
+a missed-call record), write an answered call's `ended` record, and restart
+`started_at`.
+
+So on start the room compares the roster it last built (`vc:roster`) with what
+survived. A member with no live session and no held session is kept on the
+roster as `reconnecting`, with `disconnected_at` set to when the room noticed
+(or the member's stored `disconnected_at`, if it was already reconnecting) and
+`reconnect_expires_at` 120 s after that. Its profile, voice state and
+`joined_at` are the stored ones. The roster is not empty, so `started_at`, the
+ring and the call carry on.
+
+- The client's Resume gets 4006 (the session was not held), and it Identifies
+  again. Its new session replaces the held entry; after that, a leave removes
+  the user as usual.
+- If the user is not back within the 120 s, the room alarm drops the entry. A
+  roster that empties then has the usual effects: ring cancelled, `ended`
+  record, `started_at` cleared.
 
 ## Gateway eviction and cold start
 
@@ -86,12 +124,17 @@ The released mobile app, older desktop builds (their bundled web UI) and older
 web tabs still send these. All are accepted with unchanged payload schemas:
 
 - **Op 33 VoiceChannelJoin**: adds nobody, removes nobody, does no D1 access
-  check, sends no Error, spends no move grant, answers no ring, and its
-  `started_at` is ignored. It records `channel_id` as the session's hint
-  channel (for op 15 below) and, if the gateway has not heard from that
-  channel's room in 30 s, triggers a pull. Any cadence (mobile's 30 s) is fine.
+  check, spends no move grant, answers no ring, and its `started_at` is
+  ignored. It records `channel_id` as the session's hint channel (for op 15
+  below) and, if the gateway has not heard from that channel's room in 30 s,
+  triggers a pull. Any cadence (mobile's 30 s) is fine. On an identified socket
+  it sends no Error.
 - **Op 34 VoiceChannelLeave**: removes nobody; clears the hint channel; may
-  trigger a pull. A client's room-socket op 11 or close is what removes it.
+  trigger a pull. A client's room-socket op 11 or close is what removes it. On
+  an identified socket it sends no Error.
+- **Op 33 or 34 before Identify**: unchanged. The gateway answers op 18
+  `Error {code: 4003, message: "Not identified"}`, keeps the socket open and
+  does nothing else.
 - **Op 15 VoiceStateUpdate**: `self_mute`, `self_deaf`, `self_video`,
   `self_stream`, `self_stream_audio` no longer change the sidebar member (the
   room socket's op 15 does). `stream_preview_url`, `spatial_audio_enabled`,
@@ -111,9 +154,20 @@ web tabs still send these. All are accepted with unchanged payload schemas:
   resumes or is promoted from standby (not on op 33) and goes when the room
   ends it. An abrupt close of the room socket shows `reconnecting`
   (`connected: false`) until a resume or the 120 s grace; a chat (global)
-  socket's close no longer touches voice members. `started_at` is the room's
-  first join; `joined_at` is the user's room join time. Expect one DO-to-DO hop
-  of latency after the room event.
+  socket's close no longer touches voice members. Expect one DO-to-DO hop of
+  latency after the room event.
+- `started_at` (in `VOICE_CHANNEL_STATE_UPDATE`, and `voice_started_at` in
+  Ready): set by the room, not by clients. It is when the channel's roster last
+  went from empty to non-empty, that is the `joined_at` of the earliest member
+  at that moment, in ms since the epoch. It stays the same while anyone is on
+  the roster, connected or reconnecting, including members a room reset dropped
+  who are back within the 120 s (see "Room reset"). It is `null` in an update
+  that empties the channel, and the next first join sets a new one. Before, the
+  gateway took it from the first op 33 (or the earliest `started_at` an op 33
+  claimed).
+- `joined_at` is when that user's current room session joined voice (Identify
+  or standby promotion). A user who Identifies again (after a reset, or a
+  Resume that got 4006) gets a new `joined_at`.
 - DM calls: the caller is no longer put on the DM channel's members when the
   ring starts, nor the callee on op 37 accept; each appears when their room
   session joins. `CALL_RING_STOP` `accepted` also fires when the callee's room
@@ -128,6 +182,11 @@ web tabs still send these. All are accepted with unchanged payload schemas:
   33 when the room join completes), and mute/deafen/camera/share go only to the
   room socket's op 15. Preview and spatial fields still go to the global op 15.
   A new client does not need op 33 or op 34 at all.
+- Op 33 and op 34 on the global socket: no Error on an identified socket. Op 33
+  used to answer a failed access check (no access, or a refused move grant)
+  with `Error {code: 4003, message: "Channel not found or access denied"}`; it
+  no longer checks. Sent before Identify, either still gets op 18 `Error {code:
+4003, message: "Not identified"}`, and the socket stays open.
 - Internal only (DO to DO): `POST /voice-roster`, `POST /voice-roster-pull`
   added; `POST /voice-move-out` removed.
 
