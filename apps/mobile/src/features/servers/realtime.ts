@@ -71,8 +71,12 @@ function handle(event: string, data: unknown): void {
 /** Keeps the servers store live; returns the unsubscribe. */
 export function startServerEvents(): () => void {
   const offDispatch = onDispatch(handle);
-  // A reconnect may have missed events: catch up on unread marks.
-  const offReady = onGatewayReady(() => void refreshReadStates());
+  // A reconnect may have missed events: catch up on unread marks, and on
+  // the server list if it never loaded (an app launched offline).
+  const offReady = onGatewayReady(() => {
+    void refreshReadStates();
+    if (useServersStore.getState().status === "error") void loadServers();
+  });
   return () => {
     offDispatch();
     offReady();
