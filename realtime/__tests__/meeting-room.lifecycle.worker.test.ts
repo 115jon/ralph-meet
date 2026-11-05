@@ -16,6 +16,7 @@ import {
   mainGatewayClientRules,
 } from "../../src/lib/gateway-protocol";
 import type { IceServer } from "../meeting-room/turn-credentials";
+import { SOCKET_ROLE_OPCODES } from "../socket-core";
 import { VOICE_ROSTER_PATH } from "../voice-roster";
 
 async function createAdmissionHeaders(
@@ -1685,9 +1686,9 @@ describe("MeetingRoom lifecycle", () => {
       .bind(channelId, callerId, channelId, calleeId)
       .run();
 
-    const caller = await openMeetingSocket(roomName, callerId);
+    const caller = await openGlobalSocket(roomName, callerId);
     await identifyMeetingSocket(caller, { name: "Persist Caller" });
-    const callee = await openMeetingSocket(roomName, calleeId);
+    const callee = await openGlobalSocket(roomName, calleeId);
     await identifyMeetingSocket(callee, { name: "Persist Callee" });
 
     const calleeRing = nextDispatchEvent(callee, "CALL_RING");
@@ -1786,9 +1787,9 @@ describe("MeetingRoom lifecycle", () => {
       .bind(channelId, callerId, channelId, calleeId)
       .run();
 
-    const caller = await openMeetingSocket(roomName, callerId);
+    const caller = await openGlobalSocket(roomName, callerId);
     await identifyMeetingSocket(caller, { name: "End Caller" });
-    const callee = await openMeetingSocket(roomName, calleeId);
+    const callee = await openGlobalSocket(roomName, calleeId);
     await identifyMeetingSocket(callee, { name: "End Callee" });
 
     const calleeRing = nextDispatchEvent(callee, "CALL_RING");
@@ -2077,7 +2078,7 @@ describe("MeetingRoom lifecycle", () => {
   ] as const)(
     "rejects opcode %s with a non-object payload",
     async (opcode, payload, message) => {
-      const socket = await openMeetingSocket();
+      const socket = await openGlobalSocket();
       await identifyMeetingSocket(socket);
       const response = nextJsonMessage(socket);
 
@@ -2092,7 +2093,7 @@ describe("MeetingRoom lifecycle", () => {
   );
 
   it("rate-limits expensive message operations without affecting heartbeats", async () => {
-    const socket = await openMeetingSocket("global-gateway");
+    const socket = await openGlobalSocket();
     await identifyMeetingSocket(socket);
 
     const responses = [];
@@ -2173,7 +2174,7 @@ describe("MeetingRoom lifecycle", () => {
 
   it("rejects subscriptions to unknown channels", async () => {
     const roomName = crypto.randomUUID();
-    const socket = await openMeetingSocket(roomName);
+    const socket = await openGlobalSocket(roomName);
     await identifyMeetingSocket(socket);
     const response = nextJsonMessage(socket);
 
@@ -2235,7 +2236,7 @@ describe("MeetingRoom lifecycle", () => {
       });
     }
 
-    const socket = await openMeetingSocket(crypto.randomUUID(), userId);
+    const socket = await openGlobalSocket(crypto.randomUUID(), userId);
     await identifyMeetingSocket(socket);
 
     // Invalidation runs after the status write, so wait for it instead of a
@@ -2297,7 +2298,7 @@ describe("MeetingRoom lifecycle", () => {
       .bind(channelId, `server-${crypto.randomUUID()}`)
       .run();
 
-    const socket = await openMeetingSocket(crypto.randomUUID());
+    const socket = await openGlobalSocket(crypto.randomUUID());
     await identifyMeetingSocket(socket);
     const response = nextJsonMessage(socket);
     socket.send(JSON.stringify({ op: 27, d: { channel_id: channelId } }));
@@ -2688,9 +2689,9 @@ describe("MeetingRoom lifecycle", () => {
     }
 
     const sharedRoomName = crypto.randomUUID();
-    const sender = await openMeetingSocket(sharedRoomName, "user-test");
+    const sender = await openGlobalSocket(sharedRoomName, "user-test");
     await identifyMeetingSocket(sender);
-    const recipient = await openMeetingSocket(sharedRoomName, "user-recipient");
+    const recipient = await openGlobalSocket(sharedRoomName, "user-recipient");
     await identifyMeetingSocket(recipient);
 
     const subscribeSender = nextJsonMessage(sender);
@@ -2852,9 +2853,9 @@ describe("MeetingRoom lifecycle", () => {
       .bind(serverA, "user-a", serverB, "user-b")
       .run();
 
-    const socketA = await openMeetingSocket(roomName, "user-a");
+    const socketA = await openGlobalSocket(roomName, "user-a");
     await identifyMeetingSocket(socketA);
-    const socketB = await openMeetingSocket(roomName, "user-b");
+    const socketB = await openGlobalSocket(roomName, "user-b");
     await identifyMeetingSocket(socketB);
 
     socketA.send(JSON.stringify({ op: 35, d: { server_id: serverA } }));
@@ -2940,9 +2941,9 @@ describe("MeetingRoom lifecycle", () => {
       .bind(serverId, "user-member")
       .run();
 
-    const memberSocket = await openMeetingSocket(roomName, "user-member");
+    const memberSocket = await openGlobalSocket(roomName, "user-member");
     await identifyMeetingSocket(memberSocket);
-    const outsiderSocket = await openMeetingSocket(roomName, "user-outsider");
+    const outsiderSocket = await openGlobalSocket(roomName, "user-outsider");
     await identifyMeetingSocket(outsiderSocket);
 
     memberSocket.send(JSON.stringify({ op: 35, d: { server_id: serverId } }));
@@ -3010,9 +3011,9 @@ describe("MeetingRoom lifecycle", () => {
       .bind(groupDm, "user-third")
       .run();
 
-    const caller = await openMeetingSocket(roomName, "user-test");
+    const caller = await openGlobalSocket(roomName, "user-test");
     await identifyMeetingSocket(caller);
-    const callee = await openMeetingSocket(roomName, "user-callee");
+    const callee = await openGlobalSocket(roomName, "user-callee");
     await identifyMeetingSocket(callee);
     await hasMessageWithOpcode(caller, 19, 150);
 
@@ -3075,7 +3076,7 @@ describe("MeetingRoom lifecycle", () => {
       .bind(serverId, "user-test", roleId)
       .run();
 
-    const original = await openMeetingSocket(roomName);
+    const original = await openGlobalSocket(roomName);
     const ready = await identifyMeetingSocket(original);
     original.send(JSON.stringify({ op: 35, d: { server_id: serverId } }));
     await waitForServerSubscribers(roomName, serverId, 1);
@@ -3094,7 +3095,7 @@ describe("MeetingRoom lifecycle", () => {
       }),
     });
 
-    const resumedSocket = await openMeetingSocket(roomName);
+    const resumedSocket = await openGlobalSocket(roomName);
     const orderedMessages: Array<{ op: number; d: unknown }> = [];
     const ordered = new Promise<Array<{ op: number; d: unknown }>>(
       (resolve) => {
@@ -3335,7 +3336,7 @@ describe("MeetingRoom lifecycle", () => {
       .bind(hiddenChannelId, "user-test", PERMISSIONS.VIEW_CHANNELS)
       .run();
 
-    const socket = await openMeetingSocket(roomName);
+    const socket = await openGlobalSocket(roomName);
     await identifyMeetingSocket(socket);
     socket.send(JSON.stringify({ op: 35, d: { server_id: serverId } }));
     await waitForServerSubscribers(roomName, serverId, 1);
@@ -3444,7 +3445,7 @@ describe("MeetingRoom lifecycle", () => {
       .bind(serverId, "user-test", roleId)
       .run();
 
-    const original = await openMeetingSocket(roomName);
+    const original = await openGlobalSocket(roomName);
     const ready = await identifyMeetingSocket(original);
     original.send(JSON.stringify({ op: 35, d: { server_id: serverId } }));
     await waitForServerSubscribers(roomName, serverId, 1);
@@ -3467,7 +3468,7 @@ describe("MeetingRoom lifecycle", () => {
       .bind(channelId, "user-test", PERMISSIONS.VIEW_CHANNELS)
       .run();
 
-    const resumedSocket = await openMeetingSocket(roomName);
+    const resumedSocket = await openGlobalSocket(roomName);
     const orderedMessages: Array<{ op: number; d: unknown }> = [];
     const resumed = new Promise<Array<{ op: number; d: unknown }>>(
       (resolve) => {
@@ -3668,6 +3669,12 @@ describe("MeetingRoom gateway protocol edge", () => {
   const payloadOps = Object.entries(mainGatewayClientRules).flatMap(
     ([op, rule]) => (rule ? [[Number(op), rule.invalid] as const] : []),
   );
+  /** Each payload opcode on each MeetingRoom role that accepts it. */
+  const payloadOpsByRole = (["global", "room"] as const).flatMap((role) =>
+    payloadOps
+      .filter(([op]) => SOCKET_ROLE_OPCODES[role].has(op))
+      .map(([op, invalid]) => [op, role, invalid] as const),
+  );
 
   /** Everything a client frame could change, without heartbeat fields. */
   async function roomState(roomName: string) {
@@ -3709,11 +3716,20 @@ describe("MeetingRoom gateway protocol edge", () => {
     );
   });
 
-  it.each(payloadOps)(
-    "answers malformed opcode %s payloads with %j and changes nothing",
-    async (op, invalid) => {
+  it("checks every payload opcode on at least one role", () => {
+    expect(new Set(payloadOpsByRole.map(([op]) => op)).size).toBe(
+      payloadOps.length,
+    );
+  });
+
+  it.each(payloadOpsByRole)(
+    "answers malformed opcode %s payloads on the %s socket with %j and changes nothing",
+    async (op, role, invalid) => {
       const roomName = crypto.randomUUID();
-      const socket = await openMeetingSocket(roomName);
+      const socket =
+        role === "global"
+          ? await openGlobalSocket(roomName)
+          : await openMeetingSocket(roomName);
       if (op !== GatewayOp.Identify) await identifyMeetingSocket(socket);
       const before = await roomState(roomName);
 
@@ -3742,7 +3758,7 @@ describe("MeetingRoom gateway protocol edge", () => {
   );
 
   it("sends the same error bytes as before for edge failures", async () => {
-    const socket = await openMeetingSocket();
+    const socket = await openGlobalSocket();
     await identifyMeetingSocket(socket);
     const cases: Array<[string, string]> = [
       ["not-json", '{"op":18,"d":{"code":4002,"message":"Invalid JSON"}}'],

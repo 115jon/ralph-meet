@@ -19,7 +19,6 @@ import {
   decodeMainGatewayClientFrame,
   GatewayCloseCode as CloseCode,
   GatewayOp as Op,
-  parseGatewayFrame,
   VOICE_MOVED_CLOSE_REASON,
   type CallRecord,
   type MainClientPayload,
@@ -76,11 +75,25 @@ import {
   type VoiceRosterSnapshot,
   voiceRosterSessionOf,
 } from "./voice-roster";
+import { initRealtimeTicketNonces } from "./realtime-admission";
 import {
-  consumeRealtimeTicketNonce,
-  getRealtimeAdmissionFromHeaders,
-  initRealtimeTicketNonces,
-} from "./realtime-admission";
+  acceptSocket,
+  admitSocket,
+  isOpcodeAllowed,
+  isSpentTicketReason,
+  isSilent,
+  rateLimitedError,
+  readSocketFrame,
+  refusedFieldError,
+  requestedGatewayVersion,
+  sendFrame,
+  silentAt,
+  SOCKET_HEARTBEAT_INTERVAL_MS as HEARTBEAT_INTERVAL_MS,
+  SocketRateLimiter,
+  unauthorizedUpgrade,
+  unknownOpcodeError,
+  type SocketRole,
+} from "./socket-core";
 import { resolveMeetingProfile } from "./meeting-room/profile-resolver";
 import { ProfileRequestCoordinator } from "./meeting-room/profile-request-coordinator";
 import { getCachedTurnCredentials as resolveTurnCredentials } from "./meeting-room/turn-credentials";
@@ -333,13 +346,7 @@ interface PendingCall extends StoredPendingCall {
 
 // ── Constants ───────────────────────────────────────────────────────────────
 
-const HEARTBEAT_INTERVAL_MS = 15_000;
 const PROFILE_REFRESH_COOLDOWN_MS = 10_000;
-// 90s — 6 missed heartbeats. Chrome throttles timers in a tab hidden for 5+
-// minutes to one wake-up a minute, so its 15s heartbeat arrives ~60s apart;
-// 3 beats (45s) evicted every background tab every few minutes. Still under
-// Cloudflare's ~100s idle-socket close, which the 60s beats keep open.
-const ZOMBIE_TIMEOUT_MS = HEARTBEAT_INTERVAL_MS * 6;
 const PRUNE_ALARM_INTERVAL_MS = 300_000; // 5 min safety-net — client zombie detection fires first
 const CALL_RING_TIMEOUT_MS = 30_000; // auto-cancel after 30s
 /** POST /call-accept and /call-decline answers. */
@@ -367,10 +374,9 @@ const VOICE_ROSTER_LEGACY_GRACE_MS = 120_000;
 const VOICE_ROSTER_TOMBSTONE_MS = 10 * 60 * 1000;
 /** Moved sessions' VoiceMove notices, replayed to a Resume of one. */
 const MOVED_VOICE_SESSIONS_STORAGE_KEY = "movedVoiceSessions";
-const MAX_GATEWAY_FRAME_BYTES = 1_000_000;
 const MAX_REPLAY_BUFFER_BYTES = 256_000;
 const MAX_REPLAY_PERSIST_WRITES = 32;
-const WS_RATE_LIMIT_WINDOW_MS = 60_000;
+/** Per-opcode limits per minute (SocketRateLimiter). */
 const WS_RATE_LIMITS: Record<number, number> = {
   [Op.MessageCreate]: 30,
   [Op.MessageUpdate]: 30,
@@ -416,6 +422,7 @@ export class MeetingRoom extends DurableObject<Env> {
   >();
   /** Global gateway: each user's latest move grant, spent once per use. */
   private readonly voiceMoveGrants: VoiceMoveGrantLedger;
+  private readonly rateLimiter: SocketRateLimiter;
   /** Non-standby Identify calls in flight: participantId -> admitted subject. */
   private identifyingVoiceJoins = new Map<string, string>();
   private readonly nextVoiceJoinGrantSeq = createVoiceJoinGrantSequence();
@@ -524,13 +531,10 @@ export class MeetingRoom extends DurableObject<Env> {
 
     initRealtimeTicketNonces(this.ctx.storage.sql);
     this.voiceMoveGrants = new VoiceMoveGrantLedger(this.ctx.storage.sql);
-    this.ctx.storage.sql.exec(`
-      CREATE TABLE IF NOT EXISTS ws_rate_limits (
-        rate_key TEXT PRIMARY KEY,
-        window_start INTEGER NOT NULL,
-        count INTEGER NOT NULL
-      );
-    `);
+    this.rateLimiter = new SocketRateLimiter(
+      this.ctx.storage.sql,
+      WS_RATE_LIMITS,
+    );
 
     // Cloudflare's auto-response absorbs messages at the edge, preventing the DO
     // from updating the `last_heartbeat` timestamp, which causes the zombie
@@ -812,7 +816,7 @@ export class MeetingRoom extends DurableObject<Env> {
 
   async fetch(request: Request): Promise<Response> {
     const url = new URL(request.url);
-    const gatewayVersion = parseInt(url.searchParams.get("v") ?? "1", 10);
+    const gatewayVersion = requestedGatewayVersion(url);
 
     // Extract channel ID or slug from URL path
     const channelMatch = url.pathname.match(/\/api\/channels\/([^/]+)\/ws/);
@@ -828,26 +832,19 @@ export class MeetingRoom extends DurableObject<Env> {
     }
 
     if (url.pathname.endsWith("/ws") || url.pathname === "/api/gateway") {
-      const admission = getRealtimeAdmissionFromHeaders(request.headers);
       const expectedAudience =
         url.pathname === "/api/gateway" ? "global" : "room";
-      if (
-        !admission ||
-        admission.audience !== expectedAudience ||
-        admission.roomSlug !== this.roomSlug
-      ) {
-        return new Response("Unauthorized", { status: 401 });
+      const admitted = admitSocket(request.headers, this.ctx.storage.sql, {
+        audience: expectedAudience,
+        roomSlug: this.roomSlug,
+      });
+      if (!admitted.ok) {
+        if (isSpentTicketReason(admitted.reason)) {
+          log.warn(`Realtime admission refused: ${admitted.reason}`);
+        }
+        return unauthorizedUpgrade();
       }
-      // Single use: the ticket's nonce is spent here, in the object that
-      // accepts the socket (custom-server-entry.ts verified its signature).
-      const consumed = consumeRealtimeTicketNonce(
-        this.ctx.storage.sql,
-        admission,
-      );
-      if (!consumed.ok) {
-        log.warn(`Realtime admission refused: ${consumed.reason}`);
-        return new Response("Unauthorized", { status: 401 });
-      }
+      const { admission } = admitted;
       if (
         expectedAudience === "room" &&
         admission.accessMode === "authenticated" &&
@@ -863,32 +860,18 @@ export class MeetingRoom extends DurableObject<Env> {
         }
       }
 
-      const pair = new WebSocketPair();
-      const [client, server] = Object.values(pair);
-      this.ctx.acceptWebSocket(server);
-      server.serializeAttachment({
-        admission: {
-          accessMode: admission.accessMode,
-          participantId: admission.participantId,
-          subject: admission.subject,
-        },
-      });
-
       log.info(`New connection, gateway_version=${gatewayVersion}`);
-
-      this.sendTo(server, {
-        op: Op.Hello,
-        d: {
-          heartbeat_interval: HEARTBEAT_INTERVAL_MS,
-          gateway_version: gatewayVersion,
+      return acceptSocket(
+        this.ctx,
+        {
+          admission: {
+            accessMode: admission.accessMode,
+            participantId: admission.participantId,
+            subject: admission.subject,
+          },
         },
-      });
-
-      return new Response(null, {
-        status: 101,
-        headers: { "Sec-WebSocket-Protocol": "ralph.realtime.v1" },
-        webSocket: client,
-      });
+        gatewayVersion,
+      ).response;
     }
 
     // Internal broadcast endpoint — called by REST API routes after persisting to D1
@@ -1198,38 +1181,14 @@ export class MeetingRoom extends DurableObject<Env> {
   }
 
   async webSocketMessage(ws: WebSocket, rawMsg: string | ArrayBuffer) {
-    if (typeof rawMsg !== "string") {
-      this.sendTo(ws, {
-        op: Op.Error,
-        d: {
-          code: CloseCode.InvalidPayload,
-          message: "Text websocket frames are required",
-        },
-      });
-      return;
-    }
-    if (new TextEncoder().encode(rawMsg).byteLength > MAX_GATEWAY_FRAME_BYTES) {
-      this.sendTo(ws, {
-        op: Op.Error,
-        d: {
-          code: CloseCode.InvalidPayload,
-          message: "Websocket frame is too large",
-        },
-      });
-      return;
-    }
-    if (this.env.DEBUG)
+    if (this.env.DEBUG && typeof rawMsg === "string")
       log.info(`webSocketMessage received: ${rawMsg.substring(0, 100)}`);
-
-    const parsed = parseGatewayFrame(rawMsg);
-    if (!parsed.ok) {
-      this.sendTo(ws, {
-        op: Op.Error,
-        d: { code: parsed.code, message: parsed.message },
-      });
+    const read = readSocketFrame(rawMsg);
+    if (!read.ok) {
+      this.sendTo(ws, read.error);
       return;
     }
-    const frame = parsed.frame;
+    const frame = read.frame;
 
     if (
       this.getSessionAdmission(ws)?.accessMode === "public-demo" &&
@@ -1245,14 +1204,16 @@ export class MeetingRoom extends DurableObject<Env> {
       return;
     }
 
+    // An opcode of the other MeetingRoom role answers as an unknown one.
+    const role = this.socketRole;
+    if (role && !isOpcodeAllowed(role, frame.op)) {
+      this.sendTo(ws, unknownOpcodeError(role, frame.op));
+      this.flushDirtyStorage();
+      return;
+    }
+
     if (this.isRateLimited(ws, frame.op)) {
-      this.sendTo(ws, {
-        op: Op.Error,
-        d: {
-          code: CloseCode.RateLimited,
-          message: "Operation rate limit exceeded",
-        },
-      });
+      this.sendTo(ws, rateLimitedError());
       return;
     }
 
@@ -1273,6 +1234,12 @@ export class MeetingRoom extends DurableObject<Env> {
         },
       });
       this.flushDirtyStorage();
+      return;
+    }
+
+    const refused = role ? refusedFieldError(role, frame) : null;
+    if (refused) {
+      this.sendTo(ws, refused);
       return;
     }
 
@@ -1411,7 +1378,7 @@ export class MeetingRoom extends DurableObject<Env> {
         // Use last_heartbeat as the primary liveness signal.
         const lastActivity = session.last_heartbeat ?? 0;
 
-        if (lastActivity && now - lastActivity >= ZOMBIE_TIMEOUT_MS) {
+        if (isSilent(lastActivity, now)) {
           log.info(
             `Pruning zombie: ${session.id} (${session.name}), ` +
               `last_activity=${Math.round((now - lastActivity) / 1000)}s ago`,
@@ -1511,7 +1478,7 @@ export class MeetingRoom extends DurableObject<Env> {
 
     for (const [, session] of this.sessions) {
       if (session.last_heartbeat)
-        deadlines.push(session.last_heartbeat + ZOMBIE_TIMEOUT_MS);
+        deadlines.push(silentAt(session.last_heartbeat));
     }
     for (const disconnectedAt of this.resumableSessionExpiry.values()) {
       deadlines.push(disconnectedAt + RESUME_GRACE_PERIOD_MS);
@@ -1704,52 +1671,24 @@ export class MeetingRoom extends DurableObject<Env> {
   }
 
   private isRateLimited(ws: WebSocket, op: number): boolean {
-    const limit = WS_RATE_LIMITS[op];
-    if (!limit) return false;
-
     const session = this.getSession(ws);
-    const subject = session?.user_id ?? this.getSessionAdmission(ws)?.subject;
-    const keys = [
-      `session:${session?.id ?? "unidentified"}:${op}`,
-      ...(subject ? [`subject:${subject}:${op}`] : []),
-    ];
-    const now = Date.now();
-    let limited = false;
-
-    for (const key of keys) {
-      const rows = [
-        ...this.ctx.storage.sql.exec(
-          "SELECT window_start, count FROM ws_rate_limits WHERE rate_key = ?",
-          key,
-        ),
-      ];
-      const existing = rows[0];
-      if (
-        !existing ||
-        now - Number(existing.window_start) >= WS_RATE_LIMIT_WINDOW_MS
-      ) {
-        this.ctx.storage.sql.exec(
-          `INSERT INTO ws_rate_limits (rate_key, window_start, count)
-           VALUES (?, ?, 1)
-           ON CONFLICT(rate_key) DO UPDATE SET window_start = excluded.window_start, count = 1`,
-          key,
-          now,
-        );
-        continue;
-      }
-      const count = Number(existing.count) + 1;
-      this.ctx.storage.sql.exec(
-        "UPDATE ws_rate_limits SET count = ? WHERE rate_key = ?",
-        count,
-        key,
-      );
-      if (count > limit) limited = true;
-    }
-    this.ctx.storage.sql.exec(
-      "DELETE FROM ws_rate_limits WHERE window_start < ?",
-      now - WS_RATE_LIMIT_WINDOW_MS,
+    return this.rateLimiter.isLimited(
+      op,
+      session?.id,
+      session?.user_id ?? this.getSessionAdmission(ws)?.subject,
     );
-    return limited;
+  }
+
+  /**
+   * This object's socket role: the global gateway or a channel room. Null
+   * while it has not learned its slug (it never admitted a socket since its
+   * storage was written); its sockets then keep every main-gateway opcode,
+   * as before roles were enforced.
+   */
+  private get socketRole(): Extract<SocketRole, "global" | "room"> | null {
+    if (this.roomSlug === VOICE_ROSTER_GATEWAY) return "global";
+    if (this.roomSlug === "unknown") return null;
+    return "room";
   }
 
   private getPresencePlatformsForUser(
@@ -4449,11 +4388,7 @@ export class MeetingRoom extends DurableObject<Env> {
   // ── Utilities ─────────────────────────────────────────────────────────
 
   private sendTo(ws: WebSocket, msg: ServerMsg) {
-    try {
-      ws.send(JSON.stringify(msg));
-    } catch {
-      /* closed */
-    }
+    sendFrame(ws, msg);
   }
 
   private trimReplayBuffer(buffer: ReplayEntry[]): ReplayEntry[] {
