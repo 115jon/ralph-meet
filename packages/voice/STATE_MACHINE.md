@@ -4,7 +4,8 @@ This is the contract every Yap voice client follows: the web client (through
 `@ralph/voice`), the Expo app (once it adopts this package) and the native
 Rust client. `src/state-machine.ts` is the same table as code; the two must
 agree. Device choice, fallback, persistence and output routing are in
-[DEVICES.md](DEVICES.md). Where this document says MUST, a client that does otherwise breaks
+[DEVICES.md](DEVICES.md); screen sharing and watching shares are in
+[SCREEN_SHARE.md](SCREEN_SHARE.md). Where this document says MUST, a client that does otherwise breaks
 something another client or the server relies on.
 
 A **session** is one user's presence in one voice room: a room socket
@@ -148,11 +149,13 @@ thrown). For one teardown:
 3. **Unsubscribe.** Every handler the session registered on the client is
    removed, so no late event (a `Ready`, a remote track, a stall) touches the
    torn-down state.
-4. **Local media.** In this order: the camera background effect and its raw
+4. **Local media.** In this order: the screen share module (it releases its
+   captures, now and any still in flight, and withdraws nothing; see
+   [SCREEN_SHARE.md](SCREEN_SHARE.md#teardown)); the camera background effect and its raw
    camera capture; the VAD gate binding (`setGateController(null)`); the VAD
    monitor stream; the published audio processor (noise suppression / gate
    graph); an early processor still being built; every local track
-   (microphone, camera, screen; `onended` cleared first so stopping them
+   (microphone, camera; `onended` cleared first so stopping them
    raises nothing); the capture owners (pending `getUserMedia` requests are
    invalidated, so one that resolves later is stopped, not published).
 5. **Session state and store.** The local participant id, speaking state,
@@ -228,21 +231,26 @@ none, republishes its local tracks through a
 ## Publication
 
 `src/publication.ts`. One **publication reconciler** per client owns what the
-client publishes on its microphone and camera. It is the only code that
-publishes, replaces or unpublishes those tracks; every other path (the first
-publication after a join, a device or settings change, a camera toggle, an
-outbound-stall recovery, the republish after a voice reconnect, unmute
-replacing a promoted standby's silence) only changes the **intent** and asks
-for a **reconcile**. Screen share is not a slot: it keeps its own path for
-now. Getting the tracks (`getUserMedia`, audio processors, camera effects) is
+client publishes on its microphone, camera and screen share. It is the only
+code that publishes, replaces or unpublishes those; every other path (the
+first publication after a join, a device or settings change, a camera
+toggle, a screen share starting, restarting or stopping, an outbound-stall
+recovery, the republish after a voice reconnect, unmute replacing a promoted
+standby's silence) only changes the **intent** and asks for a **reconcile**.
+The `screen` slot holds a share's tracks as one value, published and
+withdrawn together; a native share (published by its own pipeline) is
+**adopted** there so that withdrawing it is still the reconciler's
+`unpublish`. Only the share module (`src/screen-share.ts`,
+[SCREEN_SHARE.md](SCREEN_SHARE.md)) sets it. Getting the tracks (`getUserMedia`, audio processors, camera effects) is
 the platform's job; the reconciler only receives the finished track. Which
 device to open, when to open it again and what to save are in
 [DEVICES.md](DEVICES.md) (`src/devices.ts`).
 
 ### Inputs
 
-- **Intent**, per slot (`microphone`, `camera`): `track` (the track to
-  publish, or none) and `enabled` (whether it sends: the microphone's mute).
+- **Intent**, per slot (`microphone`, `camera`, `screen`): `track` (the
+  track to publish, or none; for `screen`, a share's tracks) and `enabled`
+  (whether it sends: the microphone's mute; for `screen`, the share's audio).
   The platform sets them with `setTrack(slot, track)` and
   `setEnabled(slot, enabled)`.
 - **Applied**, per slot, kept by the reconciler for the current connection:
@@ -251,7 +259,7 @@ device to open, when to open it again and what to save are in
   nothing was done on this connection yet, or a swap found no publication.
 - **Published?**, per slot, asked of the media session (web: SFUClient has a
   live publication for `cam-audio-<participant>` /
-  `cam-video-<participant>`). It is only consulted for a slot with **no
+  `cam-video-<participant>` / `screen-video-<participant>`). It is only consulted for a slot with **no
   record** on this connection. Once this connection unpublished a slot, the
   slot is "none" whatever the media session reports: a camera withdrawn with
   a keepalive keeps its sender, and a platform MAY report it as published.
@@ -269,6 +277,13 @@ The platform's media interface, all of which may fail:
 | `setEnabled(slot, on)` | `setPublishedTrackEnabled(name, on)`            | none                                                                          |
 | `isPublished(slot)`    | `getPublishedTrack(name) !== null`              | none                                                                          |
 
+On `screen`: `publish` and `replace` are `publishTracks(stream, "screen")`
+with the share's live tracks (a published or kept-alive share has its
+sources swapped), and do nothing for an adopted native share; `unpublish`
+is `stopTracks([screen-video-<id>, screen-audio-<id>])` in one call (the
+video kept alive, `StopTracks` op 13 for names PartyTracks does not hold);
+`setEnabled` acts on `screen-audio-<id>`.
+
 `publish` on a slot that is already published (or withdrawn and kept alive)
 MUST act as a swap of its source, so publishing twice is harmless; PartyTracks
 does that (`publishStream`). The camera's simulcast encodings are chosen by
@@ -276,7 +291,8 @@ the platform when it first pushes the camera, as before.
 
 ### Plan
 
-For each slot, microphone first (what peers hear matters most), then camera:
+For each slot, microphone first (what peers hear matters most), then
+camera, then screen:
 
 | intent    | applied on this connection | published? | operations                  |
 | --------- | -------------------------- | ---------- | --------------------------- |
@@ -315,12 +331,20 @@ planned.
 A failed operation (it threw or rejected) counts one failure. Under
 `PUBLICATION_RETRY` (3 attempts, 150 ms base, doubling, 1000 ms cap) the run
 waits 150 ms after the first failure and 300 ms after the second, then plans
-again; the third failure in a row ends the run as `failed` with that
-operation and its error. The intent is kept. The count resets when a plan
-comes out empty, when the budget is spent, and on a connection reset. A
-`setTrack` or `reconcile()` during a wait ends the wait at once (the count
-is kept). After `failed`, nothing retries on its own: the next
-`reconcile()` or connection reset starts a fresh run.
+again; the third failure in a row **sets that slot aside** for the rest of
+the run, and the run carries on with the other slots (so a microphone that
+cannot publish does not keep a camera or a screen share off the wire, or a
+stopped share published). When the plan for the remaining slots comes out
+empty, the run ends as `failed` with the first set-aside operation and its
+error, and `failedSlots` listing every set-aside slot; otherwise
+`converged`. The intent is kept. A `setTrack` on a set-aside slot gives it a
+fresh budget in the same run. The count resets when a plan comes out empty,
+when the budget is spent, and on a connection reset. A `setTrack` or
+`reconcile()` during a wait ends the wait at once (the count is kept).
+Callers decide on their own slot: web treats a `failed` run as its failure
+only when `failedSlots` includes the slot it changed. After `failed`,
+nothing retries on its own: the next `reconcile()` or connection reset
+starts a fresh run.
 
 ### Generations
 
