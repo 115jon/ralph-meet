@@ -1,3 +1,4 @@
+export * from "./devices";
 export * from "./publication";
 export * from "./remote-participants";
 export * from "./state-machine";
