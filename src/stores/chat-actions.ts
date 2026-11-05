@@ -111,6 +111,7 @@ export interface ChatRestActions {
   deleteChannel: (channelId: string) => Promise<void>;
   createCategory: (serverId: string, name: string) => Promise<Category | null>;
   deleteCategory: (serverId: string, categoryId: string) => Promise<void>;
+  leaveServer: (serverId: string) => Promise<void>;
   updateStatus: (
     status: "online" | "idle" | "dnd" | "offline",
     custom_status?: string | null,
@@ -742,6 +743,12 @@ export function createChatActions(
 
   const deleteCategory = async (serverId: string, categoryId: string) => {
     await apiDelete(`/api/servers/${serverId}/categories/${categoryId}`);
+  };
+
+  const leaveServer = async (serverId: string) => {
+    await apiDelete(`/api/servers/${serverId}/members/@me`);
+    // The gateway sends GUILD_DELETE too; removing is idempotent.
+    dispatch({ type: "REMOVE_SERVER", serverId });
   };
 
   const updateStatus = (
@@ -1388,6 +1395,7 @@ export function createChatActions(
     deleteChannel,
     createCategory,
     deleteCategory,
+    leaveServer,
     updateStatus,
     loadProfile,
     loadCurrentUser,
