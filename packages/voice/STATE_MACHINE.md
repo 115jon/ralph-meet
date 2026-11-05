@@ -221,7 +221,171 @@ leave, send window).
 
 After the voice socket is ready again (`VoiceReady`, op 101) the client
 re-announces its publications (`Video`, op 12) or, if the media session has
-none, republishes its local tracks.
+none, republishes its local tracks through a
+[connection reset](#reconnect-republish) of the publication reconciler.
+
+## Publication
+
+`src/publication.ts`. One **publication reconciler** per client owns what the
+client publishes on its microphone and camera. It is the only code that
+publishes, replaces or unpublishes those tracks; every other path (the first
+publication after a join, a device or settings change, a camera toggle, an
+outbound-stall recovery, the republish after a voice reconnect, unmute
+replacing a promoted standby's silence) only changes the **intent** and asks
+for a **reconcile**. Screen share is not a slot: it keeps its own path for
+now. Getting the tracks (`getUserMedia`, audio processors, camera effects) is
+the platform's job; the reconciler only receives the finished track.
+
+### Inputs
+
+- **Intent**, per slot (`microphone`, `camera`): `track` (the track to
+  publish, or none) and `enabled` (whether it sends: the microphone's mute).
+  The platform sets them with `setTrack(slot, track)` and
+  `setEnabled(slot, enabled)`.
+- **Applied**, per slot, kept by the reconciler for the current connection:
+  the track it last published or swapped in (or none once unpublished) and
+  the `enabled` it last applied to it. A slot with no record is **unknown**:
+  nothing was done on this connection yet, or a swap found no publication.
+- **Published?**, per slot, asked of the media session (web: SFUClient has a
+  live publication for `cam-audio-<participant>` /
+  `cam-video-<participant>`). It is only consulted for a slot with **no
+  record** on this connection. Once this connection unpublished a slot, the
+  slot is "none" whatever the media session reports: a camera withdrawn with
+  a keepalive keeps its sender, and a platform MAY report it as published.
+  Consulting it there would plan `unpublish` forever.
+
+### Operations
+
+The platform's media interface, all of which may fail:
+
+| operation              | web (SFUClient)                                 | wire                                                                          |
+| ---------------------- | ----------------------------------------------- | ----------------------------------------------------------------------------- |
+| `publish(slot, track)` | `publishTracks(stream, "cam")`                  | PartyTracks push (or resume of a withdrawn one), announced as `Video` (op 12) |
+| `replace(slot, track)` | `replaceTrack(name, track)`; false: none exists | none (`RTCRtpSender.replaceTrack`)                                            |
+| `unpublish(slot)`      | `unpublishTrack(name)`                          | `StopTracks` (op 13); a camera's SFU track is kept alive (`keepalive`)        |
+| `setEnabled(slot, on)` | `setPublishedTrackEnabled(name, on)`            | none                                                                          |
+| `isPublished(slot)`    | `getPublishedTrack(name) !== null`              | none                                                                          |
+
+`publish` on a slot that is already published (or withdrawn and kept alive)
+MUST act as a swap of its source, so publishing twice is harmless; PartyTracks
+does that (`publishStream`). The camera's simulcast encodings are chosen by
+the platform when it first pushes the camera, as before.
+
+### Plan
+
+For each slot, microphone first (what peers hear matters most), then camera:
+
+| intent    | applied on this connection | published? | operations                  |
+| --------- | -------------------------- | ---------- | --------------------------- |
+| none      | a track                    | not asked  | `unpublish`                 |
+| none      | none (unpublished)         | not asked  | nothing                     |
+| none      | unknown                    | yes        | `unpublish`                 |
+| none      | unknown                    | no         | nothing                     |
+| track _T_ | _T_                        | not asked  | `set-enabled` if it differs |
+| track _T_ | another track              | not asked  | `replace`, `set-enabled`    |
+| track _T_ | unknown, or none           | not asked  | `publish`, `set-enabled`    |
+
+`planPublication` is this table as a pure function. A `set-enabled` applies
+the intent's `enabled` **as it is when the operation runs**, not when it was
+planned.
+
+### Running
+
+- One run at a time per connection. `reconcile()` starts a run, or joins the
+  one in flight, and resolves when a plan comes out empty (`converged`), the
+  retry budget is spent (`failed`) or the reconciler is disposed
+  (`disposed`).
+- Operations run one after another. Before each one the run checks whether
+  a slot's intended track changed (`setTrack`); if it did, it plans again
+  from what is applied now. (A mute needs no re-plan: see `set-enabled`
+  above and [Mute](#mute).) After the last operation it always plans again;
+  it ends only on an empty plan. So a caller that set an intent and awaited
+  `reconcile()` sees `converged` only once the **latest** intent is on the
+  wire, which may no longer be its own (see generations).
+- A successful `publish` or `replace` records the track as applied with
+  `enabled` unknown, so the next plan applies `enabled`. A successful
+  `unpublish` records none. A `replace` that finds no publication records the
+  slot as unknown, so the next plan publishes; this is not a failure.
+
+### Retry and backoff
+
+A failed operation (it threw or rejected) counts one failure. Under
+`PUBLICATION_RETRY` (3 attempts, 150 ms base, doubling, 1000 ms cap) the run
+waits 150 ms after the first failure and 300 ms after the second, then plans
+again; the third failure in a row ends the run as `failed` with that
+operation and its error. The intent is kept. The count resets when a plan
+comes out empty, when the budget is spent, and on a connection reset. A
+`setTrack` or `reconcile()` during a wait ends the wait at once (the count
+is kept). After `failed`, nothing retries on its own: the next
+`reconcile()` or connection reset starts a fresh run.
+
+### Generations
+
+There is one generation model. It replaces the web client's separate
+counters (a local media generation that every mute bumped, and the
+initial-publication tokens).
+
+- **Connection generation.** Moves on every `connectionReset()`. An operation
+  result is recorded only if its connection is still the current one; a run
+  of an older connection stops at its next step without touching anything.
+- **Slot intent generation.** Moves when a slot's intended **track** changes
+  (`setTrack` with a different track, or `adopt` filling an empty intent).
+  `setEnabled` never moves it. A caller that sets an intent keeps the
+  generation it got (`generation`) and after awaiting asks
+  `isCurrent(generation, slot)`: true means its track is still the one
+  wanted (and, after `converged`, published); false means another caller
+  replaced it and the caller MUST NOT commit (and releases what it built for
+  it). A connection reset does not end a caller's intent: the same intent is
+  published again on the new connection.
+
+### Mute
+
+`setEnabled(slot, enabled)` updates the intent and, if this connection has a
+track applied on the slot, applies it **at once** (even while a run is in
+flight on that slot). It moves no generation, so a mute or unmute never
+cancels or restarts a first publication, a device swap, an outbound-stall
+recovery or a reconnect republish. If a `publish` or `replace` is in flight,
+the run applies the then-current `enabled` to the new track after it lands.
+On web, mute is also not an input of the capture sync any more: muting does
+not reopen the microphone.
+
+### Adopt
+
+`adopt(slot, track)` records a track that something else already published
+on this connection as applied (web: a promoted standby's silence), and takes
+it as the intent if the slot wants nothing yet. Swapping in the live
+microphone is then a `replace`, never a second publication.
+
+### Reconnect republish
+
+When the voice socket is ready again and the media session has no
+publications (web: `voice-reconnected`, raised from `VoiceReady` op 101),
+the platform calls `connectionReset()` and `reconcile()`. Applied state is
+forgotten (the new media session has nothing), the retry budget is reset, a
+run of the old connection is abandoned (its late results are ignored), and a
+new run publishes every wanted track afresh, microphone first, each followed
+by `set-enabled` with the current mute. A first publication that was still in
+flight when the reset came is published again on the new connection; the
+capture sync that asked for it commits it once that run converges. If the
+media session kept its publications the client only re-announces them
+(`Video`, op 12) and the reconciler is not involved.
+
+### Ownership on web
+
+`useVoiceChannel` creates the reconciler for a client on first use and
+disposes it in teardown step 4 (local media), before the client disconnects.
+The capture sync keeps its own **capture generation** for what it acquires
+(a newer capture sync or camera toggle drops an older one's captures). When
+a capture run is dropped after it set an intent, it hands each slot whose
+intent is still its own back to the session's **committed** track and waits
+for that to be published again before releasing its tracks. The committed
+track is the live one the session last committed: for the microphone the
+published audio processor's output, else the capture track, else a promoted
+standby's silence; for the camera the committed camera track; none if that
+track has ended. Never the intent it displaced: that may belong to another
+dropped run and be released already. A device-swap failure after the retry
+budget, and a stall recovery that is no longer wanted or failed, do the
+same.
 
 ## Remote participants
 
@@ -231,9 +395,8 @@ When a remote participant's **voice** socket reconnects, VoiceRoom purges
 the old connection's state and broadcasts `ClientDisconnect` (op 11, `d: {
 participant_id }`) for them, and also sends `Speaking` 0 if they were
 speaking, **before** their new connection re-announces its tracks (`Video`,
-op 12, offered to others as tracks). The same happens when their old socket's
-close is processed after the new one identified. So a `ClientDisconnect` for
-a remote participant does not mean they left.
+op 12, offered to others as tracks). So a `ClientDisconnect` for a remote
+participant does not mean they left.
 
 Rule: on a remote `ClientDisconnect`, a client MUST keep that participant's
 roster row and audio for a grace period of `REMOTE_RECONNECT_GRACE_MS`
@@ -243,10 +406,26 @@ once. Whether a participant left the **room** is decided only by the room
 socket (`VoiceStateUpdate` op 15 with `action: "leave"`, or their absence
 from a `Ready`/`Resumed` roster), never by the voice socket.
 
-Web today: roster rows already follow the room socket only, so they never
-flicker; pulled media is dropped at once on `ClientDisconnect` and pulled
-again when the tracks are re-offered. Holding the audio through the grace is
-the publication/reconnect follow-up, not this package's first version.
+`RemoteReconnectGrace` (`src/remote-participants.ts`) is this rule with
+injected timers:
+
+- `disconnected(id)` on a voice `ClientDisconnect` for a remote participant:
+  start the grace (a second one restarts it and forgets what was offered
+  during the first).
+- `offered(id, trackName)` for every track offered by a participant
+  (`Video`/track offer, op 12, and the track list of our own `VoiceReady`,
+  op 101): inside a grace it is recorded as offered again.
+- `left(id)` when the room socket says they left: the grace is cancelled and
+  the client drops them at once.
+- When the grace runs out, `expire(id, reoffered)`: if nothing was offered
+  again, everything of theirs is dropped (pulls and pending offers); else
+  only their tracks that were not offered again are.
+- `dispose()` at teardown cancels every grace without dropping anything.
+
+Web: roster rows follow the room socket only, so they never flicker.
+SFUClient clears the participant's speaking at once and keeps their pulls
+through the grace. A track offered again with the same SFU track keeps its
+pull running (no gap); one with a new SFU track moves the pull to it.
 
 ### Voice-state deltas
 

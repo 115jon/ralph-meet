@@ -677,7 +677,11 @@ export class PartyTracksMediaManager {
     }
   }
 
-  removeParticipant(participantId: string): void {
+  /** Stops a participant's tracks, except the ones named in `keep`. */
+  removeParticipant(
+    participantId: string,
+    keep: ReadonlySet<string> = new Set(),
+  ): void {
     // Its offers, and its withdrawn (parked) pulls, which have none.
     const trackNames = new Set<string>();
     for (const track of this.offers.values()) {
@@ -690,6 +694,7 @@ export class PartyTracksMediaManager {
         trackNames.add(trackName);
       }
     }
+    for (const trackName of keep) trackNames.delete(trackName);
     this.stopRemoteTracks([...trackNames]);
   }
 
