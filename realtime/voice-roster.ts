@@ -59,7 +59,10 @@ export interface VoiceRosterSnapshot {
   room_slug: string;
   /** Strictly increasing per room (nextVoiceRosterSeq). */
   seq: number;
-  /** When the roster last went from empty to non-empty; null when empty. */
+  /**
+   * When the roster last went from empty to non-empty; null when empty. A
+   * room reset does not empty it while the members it dropped are held.
+   */
   started_at: number | null;
   members: VoiceRosterMember[];
 }
@@ -105,9 +108,10 @@ export function isNewerVoiceRoster(
   return lastAppliedSeq === undefined || seq > lastAppliedSeq;
 }
 
-function inVoice(session: VoiceRosterSession): session is VoiceRosterSession & {
-  user_id: string;
-} {
+/** Whether a room session counts for the roster (in voice, signed in). */
+export function isVoiceRosterSession(
+  session: VoiceRosterSession,
+): session is VoiceRosterSession & { user_id: string } {
   return (
     !!session.user_id &&
     session.standby !== true &&
@@ -163,7 +167,7 @@ export function buildVoiceRosterMembers(
     { session: VoiceRosterSession & { user_id: string }; held: number | null }
   >();
   for (const session of live) {
-    if (!inVoice(session)) continue;
+    if (!isVoiceRosterSession(session)) continue;
     const current = chosen.get(session.user_id);
     if (
       !current ||
@@ -174,7 +178,7 @@ export function buildVoiceRosterMembers(
     }
   }
   for (const { session, disconnectedAt } of held) {
-    if (!inVoice(session)) continue;
+    if (!isVoiceRosterSession(session)) continue;
     if (options.now - disconnectedAt >= options.graceMs) continue;
     const current = chosen.get(session.user_id);
     if (current?.held === null) continue;
@@ -197,6 +201,36 @@ export function buildVoiceRosterMembers(
         a.joined_at - b.joined_at ||
         (a.user_id < b.user_id ? -1 : a.user_id > b.user_id ? 1 : 0),
     );
+}
+
+/**
+ * A member a room reset dropped, as a held session for
+ * buildVoiceRosterMembers: same profile, state and join time. It never wins
+ * over a real session of the user.
+ */
+export function voiceRosterSessionOf(
+  member: VoiceRosterMember,
+): VoiceRosterSession {
+  return {
+    id: `reset:${member.user_id}`,
+    user_id: member.user_id,
+    admission: { accessMode: "authenticated" },
+    name: member.name,
+    username: member.username,
+    display_name: member.display_name ?? null,
+    avatar_url: member.avatar_url ?? null,
+    avatar_display: member.avatar_display ?? null,
+    stream_preview_url: member.stream_preview_url ?? null,
+    self_mute: member.self_mute,
+    self_deaf: member.self_deaf,
+    self_video: member.self_video,
+    self_stream: member.self_stream,
+    self_stream_audio: member.self_stream_audio,
+    spatial_audio_enabled: member.spatial_audio_enabled,
+    spatial_audio_high_fidelity: member.spatial_audio_high_fidelity,
+    voice_joined_at: member.joined_at,
+    voice_join_order: 0,
+  };
 }
 
 /** A stable string for "did the roster change" (seq excluded). */
@@ -222,6 +256,10 @@ function isId(value: unknown): value is string {
     value.length > 0 &&
     value.length <= MAX_ID_LENGTH
   );
+}
+
+function isSeq(value: unknown): value is number {
+  return typeof value === "number" && Number.isSafeInteger(value) && value >= 0;
 }
 
 function isTimestamp(value: unknown): value is number {
@@ -300,6 +338,22 @@ function parseMember(value: unknown): VoiceRosterMember | null {
   };
 }
 
+/** A member list (a snapshot's, or a room's stored one); null if invalid. */
+export function parseVoiceRosterMembers(
+  value: unknown,
+): VoiceRosterMember[] | null {
+  if (!Array.isArray(value) || value.length > MAX_MEMBERS) return null;
+  const members: VoiceRosterMember[] = [];
+  const seen = new Set<string>();
+  for (const raw of value) {
+    const member = parseMember(raw);
+    if (!member || seen.has(member.user_id)) return null;
+    seen.add(member.user_id);
+    members.push(member);
+  }
+  return members;
+}
+
 export function parseVoiceRosterSnapshot(
   value: unknown,
 ): VoiceRosterSnapshot | null {
@@ -308,23 +362,13 @@ export function parseVoiceRosterSnapshot(
   if (
     !isId(body.channel_id) ||
     !isId(body.room_slug) ||
-    typeof body.seq !== "number" ||
-    !Number.isSafeInteger(body.seq) ||
-    body.seq < 0 ||
-    (body.started_at !== null && !isTimestamp(body.started_at)) ||
-    !Array.isArray(body.members) ||
-    body.members.length > MAX_MEMBERS
+    !isSeq(body.seq) ||
+    (body.started_at !== null && !isTimestamp(body.started_at))
   ) {
     return null;
   }
-  const members: VoiceRosterMember[] = [];
-  const seen = new Set<string>();
-  for (const raw of body.members) {
-    const member = parseMember(raw);
-    if (!member || seen.has(member.user_id)) return null;
-    seen.add(member.user_id);
-    members.push(member);
-  }
+  const members = parseVoiceRosterMembers(body.members);
+  if (!members) return null;
   return {
     channel_id: body.channel_id,
     room_slug: body.room_slug,
@@ -334,15 +378,39 @@ export function parseVoiceRosterSnapshot(
   };
 }
 
+/**
+ * A pull: which channel, from which room, and the seq the gateway last
+ * applied for it (`min_seq`, optional). A room whose seq is below that (it
+ * lost its stored seq on a host whose clock is behind) answers above it.
+ */
 export function parseVoiceRosterPull(
   value: unknown,
-): { channelId: string; roomSlug: string } | null {
+): { channelId: string; roomSlug: string; minSeq: number } | null {
   if (!value || typeof value !== "object") return null;
-  const { channel_id: channelId, room_slug: roomSlug } = value as Record<
-    string,
-    unknown
-  >;
-  return isId(channelId) && isId(roomSlug) ? { channelId, roomSlug } : null;
+  const {
+    channel_id: channelId,
+    room_slug: roomSlug,
+    min_seq: minSeq,
+  } = value as Record<string, unknown>;
+  if (!isId(channelId) || !isId(roomSlug)) return null;
+  if (minSeq === undefined) return { channelId, roomSlug, minSeq: 0 };
+  return isSeq(minSeq) ? { channelId, roomSlug, minSeq } : null;
+}
+
+/**
+ * The gateway's answer to a push: whether it applied the snapshot, and the
+ * seq it holds for the channel (absent when the snapshot came from a room
+ * that does not own the channel). A held seq above the pushed one means the
+ * room must count from above it.
+ */
+export function parseVoiceRosterPushReply(
+  value: unknown,
+): { applied: boolean; seq?: number } | null {
+  if (!value || typeof value !== "object") return null;
+  const { applied, seq } = value as Record<string, unknown>;
+  if (typeof applied !== "boolean") return null;
+  if (seq === undefined) return { applied };
+  return isSeq(seq) ? { applied, seq } : null;
 }
 
 /**

@@ -57,8 +57,11 @@ import {
 import {
   buildVoiceRosterMembers,
   isNewerVoiceRoster,
+  isVoiceRosterSession,
   nextVoiceRosterSeq,
+  parseVoiceRosterMembers,
   parseVoiceRosterPull,
+  parseVoiceRosterPushReply,
   parseVoiceRosterSnapshot,
   resolveRoomVoiceChannelId,
   voiceRosterFingerprint,
@@ -69,7 +72,9 @@ import {
   VOICE_ROSTER_PULL_PATH,
   VOICE_ROSTER_PUSH_ALARM_RETRY_MS,
   VOICE_ROSTER_REVALIDATE_MS,
+  type VoiceRosterMember,
   type VoiceRosterSnapshot,
+  voiceRosterSessionOf,
 } from "./voice-roster";
 import {
   consumeRealtimeTicketNonce,
@@ -468,6 +473,20 @@ export class MeetingRoom extends DurableObject<Env> {
   private voiceRosterDelivered: string | null = null;
   /** Room: when the roster last went from empty to non-empty. */
   private voiceRosterStartedAt: number | null = null;
+  /** Room: the members of the snapshot that holds voiceRosterSeq. */
+  private voiceRosterMembers: VoiceRosterMember[] = [];
+  /**
+   * Room: members the last roster had that a reset of this object dropped
+   * (their sockets went without close events, so no session was held for
+   * resume). Shown as reconnecting until the user's session is back or
+   * RESUME_GRACE_PERIOD_MS from when they were lost, so a deploy or a reset
+   * does not empty the channel (and end its call) under people who
+   * reconnect within seconds. Derived from voiceRosterMembers on start.
+   */
+  private voiceRosterResetHeld = new Map<
+    string,
+    { member: VoiceRosterMember; disconnectedAt: number }
+  >();
   /** Room: a push ran out of retries; the alarm tries again from here. */
   private voiceRosterRetryAt: number | null = null;
   /** Room: arrival order of the last voice join (see voice_join_order). */
@@ -643,6 +662,8 @@ export class MeetingRoom extends DurableObject<Env> {
         if (typeof rosterState.started_at === "number") {
           this.voiceRosterStartedAt = rosterState.started_at;
         }
+        this.voiceRosterMembers =
+          parseVoiceRosterMembers(rosterState.members) ?? [];
         if (typeof rosterState.retry_at === "number") {
           this.voiceRosterRetryAt = rosterState.retry_at;
         }
@@ -764,7 +785,9 @@ export class MeetingRoom extends DurableObject<Env> {
           this.revalidateVoiceRosters(VOICE_ROSTER_REVALIDATE_MS / 2),
         );
       } else if (this.voiceRosterChannelId) {
-        // Sessions that did not survive a reset change the roster.
+        // Members whose sessions did not survive a reset are held for the
+        // resume grace instead of leaving at once.
+        this.holdVoiceMembersLostInReset(Date.now());
         this.syncVoiceRoster();
         this.flushDirtyStorage();
       }
@@ -774,6 +797,7 @@ export class MeetingRoom extends DurableObject<Env> {
         this.resumableSessionExpiry.size > 0 ||
         this.pendingCalls.size > 0 ||
         this.voiceRosterSources.size > 0 ||
+        this.voiceRosterResetHeld.size > 0 ||
         this.voiceRosterRetryAt !== null
       ) {
         this.ctx.waitUntil(this.scheduleAlarm());
@@ -934,9 +958,16 @@ export class MeetingRoom extends DurableObject<Env> {
       if (!snapshot || this.roomSlug !== VOICE_ROSTER_GATEWAY) {
         return Response.json({ error: "invalid" }, { status: 400 });
       }
-      const applied = await this.applyVoiceRosterSnapshot(snapshot);
+      const applied = this.applyVoiceRosterSnapshot(snapshot);
+      // The seq held for the channel, so a room whose seq fell behind it
+      // (see raiseVoiceRosterSeqAbove) counts from above it.
+      const source = this.voiceRosterSources.get(snapshot.channel_id);
       this.flushDirtyStorage();
-      return Response.json({ applied });
+      return Response.json(
+        source?.roomSlug === snapshot.room_slug
+          ? { applied, seq: source.seq }
+          : { applied },
+      );
     }
 
     // Global gateway -> room: what is the roster now?
@@ -959,7 +990,12 @@ export class MeetingRoom extends DurableObject<Env> {
       if (this.voiceRosterChannelId !== pull.channelId) {
         return Response.json({ error: "channel_mismatch" }, { status: 409 });
       }
-      const snapshot = this.currentVoiceRoster();
+      let snapshot = this.currentVoiceRoster();
+      if (snapshot.seq < pull.minSeq) {
+        // The gateway would ignore this snapshot as older than its own.
+        this.raiseVoiceRosterSeqAbove(pull.minSeq);
+        snapshot = { ...snapshot, seq: this.voiceRosterSeq };
+      }
       // The answer delivers this snapshot; no push needed for it.
       this.voiceRosterDelivered = this.voiceRosterFingerprint;
       this.persistVoiceRosterState();
@@ -1085,6 +1121,8 @@ export class MeetingRoom extends DurableObject<Env> {
         return Response.json({ error: "invalid" }, { status: 400 });
       }
       const moved = this.moveVoiceSessions(move.userId, move.notice);
+      // Moved out while held after a reset: off this room's roster too.
+      this.voiceRosterResetHeld.delete(move.userId);
       this.flushDirtyStorage();
       return Response.json({ moved });
     }
@@ -1460,6 +1498,7 @@ export class MeetingRoom extends DurableObject<Env> {
         this.resumableSessionExpiry.size > 0 ||
         this.pendingCalls.size > 0 ||
         this.voiceRosterSources.size > 0 ||
+        this.voiceRosterResetHeld.size > 0 ||
         this.voiceRosterRetryAt !== null
       ) {
         await this.scheduleAlarm(true);
@@ -1475,6 +1514,9 @@ export class MeetingRoom extends DurableObject<Env> {
         deadlines.push(session.last_heartbeat + ZOMBIE_TIMEOUT_MS);
     }
     for (const disconnectedAt of this.resumableSessionExpiry.values()) {
+      deadlines.push(disconnectedAt + RESUME_GRACE_PERIOD_MS);
+    }
+    for (const { disconnectedAt } of this.voiceRosterResetHeld.values()) {
       deadlines.push(disconnectedAt + RESUME_GRACE_PERIOD_MS);
     }
     for (const pending of this.pendingCalls.values()) {
@@ -2275,8 +2317,56 @@ export class MeetingRoom extends DurableObject<Env> {
       fingerprint: this.voiceRosterFingerprint,
       delivered: this.voiceRosterDelivered,
       started_at: this.voiceRosterStartedAt,
+      members: this.voiceRosterMembers,
       retry_at: this.voiceRosterRetryAt,
     });
+  }
+
+  /**
+   * On start: members of the last roster with no live session and no session
+   * held for resume were dropped by a reset (no close event ran for their
+   * sockets). Hold them as reconnecting, from when that was noticed (or from
+   * their stored disconnected_at, if they were already reconnecting), for
+   * the rest of the resume grace.
+   */
+  private holdVoiceMembersLostInReset(now: number): void {
+    const present = new Set<string>();
+    for (const session of this.sessions.values()) {
+      if (isVoiceRosterSession(session)) present.add(session.user_id);
+    }
+    for (const [id, session] of this.resumableSessions) {
+      if (
+        this.resumableSessionExpiry.has(id) &&
+        isVoiceRosterSession(session)
+      ) {
+        present.add(session.user_id);
+      }
+    }
+    for (const member of this.voiceRosterMembers) {
+      if (present.has(member.user_id)) continue;
+      const disconnectedAt = Math.min(member.disconnected_at ?? now, now);
+      if (now - disconnectedAt >= RESUME_GRACE_PERIOD_MS) continue;
+      this.voiceRosterResetHeld.set(member.user_id, { member, disconnectedAt });
+    }
+    if (this.voiceRosterResetHeld.size > 0) {
+      meetingLog.info(
+        `Voice roster: holding ${this.voiceRosterResetHeld.size} member(s) a reset dropped`,
+      );
+    }
+  }
+
+  /**
+   * Room: the gateway holds `seq` for this channel, above this room's (the
+   * room lost its stored seq and the clock gave a lower one). Count from
+   * above it, so the next snapshot, pushed or pulled, is applied.
+   */
+  private raiseVoiceRosterSeqAbove(seq: number): void {
+    if (this.voiceRosterSeq > seq) return;
+    meetingLog.warn(
+      `Voice roster seq ${this.voiceRosterSeq} is behind the gateway's ${seq}; raising it`,
+    );
+    this.voiceRosterSeq = nextVoiceRosterSeq(seq);
+    this.persistVoiceRosterState();
   }
 
   /** The arrival order of a voice join, taken before Identify yields. */
@@ -2316,6 +2406,32 @@ export class MeetingRoom extends DurableObject<Env> {
     }
     if (heldStamped) this.persistResumableSessions();
 
+    // Members a reset dropped: gone once their user has a session again
+    // (a later leave must not bring them back as reconnecting) or once the
+    // grace runs out.
+    if (this.voiceRosterResetHeld.size > 0) {
+      const present = new Set<string>();
+      for (const session of this.sessions.values()) {
+        if (isVoiceRosterSession(session)) present.add(session.user_id);
+      }
+      for (const { session } of held) {
+        if (isVoiceRosterSession(session)) present.add(session.user_id);
+      }
+      for (const [userId, lost] of this.voiceRosterResetHeld) {
+        if (
+          present.has(userId) ||
+          now - lost.disconnectedAt >= RESUME_GRACE_PERIOD_MS
+        ) {
+          this.voiceRosterResetHeld.delete(userId);
+          continue;
+        }
+        held.push({
+          session: voiceRosterSessionOf(lost.member) as WsAttachment,
+          disconnectedAt: lost.disconnectedAt,
+        });
+      }
+    }
+
     const members = buildVoiceRosterMembers(this.sessions.values(), held, {
       graceMs: RESUME_GRACE_PERIOD_MS,
       now,
@@ -2343,6 +2459,7 @@ export class MeetingRoom extends DurableObject<Env> {
       if (fingerprint !== this.voiceRosterFingerprint) {
         this.voiceRosterSeq = nextVoiceRosterSeq(this.voiceRosterSeq, now);
         this.voiceRosterFingerprint = fingerprint;
+        this.voiceRosterMembers = members;
       }
       this.persistVoiceRosterState();
     }
@@ -2384,9 +2501,19 @@ export class MeetingRoom extends DurableObject<Env> {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(snapshot),
       });
-    await response.body?.cancel();
     if (!response.ok) {
+      await response.body?.cancel();
       meetingLog.warn(`Voice roster push rejected: status=${response.status}`);
+      return false;
+    }
+    const reply = parseVoiceRosterPushReply(
+      await response.json().catch(() => null),
+    );
+    if (reply && !reply.applied && (reply.seq ?? 0) > snapshot.seq) {
+      // Ignored as older than what the gateway holds: send it again (after
+      // the first backoff step) with a seq above the gateway's.
+      this.raiseVoiceRosterSeqAbove(reply.seq ?? 0);
+      this.flushDirtyStorage();
       return false;
     }
     this.voiceRosterDelivered = fingerprint;
@@ -2472,6 +2599,7 @@ export class MeetingRoom extends DurableObject<Env> {
       return false;
     }
 
+    const wasMirrored = this.voiceChannelMembers.has(channelId);
     const hints = { ...source?.hints };
     const next = new Map<string, VoiceChannelMember>();
     for (const rosterMember of snapshot.members) {
@@ -2493,7 +2621,9 @@ export class MeetingRoom extends DurableObject<Env> {
     });
     this.persistVoiceRosterSource(channelId);
     this.replaceVoiceChannelMembers(channelId, next, snapshot.started_at);
-    if (this.voiceRosterSources.size === 1) {
+    if (!source?.roomSlug || !wasMirrored) {
+      // A new (or newly non-empty) channel: its revalidation deadline may
+      // be earlier than the alarm already set.
       this.ctx.waitUntil(this.scheduleAlarm());
     }
     return true;
@@ -2671,6 +2801,7 @@ export class MeetingRoom extends DurableObject<Env> {
           body: JSON.stringify({
             channel_id: channelId,
             room_slug: roomSlug,
+            min_seq: this.voiceRosterSources.get(channelId)?.seq ?? 0,
           }),
         });
       if (!response.ok) {

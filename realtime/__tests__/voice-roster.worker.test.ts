@@ -455,7 +455,7 @@ describe("voice roster: the room is the authority", () => {
         }),
       },
     );
-    expect(await push.json()).toEqual({ applied: true });
+    expect(await push.json()).toMatchObject({ applied: true });
     expect(await memberOf(channelId, userId, gatewayName)).not.toBeNull();
 
     // A minute without word from the room: the alarm pulls its roster.
@@ -551,6 +551,383 @@ describe("voice roster: the room is the authority", () => {
     });
     expect(await runDurableObjectAlarm(gateway)).toBe(true);
     expect(await memberOf(channelId, "old-op33-user", gatewayName)).toBeNull();
+
+    chat.close();
+  });
+});
+
+/** POSTs a roster snapshot to a gateway as a room would; the reply body. */
+async function pushSnapshot(
+  gatewayName: string,
+  snapshot: {
+    channel_id: string;
+    room_slug: string;
+    seq: number;
+    members: Array<{ user_id: string; name?: string }>;
+  },
+) {
+  const response = await meetingRoom(gatewayName).fetch(
+    `https://internal${VOICE_ROSTER_PATH}`,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        ...snapshot,
+        started_at: snapshot.members.length > 0 ? Date.now() : null,
+        members: snapshot.members.map((member) => ({
+          name: member.user_id,
+          connected: true,
+          connection_state: "connected",
+          disconnected_at: null,
+          reconnect_expires_at: null,
+          self_mute: true,
+          self_deaf: false,
+          self_video: false,
+          self_stream: false,
+          joined_at: Date.now(),
+          ...member,
+        })),
+      }),
+    },
+  );
+  return (await response.json()) as { applied: boolean; seq?: number };
+}
+
+/**
+ * An object reset (deploy, exception, exceeded limit): the room's sockets
+ * drop with no close event, so no session is held for resume.
+ */
+async function resetRoom(roomSlug: string) {
+  await runInDurableObject(meetingRoom(roomSlug), (_instance, state) => {
+    state.abort("reset");
+  }).catch(() => {});
+}
+
+/** The room's members a reset dropped and it holds (wakes the room). */
+const resetHeldOf = (roomSlug: string) =>
+  runInDurableObject(meetingRoom(roomSlug), (instance) =>
+    [
+      ...(
+        instance as unknown as {
+          voiceRosterResetHeld: Map<string, unknown>;
+        }
+      ).voiceRosterResetHeld.keys(),
+    ].sort(),
+  );
+
+/** The global gateway's call state and started_at for a DM channel. */
+const callStateOf = (channelId: string) =>
+  runInDurableObject(meetingRoom(VOICE_ROSTER_GATEWAY), (instance) => {
+    const live = instance as unknown as {
+      activeCalls: Map<string, unknown>;
+      pendingCalls: Map<string, { channelId: string }>;
+      voiceChannelStartedAt: Map<string, number>;
+    };
+    return {
+      active: live.activeCalls.has(channelId),
+      ringing: [...live.pendingCalls.values()].some(
+        (call) => call.channelId === channelId,
+      ),
+      startedAt: live.voiceChannelStartedAt.get(channelId) ?? null,
+    };
+  });
+
+const ringStops = (frames: Frame[]) =>
+  frames.filter(
+    (frame) => frame.op === 19 && frame.d?.event === "CALL_RING_STOP",
+  );
+
+describe("voice roster: a room reset", () => {
+  it("holds the members a reset dropped, so an answered call goes on when they reconnect", async () => {
+    const callerId = `reset-caller-${crypto.randomUUID()}`;
+    const calleeId = `reset-callee-${crypto.randomUUID()}`;
+    const { channelId, roomSlug } = await dmRoom([callerId, calleeId]);
+    const chat = await openGatewaySocket(callerId);
+    await identify(chat);
+    const seen = record(chat);
+
+    const caller = await openRoomSocket(roomSlug, callerId, { channelId });
+    await identify(caller);
+    const callee = await openRoomSocket(roomSlug, calleeId, { channelId });
+    await identify(callee);
+    await waitForMember(channelId, callerId, { connection_state: "connected" });
+    await waitForMember(channelId, calleeId, { connection_state: "connected" });
+    await runInDurableObject(meetingRoom(VOICE_ROSTER_GATEWAY), (instance) => {
+      (
+        instance as unknown as { activeCalls: Map<string, unknown> }
+      ).activeCalls.set(channelId, {
+        callId: `call-${crypto.randomUUID()}`,
+        callerId,
+        calleeId,
+        channelId,
+        acceptedAt: Date.now() - 60_000,
+      });
+    });
+    const before = await callStateOf(channelId);
+    expect(before).toMatchObject({ active: true });
+
+    await resetRoom(roomSlug);
+    // The room's next start (here a pull would do the same) shows both as
+    // reconnecting instead of emptying the channel.
+    expect(await resetHeldOf(roomSlug)).toEqual([calleeId, callerId].sort());
+    await waitForMember(channelId, callerId, {
+      connected: false,
+      connection_state: "reconnecting",
+    });
+    await waitForMember(channelId, calleeId, {
+      connection_state: "reconnecting",
+    });
+
+    // Both clients reconnect (their Resume gets 4006; they Identify again).
+    const callerAgain = await openRoomSocket(roomSlug, callerId, { channelId });
+    await identify(callerAgain);
+    const calleeAgain = await openRoomSocket(roomSlug, calleeId, { channelId });
+    await identify(calleeAgain);
+    await waitForMember(channelId, callerId, { connection_state: "connected" });
+    await waitForMember(channelId, calleeId, { connection_state: "connected" });
+    expect(await resetHeldOf(roomSlug)).toEqual([]);
+
+    expect(await callStateOf(channelId)).toEqual(before);
+    expect(
+      sidebarUpdates(seen, channelId).some((members) => members.length === 0),
+    ).toBe(false);
+
+    // Back in a session, a leave is a leave: not reconnecting again.
+    callerAgain.send(JSON.stringify({ op: 11, d: {} }));
+    await waitForMember(channelId, callerId, null);
+
+    calleeAgain.close();
+    chat.close();
+  });
+
+  it("does not cancel a ring when the caller's room resets and they reconnect", async () => {
+    const callerId = `reset-ring-caller-${crypto.randomUUID()}`;
+    const calleeId = `reset-ring-callee-${crypto.randomUUID()}`;
+    const { channelId, roomSlug } = await dmRoom([callerId, calleeId]);
+    const chat = await openGatewaySocket(callerId);
+    await identify(chat);
+    const seen = record(chat);
+    const caller = await openRoomSocket(roomSlug, callerId, { channelId });
+    await identify(caller);
+    await waitForMember(channelId, callerId, { connection_state: "connected" });
+    await runInDurableObject(meetingRoom(VOICE_ROSTER_GATEWAY), (instance) => {
+      (
+        instance as unknown as { pendingCalls: Map<string, unknown> }
+      ).pendingCalls.set(calleeId, {
+        callId: `ring-${crypto.randomUUID()}`,
+        callerId,
+        calleeId,
+        channelId,
+        voiceRoomId: roomSlug,
+        expiresAt: Date.now() + 30_000,
+        callerName: "Caller",
+        timeout: undefined,
+      });
+    });
+
+    await resetRoom(roomSlug);
+    expect(await resetHeldOf(roomSlug)).toEqual([callerId]);
+    await waitForMember(channelId, callerId, {
+      connection_state: "reconnecting",
+    });
+    const again = await openRoomSocket(roomSlug, callerId, { channelId });
+    await identify(again);
+    await waitForMember(channelId, callerId, { connection_state: "connected" });
+    await settle(chat);
+
+    expect(await callStateOf(channelId)).toMatchObject({ ringing: true });
+    expect(ringStops(seen)).toEqual([]);
+
+    await runInDurableObject(meetingRoom(VOICE_ROSTER_GATEWAY), (instance) => {
+      (
+        instance as unknown as { pendingCalls: Map<string, unknown> }
+      ).pendingCalls.delete(calleeId);
+    });
+    again.close();
+    chat.close();
+  });
+
+  it("ends the call once the grace runs out with nobody back", async () => {
+    const callerId = `reset-gone-caller-${crypto.randomUUID()}`;
+    const calleeId = `reset-gone-callee-${crypto.randomUUID()}`;
+    const { channelId, roomSlug } = await dmRoom([callerId, calleeId]);
+    const caller = await openRoomSocket(roomSlug, callerId, { channelId });
+    await identify(caller);
+    const callee = await openRoomSocket(roomSlug, calleeId, { channelId });
+    await identify(callee);
+    await waitForMember(channelId, callerId, { connection_state: "connected" });
+    await waitForMember(channelId, calleeId, { connection_state: "connected" });
+    await runInDurableObject(meetingRoom(VOICE_ROSTER_GATEWAY), (instance) => {
+      (
+        instance as unknown as { activeCalls: Map<string, unknown> }
+      ).activeCalls.set(channelId, {
+        callId: `call-${crypto.randomUUID()}`,
+        callerId,
+        calleeId,
+        channelId,
+        acceptedAt: Date.now() - 60_000,
+      });
+    });
+    const startedAt = (await callStateOf(channelId)).startedAt;
+
+    await resetRoom(roomSlug);
+    expect(await resetHeldOf(roomSlug)).toHaveLength(2);
+    await waitForMember(channelId, callerId, {
+      connection_state: "reconnecting",
+    });
+    // Held, the channel keeps its call and its started_at.
+    expect(await callStateOf(channelId)).toEqual({
+      active: true,
+      ringing: false,
+      startedAt,
+    });
+
+    const room = meetingRoom(roomSlug);
+    await runInDurableObject(room, (instance) => {
+      for (const lost of (
+        instance as unknown as {
+          voiceRosterResetHeld: Map<string, { disconnectedAt: number }>;
+        }
+      ).voiceRosterResetHeld.values()) {
+        lost.disconnectedAt -= 121_000;
+      }
+    });
+    expect(await runDurableObjectAlarm(room)).toBe(true);
+    await waitForMember(channelId, callerId, null);
+    await waitForMember(channelId, calleeId, null);
+    await vi.waitFor(async () =>
+      expect(await callStateOf(channelId)).toMatchObject({
+        active: false,
+        startedAt: null,
+      }),
+    );
+  });
+});
+
+describe("voice roster: a room seq behind the gateway's", () => {
+  // The room lost its stored seq and its host's clock is an hour behind:
+  // the gateway holds a seq above anything the room would count to.
+  const aheadSeq = () => (Date.now() + 3_600_000) * 1000;
+
+  it("pushes again above the gateway's seq when a push is ignored as older", async () => {
+    const userId = `seq-push-${crypto.randomUUID()}`;
+    const { channelId, roomSlug } = await dmRoom([userId]);
+    const socket = await openRoomSocket(roomSlug, userId, { channelId });
+    await identify(socket);
+    await waitForMember(channelId, userId, { self_mute: true });
+    await runInDurableObject(meetingRoom(VOICE_ROSTER_GATEWAY), (instance) => {
+      (
+        instance as unknown as {
+          voiceRosterSources: Map<string, { seq: number }>;
+        }
+      ).voiceRosterSources.get(channelId)!.seq = aheadSeq();
+    });
+
+    socket.send(JSON.stringify({ op: 15, d: { self_mute: false } }));
+    await waitForMember(channelId, userId, { self_mute: false });
+
+    socket.close();
+  });
+
+  it("answers a pull above the gateway's seq, so the pull replaces a stale roster", async () => {
+    const userId = `seq-pull-${crypto.randomUUID()}`;
+    const { channelId, roomSlug } = await dmRoom([userId]);
+    const socket = await openRoomSocket(roomSlug, userId, { channelId });
+    await identify(socket);
+    await waitForMember(channelId, userId, { connection_state: "connected" });
+    // What the gateway holds: a ghost, at a seq above the room's.
+    expect(
+      await pushSnapshot(VOICE_ROSTER_GATEWAY, {
+        channel_id: channelId,
+        room_slug: roomSlug,
+        seq: aheadSeq(),
+        members: [{ user_id: "seq-ghost" }],
+      }),
+    ).toMatchObject({ applied: true });
+    await waitForMember(channelId, userId, null);
+
+    const gateway = meetingRoom(VOICE_ROSTER_GATEWAY);
+    await runInDurableObject(gateway, (instance) => {
+      (
+        instance as unknown as {
+          voiceRosterSources: Map<string, { confirmedAt: number }>;
+        }
+      ).voiceRosterSources.get(channelId)!.confirmedAt = Date.now() - 61_000;
+    });
+    expect(await runDurableObjectAlarm(gateway)).toBe(true);
+    await waitForMember(channelId, userId, { connection_state: "connected" });
+    expect(await memberOf(channelId, "seq-ghost")).toBeNull();
+
+    socket.close();
+  });
+
+  it("tells a room the seq it holds when it ignores an older push", async () => {
+    const gatewayName = `seq-reply-${crypto.randomUUID()}`;
+    const chat = await openGatewaySocket("seq-reply-user", gatewayName);
+    await identify(chat);
+    const snapshot = {
+      channel_id: `seq-reply-${crypto.randomUUID()}`,
+      room_slug: "seq-reply-room",
+      members: [{ user_id: "alice" }],
+    };
+    expect(await pushSnapshot(gatewayName, { ...snapshot, seq: 20 })).toEqual({
+      applied: true,
+      seq: 20,
+    });
+    expect(await pushSnapshot(gatewayName, { ...snapshot, seq: 7 })).toEqual({
+      applied: false,
+      seq: 20,
+    });
+    // Not the channel's room: no seq to count from.
+    expect(
+      await pushSnapshot(gatewayName, {
+        ...snapshot,
+        room_slug: "another-room",
+        seq: 99,
+      }),
+    ).toEqual({ applied: false });
+
+    chat.close();
+  });
+});
+
+describe("voice roster: gateway alarm", () => {
+  it("schedules the revalidation alarm for every newly mirrored channel", async () => {
+    const gatewayName = `roster-alarm-${crypto.randomUUID()}`;
+    const chat = await openGatewaySocket("roster-alarm-user", gatewayName);
+    await identify(chat);
+    const gateway = meetingRoom(gatewayName);
+    const first = `roster-alarm-a-${crypto.randomUUID()}`;
+    // A first channel that emptied: its source stays (tombstone).
+    await pushSnapshot(gatewayName, {
+      channel_id: first,
+      room_slug: "room-a",
+      seq: 1,
+      members: [{ user_id: "alice" }],
+    });
+    await pushSnapshot(gatewayName, {
+      channel_id: first,
+      room_slug: "room-a",
+      seq: 2,
+      members: [],
+    });
+    await runInDurableObject(gateway, (_instance, state) =>
+      state.storage.setAlarm(Date.now() + 600_000),
+    );
+
+    await pushSnapshot(gatewayName, {
+      channel_id: `roster-alarm-b-${crypto.randomUUID()}`,
+      room_slug: "room-b",
+      seq: 1,
+      members: [{ user_id: "bob" }],
+    });
+    await vi.waitFor(async () => {
+      const alarm = await runInDurableObject(gateway, (_instance, state) =>
+        state.storage.getAlarm(),
+      );
+      expect(alarm).not.toBeNull();
+      expect(alarm!).toBeLessThanOrEqual(Date.now() + 60_000);
+    });
 
     chat.close();
   });

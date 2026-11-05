@@ -4,10 +4,13 @@ import {
   buildVoiceRosterMembers,
   isNewerVoiceRoster,
   nextVoiceRosterSeq,
+  parseVoiceRosterPull,
+  parseVoiceRosterPushReply,
   parseVoiceRosterSnapshot,
   resolveRoomVoiceChannelId,
   VoiceRosterPusher,
   type VoiceRosterSession,
+  voiceRosterSessionOf,
 } from "./voice-roster";
 
 const NOW = 1_800_000_000_000;
@@ -170,6 +173,56 @@ describe("parseVoiceRosterSnapshot", () => {
       }),
     ).toBeNull();
     expect(parseVoiceRosterSnapshot({ ...base, members: "x" })).toBeNull();
+  });
+});
+
+describe("seq feedback (pull min_seq, push reply)", () => {
+  it("reads a pull's min_seq, which older gateways leave out", () => {
+    expect(
+      parseVoiceRosterPull({ channel_id: "c", room_slug: "r", min_seq: 42 }),
+    ).toEqual({ channelId: "c", roomSlug: "r", minSeq: 42 });
+    expect(parseVoiceRosterPull({ channel_id: "c", room_slug: "r" })).toEqual({
+      channelId: "c",
+      roomSlug: "r",
+      minSeq: 0,
+    });
+    expect(
+      parseVoiceRosterPull({ channel_id: "c", room_slug: "r", min_seq: -1 }),
+    ).toBeNull();
+  });
+
+  it("reads a push reply with or without the gateway's seq", () => {
+    expect(parseVoiceRosterPushReply({ applied: false, seq: 9 })).toEqual({
+      applied: false,
+      seq: 9,
+    });
+    expect(parseVoiceRosterPushReply({ applied: true })).toEqual({
+      applied: true,
+    });
+    expect(parseVoiceRosterPushReply({ applied: "yes" })).toBeNull();
+    expect(parseVoiceRosterPushReply({ applied: true, seq: 1.5 })).toBeNull();
+  });
+});
+
+describe("voiceRosterSessionOf", () => {
+  it("turns a member a reset dropped back into the same member when held", () => {
+    const [member] = buildVoiceRosterMembers(
+      [session("s1", "u1", { self_mute: false, self_stream: true })],
+      [],
+      { graceMs: 120_000, now: NOW, fallbackJoinedAt: NOW },
+    );
+    const [held] = buildVoiceRosterMembers(
+      [],
+      [{ session: voiceRosterSessionOf(member), disconnectedAt: NOW }],
+      { graceMs: 120_000, now: NOW, fallbackJoinedAt: NOW },
+    );
+    expect(held).toEqual({
+      ...member,
+      connected: false,
+      connection_state: "reconnecting",
+      disconnected_at: NOW,
+      reconnect_expires_at: NOW + 120_000,
+    });
   });
 });
 
