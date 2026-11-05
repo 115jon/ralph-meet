@@ -37,6 +37,7 @@ import {
   type VideoFlow,
   type VideoFrameReading,
 } from "@ralph/voice-media";
+import { readMainSessionVideoFrames } from "./voice/main-session-video-frames";
 import { opusPtimeConfigurator } from "./voice/opus-ptime";
 import { createVideoKeepalive } from "./voice/video-keepalive";
 import { StatsHub } from "./voice/stats-hub";
@@ -1024,32 +1025,25 @@ export class SFUClient extends TypedEventEmitter<SFUEventMap> {
 
   /**
    * A pulled camera's decoded frames, for the media manager's video health.
-   * On the call's session it is read from the StatsHub's latest snapshot, so
-   * the hub stays the one getStats() poller there; a recovery session's
-   * receiver is read directly (rare, and only while it pulls).
+   * On the call's session it is read from the StatsHub's latest snapshot
+   * where the hub has one (see readMainSessionVideoFrames); a recovery
+   * session's receiver is read directly (rare, and only while it pulls).
    */
   private async readRemoteVideoFrames(
     track: MediaStreamTrack,
   ): Promise<VideoFrameReading | null> {
     const transport = this.partyTracksTransport;
     if (!transport) return null;
+    const receiver = transport.receiverFor(track);
     if (transport.isOnMainSession(track)) {
-      const now = Date.now();
-      const since = this.remoteVideoReadSince.get(track) ?? now;
+      const since = this.remoteVideoReadSince.get(track) ?? Date.now();
       this.remoteVideoReadSince.set(track, since);
       const pulled = this.partyTracksMedia
         ?.getRemoteTracksForDiagnostics()
         .find((info) => info.track === track);
       const stats = pulled ? this.stats.getTrackStats(pulled.track_name) : null;
-      // An entry older than this track is its alias's previous track's: this
-      // one has had no inbound-rtp yet (nothing arrived). Counted as zero
-      // frames only while the hub is taking snapshots.
-      if (stats && stats.timestamp >= since) {
-        return { frames: stats.frames, at: stats.timestamp };
-      }
-      return this.statsHub.isRunning() ? { frames: 0, at: now } : null;
+      return readMainSessionVideoFrames(stats, since, receiver);
     }
-    const receiver = transport.receiverFor(track);
     return receiver ? readReceiverFrames(receiver) : null;
   }
 
