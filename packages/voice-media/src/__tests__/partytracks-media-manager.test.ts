@@ -351,9 +351,14 @@ describe("PartyTracksMediaManager", () => {
     expect(events).toEqual(["remove:screen-video-peer"]);
     expect(viewer.hasRemoteOffer("screen-video-peer")).toBe(true);
 
-    // Watching again pulls the share afresh.
+    // Watching again pulls the share afresh, on the new connection the
+    // released ones left for (not one fresh connection per alias).
     viewer.setRemoteTrackSubscription("screen-video-peer", true);
     expect(transport.pullCount).toBe(4);
+    expect(transport.pulls.at(-1)).toEqual({
+      trackName: "screen-video-peer",
+      fresh: false,
+    });
     viewer.dispose();
   });
 
@@ -1318,6 +1323,63 @@ describe("PartyTracksMediaManager remote video recovery", () => {
       .get("cam-video-remote")
       ?.next(mediaTrack("video", "second"));
     expect(events).toEqual(["add first", "remove first", "add second"]);
+    manager.dispose();
+  });
+
+  it("pulls a recovered camera fresh again when its fresh pull was lost to a withdrawal", () => {
+    const { transport, events, manager } = setup();
+    manager.offerTracks([camera]);
+    transport.pulledTracks
+      .get("cam-video-remote")
+      ?.next(mediaTrack("video", "first"));
+    // Recovered: the main-session pull closes, a fresh one is on its way.
+    expect(manager.recoverRemoteVideo("cam-video-remote")).toBe(true);
+    // The publisher turns its camera off before the fresh pull lands (it had
+    // no track, so it is closed, not parked), then on again.
+    manager.withdrawRemoteTracks(["cam-video-remote"]);
+    manager.offerTracks([camera]);
+    expect(transport.pulls).toEqual([
+      { trackName: "cam-video-remote", fresh: false },
+      { trackName: "cam-video-remote", fresh: true },
+      { trackName: "cam-video-remote", fresh: true },
+    ]);
+    // Once a fresh pull has brought it back, a later pull is ordinary again.
+    transport.pulledTracks
+      .get("cam-video-remote")
+      ?.next(mediaTrack("video", "second"));
+    expect(events).toEqual(["add first", "remove first", "add second"]);
+    manager.dispose();
+  });
+
+  it("pulls dropped video fresh when a new offer cuts its backoff short", async () => {
+    const { transport, manager, advance } = setup();
+    manager.offerTracks([camera]);
+    // No track: the watchdog drops the pull, which waits out its backoff.
+    await advance(10_000);
+    // The publisher republishes meanwhile: the new offer is pulled now.
+    manager.offerTracks([{ ...camera, sfu_track_name: "sfu-camera-2" }]);
+    expect(transport.pulls).toEqual([
+      { trackName: "cam-video-remote", fresh: false },
+      { trackName: "cam-video-remote", fresh: true },
+    ]);
+    manager.dispose();
+  });
+
+  it("pulls a camera ordinarily once a fresh pull has brought it back", () => {
+    const { transport, manager } = setup();
+    manager.offerTracks([camera]);
+    transport.pulledTracks
+      .get("cam-video-remote")
+      ?.next(mediaTrack("video", "first"));
+    manager.recoverRemoteVideo("cam-video-remote");
+    transport.pulledTracks
+      .get("cam-video-remote")
+      ?.next(mediaTrack("video", "second"));
+    // It plays on its fresh session; the publisher withdraws it (parked).
+    manager.withdrawRemoteTracks(["cam-video-remote"]);
+    // Back with the same SFU track: the parked pull just shows it again.
+    manager.offerTracks([camera]);
+    expect(transport.pullCount).toBe(2);
     manager.dispose();
   });
 

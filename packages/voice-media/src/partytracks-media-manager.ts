@@ -205,8 +205,6 @@ interface RemotePull {
 interface PullRetry {
   /** Pulls dropped in a row (watchdog or error) without producing a track. */
   failures: number;
-  /** The re-pull asks for a fresh path (a video alias; see startPull). */
-  fresh?: boolean;
   /** Set while the re-pull waits out its backoff. */
   cancel?: () => void;
 }
@@ -272,6 +270,14 @@ export class PartyTracksMediaManager {
   private readonly offers = new Map<string, TrackInfo>();
   private readonly pulls = new Map<string, RemotePull>();
   private readonly pullRetries = new Map<string, PullRetry>();
+  /**
+   * Video aliases whose pull closed (recovered, retargeted, dropped,
+   * unsubscribed, withdrawn before it produced a track) and that no fresh
+   * pull has brought back yet: every pull of one asks for a fresh path (see
+   * startPull), whichever path starts it. Pulled again on the connection
+   * that closed it, the SFU can recycle the closed m-line's MID.
+   */
+  private readonly freshPullAliases = new Set<string>();
   private readonly unsubscribedTrackNames = new Set<string>();
   /** Opt-in tracks (screen video) the viewer has asked for. */
   private readonly subscribedTrackNames = new Set<string>();
@@ -733,6 +739,9 @@ export class PartyTracksMediaManager {
       this.stopPull(trackName);
       this.clearPullRetry(trackName);
       this.notFound.delete(trackName);
+      // Their connection goes with them: the next pull is on a new one
+      // anyway, and one fresh pull each would open a connection each.
+      this.freshPullAliases.delete(trackName);
     }
   }
 
@@ -864,6 +873,7 @@ export class PartyTracksMediaManager {
       this.clearPullRetry(trackName);
     }
     this.offers.clear();
+    this.freshPullAliases.clear();
     this.unsubscribedTrackNames.clear();
     this.subscribedTrackNames.clear();
     this.notFound.clear();
@@ -876,15 +886,19 @@ export class PartyTracksMediaManager {
   /**
    * `fresh` pulls on a peer connection with no closed m-line (honoured by
    * SplitVideoTransport): for a video alias pulled again after its pull
-   * closed, failed or stalled. Pulled again on the connection that closed
-   * it, the SFU can hand back the recycled MID with other RTP header
-   * extension IDs, which libwebrtc rejects, and the video never arrives.
+   * closed, failed or stalled (freshPullAliases, so every caller asks for
+   * it). Pulled again on the connection that closed it, the SFU can hand
+   * back the recycled MID with other RTP header extension IDs, which
+   * libwebrtc rejects, and the video never arrives.
    */
   private startPull(
     track: TrackInfo,
     fresh = false,
     layer: VideoLayerQuality = INITIAL_VIDEO_LAYER,
   ): void {
+    if (track.kind === "video" && this.freshPullAliases.has(track.track_name)) {
+      fresh = true;
+    }
     const metadata$ = new BehaviorSubject(track);
     const pull: RemotePull = {
       metadata$,
@@ -909,6 +923,8 @@ export class PartyTracksMediaManager {
         pull.cancelWatchdog = undefined;
         this.pullRetries.delete(track.track_name);
         this.notFound.delete(track.track_name);
+        // Back on a path with no closed m-line of it.
+        if (fresh) this.freshPullAliases.delete(track.track_name);
         const offer = this.offers.get(track.track_name);
         // PartyTracks re-emits a track it already produced.
         if (pull.currentTrack === remoteTrack) {
@@ -1110,11 +1126,11 @@ export class PartyTracksMediaManager {
   /** Drops a pull that failed or produced nothing, and pulls again later. */
   private dropPull(trackName: string, pull: RemotePull): void {
     if (this.disposed || this.pulls.get(trackName) !== pull) return;
+    // A dropped video pull may have closed a transceiver on its connection:
+    // stopPull marks the alias, so the re-pull is fresh.
     this.stopPull(trackName);
     const retry = this.pullRetries.get(trackName) ?? { failures: 0 };
     retry.failures += 1;
-    // The dropped pull may have closed a transceiver on its connection.
-    retry.fresh = pull.metadata$.value.kind === "video";
     this.pullRetries.set(trackName, retry);
     const delay = Math.min(
       this.pullRetryBaseMs * 2 ** (retry.failures - 1),
@@ -1132,7 +1148,7 @@ export class PartyTracksMediaManager {
       ) {
         return;
       }
-      this.startPull(offer, retry.fresh === true);
+      this.startPull(offer);
     }, delay);
   }
 
@@ -1235,6 +1251,10 @@ export class PartyTracksMediaManager {
     pull.pendingLayer?.cancel();
     pull.pendingLayer = undefined;
     pull.subscription.unsubscribe();
+    // Closing a video pull may close its m-line (see freshPullAliases).
+    if (pull.metadata$.value.kind === "video") {
+      this.freshPullAliases.add(trackName);
+    }
     pull.metadata$.complete();
     pull.preferredRid$.complete();
     if (!pull.currentTrack) return;
