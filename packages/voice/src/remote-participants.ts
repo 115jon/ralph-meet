@@ -5,9 +5,11 @@ import type { VoiceTimers } from "./voice-session";
 
 /**
  * How long a remote participant's roster row and audio outlive a voice
- * `ClientDisconnect` (op 11) for them. VoiceRoom sends one whenever their
- * voice socket reconnects, before their tracks are offered again, so the
- * drop is cancelled if the same participant id offers tracks within it.
+ * `ClientDisconnect` (op 11) for them. VoiceRoom holds a reconnecting
+ * participant's tracks without one (STATE_MACHINE.md, "Reconnect hold"), but
+ * sends one when that hold runs out first, and VoiceRoom up to v3.13.0 sent
+ * one on every voice-socket reconnect, so the drop is cancelled if the same
+ * participant id offers tracks within it.
  */
 export const REMOTE_RECONNECT_GRACE_MS = 3_000;
 

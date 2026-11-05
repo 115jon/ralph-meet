@@ -682,7 +682,8 @@ export class SFUClient extends TypedEventEmitter<SFUEventMap> {
       }
     });
     this.voiceGW.on("client-disconnect", ({ participant_id }) => {
-      // VoiceRoom says this on every voice-socket reconnect too, before the
+      // Also sent for a voice-socket reconnect that outlasted VoiceRoom's
+      // hold (and by VoiceRoom up to v3.13.0 for every one), before the
       // participant's tracks are offered again: keep their media through
       // the grace (dropDisconnectedParticipant). Speaking stops now.
       this.remoteReconnectGrace.disconnected(participant_id);

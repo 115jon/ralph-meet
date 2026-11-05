@@ -5,6 +5,7 @@
 //   - first RTP per inbound/outbound audio stream and first audible level,
 //     from a getStats sampler the bench starts and stops around a run,
 //   - when the voice header first reads "Connected",
+//   - the opcode of every frame received on a voice socket,
 //   - every call-socket admission request (POST /api/voice/admission, and
 //     the room/voice audiences of /api/voice/socket-ticket on builds before
 //     it): one Kova session check each.
@@ -23,6 +24,7 @@
     rtp: { inbound: {}, outbound: {} },
     connectedText: [],
     admissions: [],
+    voiceFrames: [],
     sampler: null,
     hidden: false,
   };
@@ -35,6 +37,20 @@
     constructor(...args) {
       super(...args);
       sockets.push(this);
+      if (/\/api\/channels\/[^/]+\/voice/.test(this.url)) {
+        this.addEventListener("message", (event) => {
+          try {
+            const frame = JSON.parse(event.data);
+            vb.voiceFrames.push({
+              t: now(),
+              op: frame.op,
+              participantId: frame.d?.participant_id ?? null,
+            });
+          } catch {
+            // Not JSON: not a gateway frame.
+          }
+        });
+      }
     }
   };
   /** Closes the open sockets whose URL matches, as a dropped link would. */
@@ -187,11 +203,20 @@
   // ── getStats sampler ────────────────────────────────────────────────
   vb.startSampler = (intervalMs = 20, levelThreshold = 0.01) => {
     vb.stopSampler();
-    vb.rtp = { inbound: {}, outbound: {}, startedAt: now() };
+    vb.rtp = {
+      inbound: {},
+      outbound: {},
+      startedAt: now(),
+      // Every inbound audio stream together: the longest time no stream
+      // received a packet. A pull that closes and is pulled again shows up
+      // here (as two streams), not in any one stream's maxGap.
+      anyInbound: { lastIncrease: null, maxGap: 0, gaps: [] },
+    };
     let busy = false;
     const tick = async () => {
       if (busy) return;
       busy = true;
+      let increased = false;
       try {
         await Promise.all(
           vb.pcs.map(async (pc, index) => {
@@ -218,6 +243,7 @@
                 });
                 const packets = stat.packetsReceived ?? 0;
                 if (packets > entry.packets) {
+                  increased = true;
                   const gap = t - (entry.lastIncrease ?? t);
                   if (gap > entry.maxGap) entry.maxGap = gap;
                   if (gap >= 250) entry.resumes.push({ t, gap });
@@ -261,6 +287,14 @@
         // A PC closing mid-sample is fine; the next tick skips it.
       } finally {
         busy = false;
+      }
+      if (increased) {
+        const any = vb.rtp.anyInbound;
+        const t = now();
+        const gap = t - (any.lastIncrease ?? t);
+        if (gap > any.maxGap) any.maxGap = gap;
+        if (gap >= 100) any.gaps.push({ t, gap });
+        any.lastIncrease = t;
       }
     };
     vb.sampler = setInterval(tick, intervalMs);
@@ -337,6 +371,7 @@
     marks: vb.marks(since),
     resources: vb.resources(since),
     admissions: vb.admissions.filter((entry) => entry.t >= since),
+    voiceFrames: vb.voiceFrames.filter((entry) => entry.t >= since),
     pcEvents: vb.pcEvents.filter((event) => event.t >= since),
     pcStates: vb.pcs.map((pc) => ({
       connection: pc.connectionState,

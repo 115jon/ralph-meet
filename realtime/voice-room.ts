@@ -234,6 +234,15 @@ const VOICE_WS_RATE_LIMITS: Record<number, number> = {
 const REPUBLISH_REQUEST_INTERVAL_MS = 3_000;
 /** How long a join grant stands before the alarm re-checks it (see reapParticipantsWithoutJoin). */
 const VOICE_JOIN_GRANT_RECHECK_MS = 60_000;
+/**
+ * How long a participant's PartyTracks tracks outlive a voice socket that
+ * closed without a leave (op 11), and how long a participant that identified
+ * again has to offer them again (see holdParticipantTracks). It covers a
+ * voice-socket reconnect: the client's first backoffs (0.25–1 s each), its
+ * admission request and VoiceIdentify. realtime/SOCKET_CORE.md, "Voice
+ * reconnect hold".
+ */
+export const VOICE_RECONNECT_HOLD_MS = 5_000;
 
 // ── VoiceRoom Durable Object ────────────────────────────────────────────────
 
@@ -253,6 +262,7 @@ export class VoiceRoom extends DurableObject<Env, unknown> {
   private readonly identifyingSockets = new Set<WebSocket>();
   private voiceJoinGrantWaitMs = VOICE_JOIN_GRANT_WAIT_MS;
   private voiceJoinGrantRecheckMs = VOICE_JOIN_GRANT_RECHECK_MS;
+  private voiceReconnectHoldMs = VOICE_RECONNECT_HOLD_MS;
 
   constructor(ctx: DurableObjectState<unknown>, env: Env) {
     super(ctx, env);
@@ -325,7 +335,8 @@ export class VoiceRoom extends DurableObject<Env, unknown> {
         native_screen_session_id TEXT,
         last_heartbeat INTEGER DEFAULT 0,
         speaking INTEGER DEFAULT 0,
-        connection_id TEXT
+        connection_id TEXT,
+        held_until INTEGER
       );
     `);
     this.dropParticipantsLegacyUserIdColumn();
@@ -356,7 +367,8 @@ export class VoiceRoom extends DurableObject<Env, unknown> {
         mid TEXT,
         kind TEXT NOT NULL,
         native_screen_pending INTEGER NOT NULL DEFAULT 0,
-        simulcast_rids TEXT
+        simulcast_rids TEXT,
+        held INTEGER NOT NULL DEFAULT 0
       );
     `);
     try {
@@ -373,6 +385,20 @@ export class VoiceRoom extends DurableObject<Env, unknown> {
     }
     try {
       this.sql.exec(`ALTER TABLE tracks ADD COLUMN simulcast_rids TEXT;`);
+    } catch {
+      // Existing SQLite-backed Durable Objects already have the column.
+    }
+    // The voice reconnect hold (holdParticipantTracks): when a participant's
+    // held tracks go, and which of its tracks are held.
+    try {
+      this.sql.exec(`ALTER TABLE participants ADD COLUMN held_until INTEGER;`);
+    } catch {
+      // Existing SQLite-backed Durable Objects already have the column.
+    }
+    try {
+      this.sql.exec(
+        `ALTER TABLE tracks ADD COLUMN held INTEGER NOT NULL DEFAULT 0;`,
+      );
     } catch {
       // Existing SQLite-backed Durable Objects already have the column.
     }
@@ -736,6 +762,8 @@ export class VoiceRoom extends DurableObject<Env, unknown> {
         ),
       );
 
+      await this.expireReconnectHolds(now);
+
       // Check active participants for zombie timeouts using SQLite
       const participants = this.sql.exec(
         `SELECT id, last_heartbeat FROM participants`,
@@ -789,6 +817,11 @@ export class VoiceRoom extends DurableObject<Env, unknown> {
       `SELECT last_heartbeat FROM participants WHERE last_heartbeat > 0`,
     )) {
       deadlines.push(silentAt(row.last_heartbeat as number));
+    }
+    for (const row of this.sql.exec(
+      `SELECT MIN(held_until) as held_until FROM participants WHERE held_until IS NOT NULL`,
+    )) {
+      if (row.held_until) deadlines.push(row.held_until as number);
     }
     for (const ws of this.unidentifiedSockets()) {
       const lastSeenAt = this.getVoiceAttachment(ws)?.last_seen_at;
@@ -1597,10 +1630,10 @@ export class VoiceRoom extends DurableObject<Env, unknown> {
   }
 
   /**
-   * Participants with an identified voice socket. Closing a voice socket
-   * purges its participant at once, and identifying again purges the old
-   * rows before VoiceReady, so rows of any other participant can never be
-   * resumed. They only outlive their socket when the object restarts under
+   * Participants with an identified voice socket. A voice socket that
+   * closes leaves its participant held (holdParticipantTracks, held_until
+   * set) until it identifies again or the hold runs out. Rows of any other
+   * participant only outlive their socket when the object restarts under
    * live sockets (a deploy, a crash, a dev server restart), which drops the
    * sockets without webSocketClose; the zombie alarm removes them later.
    */
@@ -2198,9 +2231,12 @@ export class VoiceRoom extends DurableObject<Env, unknown> {
         d.supports_listen_together_snapshot_events === true,
     };
 
-    // Voice signaling reconnects never transfer browser transport state.
-    // PartyTracks reconciles its publications after VoiceReady, while a native
-    // screen publisher establishes a fresh, explicitly owned Calls session.
+    // A reconnect of this participant (its old socket may still be open, or
+    // closed and held). Its PartyTracks session survives the socket, so its
+    // tracks are held, not purged: after VoiceReady it offers them again
+    // (op 12), and an unchanged offer reaches the others as a no-op. A
+    // native screen publisher establishes a fresh, explicitly owned Calls
+    // session, so that share is ended now (holdParticipantTracks).
     const existingParticipant = [
       ...this.sql.exec(
         "SELECT id FROM participants WHERE id = ?",
@@ -2208,7 +2244,7 @@ export class VoiceRoom extends DurableObject<Env, unknown> {
       ),
     ][0];
     if (existingParticipant) {
-      await this.purgeParticipantState(d.participant_id, ws);
+      await this.holdParticipantTracks(d.participant_id, ws);
     }
 
     // A reconnect replaces only the same participant identity. A user may have
@@ -2248,10 +2284,16 @@ export class VoiceRoom extends DurableObject<Env, unknown> {
     roomLog.info(
       `VoiceIdentify: participant=${d.participant_id} join_wait_ms=${joinWaitMs}`,
     );
-    // Only participants that still have an identified voice socket. Rows of
-    // any other participant are left over from a restart (see
+    // Only participants that still have an identified voice socket, or are
+    // held through a reconnect (holdParticipantTracks). Rows of any other
+    // participant are left over from a restart (see
     // identifiedVoiceParticipantIds) and name dead PartyTracks sessions.
     const liveParticipantIds = this.identifiedVoiceParticipantIds();
+    for (const row of this.sql.exec(
+      "SELECT id FROM participants WHERE held_until IS NOT NULL",
+    )) {
+      liveParticipantIds.add(row.id as string);
+    }
     const existingTracks: TrackInfo[] = [];
     let staleTrackCount = 0;
     const tCursor = this.sql.exec(
@@ -2618,7 +2660,7 @@ export class VoiceRoom extends DurableObject<Env, unknown> {
               "ON CONFLICT(track_name) DO UPDATE SET " +
               "participant_id = excluded.participant_id, " +
               "sfu_track_name = NULL, session_id = excluded.session_id, " +
-              "mid = excluded.mid, kind = excluded.kind, native_screen_pending = 1, " +
+              "mid = excluded.mid, kind = excluded.kind, native_screen_pending = 1, held = 0, " +
               "simulcast_rids = NULL " +
               "WHERE tracks.participant_id = excluded.participant_id",
             track.track_name,
@@ -2804,7 +2846,7 @@ export class VoiceRoom extends DurableObject<Env, unknown> {
           "sfu_track_name = excluded.sfu_track_name, " +
           "session_id = excluded.session_id, mid = NULL, " +
           "kind = excluded.kind, native_screen_pending = 0, " +
-          "simulcast_rids = excluded.simulcast_rids",
+          "simulcast_rids = excluded.simulcast_rids, held = 0",
         track.track_name,
         participantId,
         track.sfu_track_name,
@@ -3539,6 +3581,12 @@ export class VoiceRoom extends DurableObject<Env, unknown> {
       return;
     }
 
+    if (closeSocket === false) {
+      // The socket closed without a leave (op 11): most likely a reconnect.
+      await this.holdDisconnectedParticipant(participantId, ws);
+      return;
+    }
+
     await this.disconnectParticipant(
       participantId,
       closeSocket ? ws : undefined,
@@ -3555,6 +3603,143 @@ export class VoiceRoom extends DurableObject<Env, unknown> {
     await this.purgeParticipantState(participantId, ws);
 
     if (ws) this.closeVoiceSocket(ws, close);
+  }
+
+  /**
+   * The participant's voice socket closed without a leave. Its row and its
+   * PartyTracks tracks are held for voiceReconnectHoldMs instead of purged:
+   * its PartyTracks session outlives the socket, so a reconnect that offers
+   * the same tracks again changes nothing for anyone pulling them. If it
+   * does not identify again in time, expireReconnectHolds purges it as a
+   * leave would.
+   */
+  private async holdDisconnectedParticipant(
+    participantId: string,
+    ws: WebSocket,
+  ): Promise<void> {
+    // The closing socket no longer carries the participant (see
+    // closeVoiceSocket): while held, nobody is connected as it.
+    const attachment = this.getVoiceAttachment(ws);
+    try {
+      ws.serializeAttachment(
+        attachment?.admission ? { admission: attachment.admission } : null,
+      );
+    } catch {
+      // The socket is already gone.
+    }
+    roomLog.info(
+      "Participant " + participantId + " voice socket closed; holding tracks",
+    );
+    await this.holdParticipantTracks(participantId, ws);
+  }
+
+  /**
+   * Holds a participant's PartyTracks tracks across a voice-socket
+   * reconnect: its socket closed without a leave, or it identified again
+   * (possibly before the old socket's close arrived). Nothing that keeps
+   * playing is withdrawn: no ClientDisconnect (op 11) and no StopTracks
+   * (op 13) for its PartyTracks tracks. What does not survive a reconnect
+   * goes now: speaking (op 5 with 0), and a native screen share (its
+   * publisher starts a new Calls session after a reconnect; op 13 for its
+   * tracks). Each held track is released by a Video (op 12) offering it
+   * again; whatever is still held at held_until goes then
+   * (expireReconnectHolds).
+   */
+  private async holdParticipantTracks(
+    participantId: string,
+    excludeWs?: WebSocket,
+  ): Promise<void> {
+    this.invalidateNativeScreenOperation(participantId);
+    const participant = [
+      ...this.sql.exec(
+        "SELECT speaking, native_screen_session_id FROM participants WHERE id = ?",
+        participantId,
+      ),
+    ][0];
+    if (!participant) return;
+    if (Number(participant.speaking ?? 0) !== 0) {
+      this.sql.exec(
+        "UPDATE participants SET speaking = 0 WHERE id = ?",
+        participantId,
+      );
+      this.broadcast(
+        {
+          op: Op.Speaking,
+          d: { participant_id: participantId, speaking: 0 },
+        },
+        excludeWs,
+      );
+    }
+
+    // Held before the native share's cleanup yields (an SFU request), so a
+    // VoiceReady meanwhile still lists these tracks.
+    this.sql.exec(
+      "UPDATE tracks SET held = 1 WHERE participant_id = ?",
+      participantId,
+    );
+    this.sql.exec(
+      "UPDATE participants SET held_until = ? WHERE id = ?",
+      Date.now() + this.voiceReconnectHoldMs,
+      participantId,
+    );
+
+    const nativeSessionId =
+      typeof participant.native_screen_session_id === "string"
+        ? participant.native_screen_session_id
+        : null;
+    const nativeTracks = nativeSessionId
+      ? await this.removeNativeScreenPublication(participantId, nativeSessionId)
+      : [];
+    // Native rows of no current native session (none are expected).
+    const orphanedNativeTracks = [
+      ...this.sql.exec(
+        "DELETE FROM tracks WHERE participant_id = ? AND sfu_track_name IS NULL " +
+          "RETURNING track_name, participant_id, sfu_track_name, session_id, mid, kind, simulcast_rids",
+        participantId,
+      ),
+    ].map((row) => this.toTrackInfo(row));
+    this.broadcastStoppedTracks(
+      participantId,
+      [...nativeTracks, ...orphanedNativeTracks],
+      excludeWs,
+    );
+    await this.scheduleAlarm();
+  }
+
+  /**
+   * Ends the holds whose time is up. A participant that identified again
+   * loses only the tracks it did not offer again (op 13 for those); one
+   * that did not come back is purged as a leave is (op 11, op 13).
+   */
+  private async expireReconnectHolds(now: number): Promise<void> {
+    const due = [
+      ...this.sql.exec(
+        "SELECT id FROM participants WHERE held_until IS NOT NULL AND held_until <= ?",
+        now,
+      ),
+    ].map((row) => row.id as string);
+    for (const participantId of due) {
+      const ws = this.getWsByParticipant(participantId);
+      if (!ws || !this.isCurrentAuthenticatedVoiceSocket(ws)) {
+        roomLog.info(
+          "Participant " + participantId + " did not reconnect; purging",
+        );
+        await this.disconnectParticipant(participantId);
+        continue;
+      }
+      const stale = [
+        ...this.sql.exec(
+          "DELETE FROM tracks WHERE participant_id = ? AND held = 1 " +
+            "RETURNING track_name, participant_id, sfu_track_name, session_id, mid, kind, simulcast_rids",
+          participantId,
+        ),
+      ].map((row) => this.toTrackInfo(row));
+      this.sql.exec(
+        "UPDATE participants SET held_until = NULL WHERE id = ?",
+        participantId,
+      );
+      this.broadcastStoppedTracks(participantId, stale);
+    }
   }
 
   /**

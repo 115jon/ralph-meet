@@ -83,6 +83,64 @@ MeetingRoom's session map holds identified sessions only. VoiceRoom
 broadcasts through `broadcastToIdentified`, which skips sockets that have not
 sent VoiceIdentify.
 
+## Voice reconnect hold
+
+A participant's PartyTracks session (its peer connection to the SFU)
+outlives its voice socket, and a voice-socket reconnect keeps the
+`participant_id` (the reconnect's ticket is bound to it, see
+[ADMISSION.md](ADMISSION.md)). So VoiceRoom does not withdraw a
+participant's tracks when only the socket went away
+(`VOICE_RECONNECT_HOLD_MS` = 5000 ms in `voice-room.ts`).
+
+**Hold.** It starts when an identified voice socket closes or errors
+without the participant's `ClientDisconnect` (op 11), and when a
+`VoiceIdentify` (op 100) names a participant that still has a row (its old
+socket closed and held, or still open; the old socket is then closed with
+`1000 "Replaced by new connection"`). Each time:
+
+- `participants.held_until` = now + 5000 ms, and every track of the
+  participant is marked `held`.
+- If it was speaking: `Speaking` `{participant_id, speaking: 0}` (op 5) to
+  the others at once.
+- A native screen share (tracks without `sfu_track_name`) is closed at
+  once, as before: `StopTracks` (op 13) for those tracks only, and the
+  stream watchers of the participant go with it (a `stream.watch.snapshot`
+  if that changed them), as for any stopped `screen-` track.
+- Nothing else: no `ClientDisconnect` (op 11), no `StopTracks` for its
+  PartyTracks tracks. The row, its PartyTracks tracks and (without a native
+  share) its stream watchers stay.
+
+While held, a joiner's `VoiceReady` (op 101) lists the held tracks.
+
+**Release.** A `Video` (op 12) from the participant's new connection
+records the offered tracks as before (same `track_name`: the row is
+replaced) and clears their `held` mark; the op 12 is broadcast as before,
+unchanged offers included.
+
+**Expiry** (the alarm, at `held_until`):
+
+- The participant has identified again: `StopTracks` (op 13) for its tracks
+  still marked `held` (those it did not offer again), if any. No op 11.
+- It has not: the purge a leave does. `ClientDisconnect`
+  `{participant_id}` (op 11), then `StopTracks` (op 13) for all its tracks,
+  and the row is deleted.
+
+**Not held.** Op 11 on the voice socket, `/disconnect-participant` (a room
+leave or a kick, also during a hold), a device takeover or move
+(`SessionReplaced`), a revoked join grant and a zombie (90 s without
+heartbeat) purge at once, as before: op 5 (if speaking), op 11, op 13.
+
+**Before** (VoiceRoom up to v3.13.0): every voice-socket close, and every
+`VoiceIdentify` of a participant that had a row, purged at once (op 5 if
+speaking, op 11, op 13 for every track), and the new connection's op 12
+offered the same tracks again a moment later. Shipped clients closed their
+audio pull on that op 13 and pulled again on the op 12. Web and desktop
+from v3.0.0 and mobile from mobile-v0.1.0 (their `offerTracks`) ignore an
+op 12 that repeats a track they already pull with the same metadata, and
+move the pull when its `session_id` or `sfu_track_name` differs; none
+needs an op 11 before a re-offer. All of them re-announce their
+publications after `VoiceReady` on a voice reconnect.
+
 ## Opcode tables (client → server)
 
 | Op  | Name                    | global | room | voice |

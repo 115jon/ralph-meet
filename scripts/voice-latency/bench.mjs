@@ -24,6 +24,9 @@
 //   drop     connected, go offline for --drop-ms, measure the recovery
 //   room-drop  connected, close the room socket (as a dropped link would),
 //            measure its reconnect: Resume, admission requests, audio
+//   voice-drop  connected, close the voice socket (as a dropped link
+//            would), measure the listener's audio gap (peerAnyAudioGap: no
+//            inbound audio packet at all) and the op 11/13 it received
 //   hidden   connected, hide + freeze the tab for --hidden-ms, then resume
 //
 // Network profiles (--profile, comma separated; the joiner's page only, via
@@ -358,6 +361,10 @@ async function runDisruption(kind, { joiner, listener, opts }) {
     await joiner.page.evaluate(() =>
       window.__vb.dropSockets("/api/channels/[^/]+/ws"),
     );
+  } else if (kind === "voice-drop") {
+    await joiner.page.evaluate(() =>
+      window.__vb.dropSockets("/api/channels/[^/]+/voice"),
+    );
   } else {
     await joiner.page.evaluate(() => window.__vb.setHidden(true));
     await joiner.cdp.send("Page.setWebLifecycleState", { state: "frozen" });
@@ -407,6 +414,18 @@ async function runDisruption(kind, { joiner, listener, opts }) {
       j.connectedText.find((e) => e.visible && e.t >= resumedAt)?.t ?? null,
     ),
     peerMaxAudioGap: gaps.length ? Math.round(Math.max(...gaps)) : null,
+    peerAnyAudioGap:
+      l.rtp.anyInbound != null ? Math.round(l.rtp.anyInbound.maxGap) : null,
+    // Frames about the joiner on the listener's voice socket after the drop.
+    peerOp11: (l.voiceFrames ?? []).filter(
+      (frame) => frame.op === 11 && frame.t >= before,
+    ).length,
+    peerOp13: (l.voiceFrames ?? []).filter(
+      (frame) => frame.op === 13 && frame.t >= before,
+    ).length,
+    peerOp12: (l.voiceFrames ?? []).filter(
+      (frame) => frame.op === 12 && frame.t >= before,
+    ).length,
     // First RTP the listener got after a stall that ended after the resume
     // (null when its audio never stalled).
     peerAudioResumed: rel(
@@ -499,6 +518,7 @@ async function main() {
           } else if (
             scenario === "drop" ||
             scenario === "room-drop" ||
+            scenario === "voice-drop" ||
             scenario === "hidden"
           ) {
             result = await runDisruption(scenario, ctx);
