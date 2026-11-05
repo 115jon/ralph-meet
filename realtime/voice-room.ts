@@ -185,6 +185,11 @@ interface VoiceAttachment {
     accessMode: "authenticated" | "public-demo";
     serverId?: string;
     subject: string;
+    /**
+     * Tickets from /api/voice/admission: the only participant this socket
+     * may identify as. Deprecated two-request tickets leave it unset.
+     */
+    boundParticipantId?: string;
   };
   participant_id: string;
   connection_id?: string;
@@ -491,6 +496,9 @@ export class VoiceRoom extends DurableObject<Env, unknown> {
             accessMode: admission.accessMode,
             subject: admission.subject,
             ...(admission.serverId ? { serverId: admission.serverId } : {}),
+            ...(admission.boundParticipantId
+              ? { boundParticipantId: admission.boundParticipantId }
+              : {}),
           },
           last_seen_at: Date.now(),
         } satisfies Partial<VoiceAttachment>,
@@ -2063,6 +2071,24 @@ export class VoiceRoom extends DurableObject<Env, unknown> {
     }
 
     const admission = this.getVoiceAttachment(ws)?.admission;
+    if (
+      admission?.boundParticipantId !== undefined &&
+      admission.boundParticipantId !== d.participant_id
+    ) {
+      // The ticket was for another participant of this user's join (the
+      // room socket re-identified meanwhile). Not a refusal: the client
+      // reconnects with a ticket for the participant it is now.
+      roomLog.warn(
+        `VoiceIdentify for another participant than the ticket's: participant=${d.participant_id}`,
+      );
+      try {
+        ws.close(
+          VOICE_JOIN_UNVERIFIED_CLOSE_CODE,
+          "Voice ticket is for another participant",
+        );
+      } catch {}
+      return;
+    }
     const verification = await verifyVoiceToken({
       token: d.voice_token,
       participantId: d.participant_id,

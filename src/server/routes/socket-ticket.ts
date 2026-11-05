@@ -1,48 +1,43 @@
 // /api/voice/socket-ticket on the Effect edge. The route file only wires
 // these handlers.
+//
+// audience "global" is the chat socket's ticket and is current.
+//
+// DEPRECATED: audiences "room" and "voice", and the room ticket's
+// `media_bootstrap`. That is the two-request join (one Kova check each)
+// that `/api/voice/admission` replaced in v3.13.0 (src/server/routes/
+// voice-admission.ts, realtime/ADMISSION.md). Installed desktop builds up to
+// v3.12.0 and mobile builds up to mobile-v0.5.1 still join this way, and
+// MeetingRoom still mints Identify/Resume credentials for their tickets (no
+// `media` claim). Delete both audiences, the bootstrap and that minting after
+// v3.14.0, once the desktop updater and the mobile minimum version are past
+// those builds.
 
 import { Effect, Schema, type Layer } from "effect";
 
-import {
-  apiError,
-  buildVoiceChannelRoomSlug,
-  getCorsHeaders,
-  handleCorsPreflightIfNeeded,
-} from "@/lib/api-helpers";
-import { resolveChannelAccess } from "@/lib/channel-access";
-import { PERMISSIONS, hasPermission } from "@/lib/permissions";
+import { apiError } from "@/lib/api-helpers";
 import { looseStruct } from "@/lib/schema";
-import { getOrCreateDemoSession } from "@/lib/voice/demo-session";
-import { openVoiceMoveGrant } from "@/lib/voice/voice-move-grant";
-import { isPublicDemoRoomSlug } from "@/lib/voice/realtime-policy";
 import { validateBody } from "@/lib/validate-body";
 import {
   issueSocketTicket,
   type SocketTicketAudience,
 } from "@/lib/voice/socket-ticket";
-import {
-  Database,
-  RateLimiter,
-  WorkerEnv,
-  type WorkerBindings,
-} from "@/server/bindings";
+import { WorkerEnv } from "@/server/bindings";
 import { runRoute, type RouteServices } from "@/server/edge";
-import type { AuthUnavailable, Unauthenticated } from "@/server/errors";
-import { signedInUserId, type KovaAuth } from "@/server/kova-auth";
-import { getCachedTurnCredentials } from "../../../realtime/meeting-room/turn-credentials";
-import { issueVoiceToken } from "../../../realtime/voice-token";
 import {
-  VOICE_MOVE_GRANT_USE_PATH,
-  type VoiceMoveGrantUseRequest,
-} from "../../../realtime/voice-move";
-
-const SOCKET_TICKET_TTL_MS = 60_000;
-const DEMO_TICKET_RATE_LIMIT = { limit: 12, windowMs: 60 * 60 * 1000 };
-const DEMO_SESSION_TICKET_RATE_LIMIT = { limit: 30, windowMs: 60 * 60 * 1000 };
-
-const OPTIONS = async ({ request }: { request: Request }) =>
-  handleCorsPreflightIfNeeded(request) ??
-  new Response(null, { status: 204, headers: getCorsHeaders(request) });
+  mintVoiceMedia,
+  turnServersFrom,
+  voiceMediaWire,
+} from "../../../realtime/voice-media";
+import {
+  SOCKET_TICKET_TTL_MS,
+  admitCallSocket,
+  admitGlobalSocket,
+  createServerTiming,
+  getSocketTicketConfig,
+  noStore,
+  socketAdmissionOptions,
+} from "./socket-admission";
 
 export const socketTicketRequestBodySchema = looseStruct({
   audience: Schema.optional(Schema.Unknown),
@@ -52,20 +47,6 @@ export const socketTicketRequestBodySchema = looseStruct({
   roomSlug: Schema.optional(Schema.Unknown),
   serverId: Schema.optional(Schema.Unknown),
 });
-
-type SocketTicketRequestBody = typeof socketTicketRequestBodySchema.Type;
-
-type SocketTicketEnv = WorkerBindings;
-
-type TicketAdmission = {
-  accessMode: "authenticated" | "public-demo";
-  cookie?: string;
-  roomSlug: string;
-  serverId?: string;
-  /** Room and voice tickets: the channel the room reports its roster for. */
-  channelId?: string;
-  subject: string;
-};
 
 /** POST /api/voice/socket-ticket — a short-lived, audience-bound socket ticket. */
 const issueTicket = Effect.fn("voice.socket_ticket")(function* (
@@ -98,27 +79,18 @@ const issueTicket = Effect.fn("voice.socket_ticket")(function* (
     );
   }
 
-  const hasChannelId =
-    typeof body.channelId === "string" && body.channelId.trim().length > 0;
-  const admitting: Effect.Effect<
-    TicketAdmission | Response,
-    Unauthenticated | AuthUnavailable,
-    KovaAuth | Database | RateLimiter | WorkerEnv
-  > =
-    audience !== "global" && !hasChannelId
-      ? authorizePublicDemoTicket(request, config.ticketSecret, body, audience)
-      : authorizeAuthenticatedTicket(
-          request,
-          body,
-          audience,
-          config.ticketSecret,
-        );
-  const admission = yield* timing.measure("admission", admitting);
+  const admission = yield* timing.measure(
+    "admission",
+    audience === "global"
+      ? admitGlobalSocket(request)
+      : admitCallSocket(request, body, config.ticketSecret, audience),
+  );
   if (admission instanceof Response) return admission;
 
   const expiresAt = Date.now() + SOCKET_TICKET_TTL_MS;
   const nonce = crypto.randomUUID();
-  if (audience === "room" && !env.CALLS_APP_SECRET) {
+  const callsSecret = env.CALLS_APP_SECRET;
+  if (audience === "room" && !callsSecret) {
     return apiError(
       "Realtime media admission is not configured",
       503,
@@ -142,16 +114,18 @@ const issueTicket = Effect.fn("voice.socket_ticket")(function* (
     ),
   );
 
+  // Deprecated (see the top of this file): the room ticket's media bootstrap.
   const mediaBootstrap =
-    audience === "room" && env.CALLS_APP_SECRET
+    audience === "room" && callsSecret
       ? yield* timing.measure(
           "media",
           Effect.promise(() =>
-            createRoomMediaBootstrap({
-              env,
-              nonce,
+            mintVoiceMedia({
+              participantId: nonce,
               roomSlug: admission.roomSlug,
               subject: admission.subject,
+              callsSecret,
+              turn: turnServersFrom(env, turnLog),
             }),
           ),
         )
@@ -161,7 +135,9 @@ const issueTicket = Effect.fn("voice.socket_ticket")(function* (
     access_mode: admission.accessMode,
     audience,
     expires_at: expiresAt,
-    ...(mediaBootstrap ? { media_bootstrap: mediaBootstrap } : {}),
+    ...(mediaBootstrap
+      ? { media_bootstrap: voiceMediaWire(mediaBootstrap) }
+      : {}),
     room_slug: admission.roomSlug,
     ticket,
   });
@@ -170,343 +146,14 @@ const issueTicket = Effect.fn("voice.socket_ticket")(function* (
   return response;
 });
 
-/**
- * `Server-Timing` for the ticket: where the join's first round trip goes
- * (admission = Kova session + channel checks, media = voice token + TURN).
- * Durations only, no identifiers; `pnpm bench:voice` reads them.
- */
-function createServerTiming() {
-  const entries: string[] = [];
-  const started = performance.now();
-  return {
-    measure<A, E, R>(
-      name: string,
-      effect: Effect.Effect<A, E, R>,
-    ): Effect.Effect<A, E, R> {
-      return Effect.suspend(() => {
-        const start = performance.now();
-        return effect.pipe(
-          Effect.ensuring(
-            Effect.sync(() => {
-              entries.push(
-                `${name};dur=${(performance.now() - start).toFixed(1)}`,
-              );
-            }),
-          ),
-        );
-      });
-    },
-    header(): string {
-      return [
-        ...entries,
-        `total;dur=${(performance.now() - started).toFixed(1)}`,
-      ].join(", ");
-    },
-  };
-}
-
-async function createRoomMediaBootstrap({
-  env,
-  nonce,
-  roomSlug,
-  subject,
-}: {
-  env: SocketTicketEnv;
-  nonce: string;
-  roomSlug: string;
-  subject: string;
-}) {
-  const secret = env.CALLS_APP_SECRET;
-  if (!secret) {
-    throw new Error("CALLS_APP_SECRET is required for room media bootstrap");
-  }
-  const [voiceToken, iceServers] = await Promise.all([
-    issueVoiceToken({
-      participantId: nonce,
-      roomSlug,
-      subject,
-      secret,
-    }),
-    getCachedTurnCredentials({
-      tokenId: env.TURN_TOKEN_ID ?? "",
-      tokenSecret: env.TURN_TOKEN_SECRET ?? "",
-      fetch,
-      log: {
-        info(message) {
-          console.info(`[socket-ticket] ${message}`);
-        },
-        warn(message) {
-          console.warn(`[socket-ticket] ${message}`);
-        },
-      },
-    }),
-  ]);
-  return {
-    participant_id: nonce,
-    voice_token: voiceToken,
-    ice_servers: iceServers,
-  };
-}
-
-function authorizeAuthenticatedTicket(
-  request: Request,
-  body: SocketTicketRequestBody,
-  audience: SocketTicketAudience,
-  ticketSecret: string,
-): Effect.Effect<
-  TicketAdmission | Response,
-  Unauthenticated | AuthUnavailable,
-  KovaAuth | Database | WorkerEnv
-> {
-  return Effect.gen(function* () {
-    const userId = yield* signedInUserId(request);
-
-    if (audience === "global") {
-      return {
-        accessMode: "authenticated",
-        roomSlug: "global-gateway",
-        subject: userId,
-      } satisfies TicketAdmission;
-    }
-
-    if (typeof body.channelId !== "string" || !body.channelId.trim()) {
-      return apiError(
-        "channelId is required",
-        400,
-        "CHANNEL_REQUIRED",
-        request,
-      );
-    }
-
-    const channelId = body.channelId.trim();
-    const db = yield* Database;
-    const channelAccess = yield* Effect.promise(() =>
-      resolveChannelAccess(db, userId, channelId),
-    );
-    if (!channelAccess) {
-      return Response.json(
-        { error: "Channel not found or access denied" },
-        { status: 403 },
-      );
-    }
-
-    if (
-      typeof body.roomSlug === "string" &&
-      body.roomSlug.startsWith("dm-call-")
-    ) {
-      const callRoomSlug = yield* Effect.promise(() =>
-        getAuthorizedDmCallRoomSlug(db, userId, channelId),
-      );
-      if (!callRoomSlug || callRoomSlug !== body.roomSlug) {
-        return apiError(
-          "Channel not found or access denied",
-          403,
-          "ROOM_NOT_ALLOWED",
-          request,
-        );
-      }
-      return {
-        accessMode: "authenticated",
-        roomSlug: callRoomSlug,
-        channelId,
-        subject: userId,
-      } satisfies TicketAdmission;
-    }
-
-    const serverId = channelAccess.serverId;
-    if (!serverId) {
-      return apiError(
-        "Server voice channel required",
-        400,
-        "SERVER_VOICE_REQUIRED",
-        request,
-      );
-    }
-
-    // resolveChannelAccess read this channel's row and the caller's
-    // permissions in it (for this server) already: no second lookup.
-    if (channelAccess.channelType !== "voice") {
-      return apiError(
-        "Server voice channel required",
-        400,
-        "SERVER_VOICE_REQUIRED",
-        request,
-      );
-    }
-
-    if (
-      typeof body.serverId === "string" &&
-      body.serverId.trim() &&
-      body.serverId.trim() !== serverId
-    ) {
-      return apiError(
-        "Channel not found or access denied",
-        403,
-        "SERVER_MISMATCH",
-        request,
-      );
-    }
-
-    const permissions = channelAccess.permissions;
-    let canConnect =
-      permissions !== null && hasPermission(permissions, PERMISSIONS.CONNECT);
-    if (!canConnect && body.moveGrant !== undefined) {
-      // A moderator moved them here: a valid grant, spent once per audience
-      // with the global gateway (only the user's latest grant counts).
-      const grant = yield* Effect.promise(() =>
-        openVoiceMoveGrant(body.moveGrant, ticketSecret, {
-          subject: userId,
-          channelId,
-          serverId,
-        }),
-      );
-      if (grant) {
-        const env = yield* WorkerEnv;
-        canConnect = yield* Effect.promise(() =>
-          spendVoiceMoveGrant(env, {
-            user_id: userId,
-            jti: grant.jti,
-            channel_id: channelId,
-            use: audience === "voice" ? "voice" : "room",
-          }),
-        );
-      }
-    }
-    if (!canConnect) {
-      return apiError(
-        "You do not have permission to connect to this voice channel",
-        403,
-        "CONNECT_DENIED",
-        request,
-      );
-    }
-
-    return {
-      accessMode: "authenticated",
-      roomSlug: buildVoiceChannelRoomSlug(serverId, channelId),
-      serverId,
-      channelId,
-      subject: userId,
-    } satisfies TicketAdmission;
-  });
-}
-
-function authorizePublicDemoTicket(
-  request: Request,
-  ticketSecret: string,
-  body: SocketTicketRequestBody,
-  audience: SocketTicketAudience,
-): Effect.Effect<TicketAdmission | Response, never, RateLimiter> {
-  return Effect.gen(function* () {
-    if (!isSameOrigin(request)) {
-      return apiError(
-        "Demo ticket origin is not allowed",
-        403,
-        "DEMO_ORIGIN_NOT_ALLOWED",
-        request,
-      );
-    }
-    if (audience === "global") {
-      return apiError(
-        "Public demo global gateway is disabled",
-        403,
-        "GLOBAL_DEMO_DISABLED",
-      );
-    }
-    if (!isPublicDemoRoomSlug(body.roomSlug)) {
-      return apiError("Demo room is not allowed", 403, "DEMO_ROOM_NOT_ALLOWED");
-    }
-    const roomSlug = body.roomSlug;
-
-    const session = yield* Effect.promise(() =>
-      getOrCreateDemoSession(request, ticketSecret),
-    );
-    const clientIp = request.headers.get("CF-Connecting-IP") ?? "unknown";
-    const rateLimiter = yield* RateLimiter;
-    const ipLimit = yield* rateLimiter.check(
-      `demo-ticket-ip:${clientIp}`,
-      "issue",
-      DEMO_TICKET_RATE_LIMIT,
-    );
-    if (ipLimit) return ipLimit;
-
-    const sessionLimit = yield* rateLimiter.check(
-      `demo-ticket-session:${session.subject}`,
-      "issue",
-      DEMO_SESSION_TICKET_RATE_LIMIT,
-    );
-    if (sessionLimit) return sessionLimit;
-
-    return {
-      accessMode: "public-demo",
-      cookie: session.cookie ?? undefined,
-      roomSlug,
-      subject: session.subject,
-    } satisfies TicketAdmission;
-  });
-}
-
-/** Spends a move grant for one ticket; false if dead, used or unreachable. */
-async function spendVoiceMoveGrant(
-  env: SocketTicketEnv,
-  use: VoiceMoveGrantUseRequest,
-): Promise<boolean> {
-  try {
-    const response = await env.MEETING_ROOM.get(
-      env.MEETING_ROOM.idFromName("global-gateway"),
-    ).fetch(`https://internal${VOICE_MOVE_GRANT_USE_PATH}`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(use),
-    });
-    if (!response.ok) return false;
-    const body: unknown = await response.json();
-    return (
-      typeof body === "object" &&
-      body !== null &&
-      "ok" in body &&
-      body.ok === true
-    );
-  } catch {
-    return false;
-  }
-}
-
-async function getAuthorizedDmCallRoomSlug(
-  db: D1Database,
-  userId: string,
-  channelId: string,
-): Promise<string | null> {
-  const { results } = await db
-    .prepare(
-      `SELECT user_id FROM dm_recipients WHERE channel_id = ? ORDER BY user_id ASC`,
-    )
-    .bind(channelId)
-    .all<{ user_id: string }>();
-  const recipients = (results ?? [])
-    .map((row: { user_id: string }) => row.user_id)
-    .filter(Boolean);
-  if (recipients.length !== 2 || !recipients.includes(userId)) return null;
-  return `dm-call-${recipients[0]}-${recipients[1]}`;
-}
-
-function getSocketTicketConfig(
-  env: SocketTicketEnv,
-): { ok: true; ticketSecret: string } | { ok: false; code: string } {
-  if (!env.REALTIME_TICKET_SECRET) {
-    return { ok: false, code: "REALTIME_TICKET_SECRET_MISSING" };
-  }
-
-  return {
-    ok: true,
-    ticketSecret: env.REALTIME_TICKET_SECRET,
-  };
-}
-
-function isSameOrigin(request: Request): boolean {
-  const origin = request.headers.get("origin");
-  return origin !== null && origin === new URL(request.url).origin;
-}
+const turnLog = {
+  info(message: string) {
+    console.info(`[socket-ticket] ${message}`);
+  },
+  warn(message: string) {
+    console.warn(`[socket-ticket] ${message}`);
+  },
+};
 
 function parseAudience(value: unknown): SocketTicketAudience | null {
   return value === "global" || value === "room" || value === "voice"
@@ -514,15 +161,10 @@ function parseAudience(value: unknown): SocketTicketAudience | null {
     : null;
 }
 
-function noStore(response: Response): Response {
-  response.headers.set("Cache-Control", "no-store");
-  return response;
-}
-
 /** The handlers, on the given services (the live ones by default). */
 export function socketTicketRoutes(services?: Layer.Layer<RouteServices>) {
   return {
-    OPTIONS,
+    OPTIONS: socketAdmissionOptions,
     POST: async ({ request }: { request: Request }) =>
       noStore(
         await runRoute(
