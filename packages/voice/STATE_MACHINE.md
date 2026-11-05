@@ -425,14 +425,47 @@ same.
 
 ## Remote participants
 
-### Reconnect grace
+### Reconnect hold (server)
 
-When a remote participant's **voice** socket reconnects, VoiceRoom purges
-the old connection's state and broadcasts `ClientDisconnect` (op 11, `d: {
-participant_id }`) for them, and also sends `Speaking` 0 if they were
-speaking, **before** their new connection re-announces its tracks (`Video`,
-op 12, offered to others as tracks). So a `ClientDisconnect` for a remote
-participant does not mean they left.
+When a remote participant's **voice** socket reconnects, VoiceRoom holds
+their tracks instead of withdrawing them
+([realtime/SOCKET_CORE.md](../../realtime/SOCKET_CORE.md#voice-reconnect-hold),
+`VOICE_RECONNECT_HOLD_MS`, 5000 ms). What others receive:
+
+- At once: `Speaking` (op 5) with `speaking: 0` if they were speaking, and
+  `StopTracks` (op 13) for a native screen share's tracks only (that
+  publisher starts a new Calls session after a reconnect).
+- If they identify again within the hold and offer the same tracks
+  (`Video`, op 12, the same `track_name`, `session_id` and
+  `sfu_track_name`): that op 12 and nothing else. **No** `ClientDisconnect`
+  (op 11) and **no** `StopTracks` (op 13). An unchanged offer of a track
+  that is already pulled MUST leave the pull as it is (no gap).
+- If they offer a track again with another `session_id` or
+  `sfu_track_name` (their PartyTracks session was rebuilt): that op 12;
+  the client moves the pull to it.
+- Tracks they have not offered again when the hold runs out (counted from
+  their new `VoiceIdentify`): one `StopTracks` (op 13) for those only. No
+  op 11.
+- If they do not identify again within the hold (5000 ms after the close):
+  `ClientDisconnect` (op 11) and `StopTracks` (op 13) for all their tracks,
+  as for a leave.
+- A leave is not held: their op 11 on the voice socket, a room leave, a
+  move, a kick or a takeover gives op 11 and op 13 at once.
+
+So a client receives a re-offer of tracks it already has, without a
+`ClientDisconnect` before it, and keeps pulling them. A participant who
+joins during a hold is offered the held tracks in its `VoiceReady`.
+
+VoiceRoom up to v3.13.0 purged at once on every voice-socket close and on
+every `VoiceIdentify` of a participant it already had: op 11 and op 13 for
+all their tracks, **before** the new connection re-announced them. The
+client grace below was written for that, and still covers a reconnect that
+takes longer than the hold.
+
+### Reconnect grace (client)
+
+A `ClientDisconnect` for a remote participant does not mean they left the
+room.
 
 Rule: on a remote `ClientDisconnect`, a client MUST keep that participant's
 roster row and audio for a grace period of `REMOTE_RECONNECT_GRACE_MS`
@@ -461,7 +494,9 @@ injected timers:
 Web: roster rows follow the room socket only, so they never flicker.
 SFUClient clears the participant's speaking at once and keeps their pulls
 through the grace. A track offered again with the same SFU track keeps its
-pull running (no gap); one with a new SFU track moves the pull to it.
+pull running (no gap); one with a new SFU track moves the pull to it. A
+`StopTracks` still closes an audio pull (and parks a video one) inside the
+grace; with the server's hold that only happens once the hold has run out.
 
 ### Voice-state deltas
 

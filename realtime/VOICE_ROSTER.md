@@ -8,6 +8,10 @@ into `voiceChannelMembers` for the sidebar (`VOICE_CHANNEL_STATES`,
 or removes a member. Code: `voice-roster.ts` (snapshot, seq, push queue, wire
 parsing) and the "Voice rosters" sections of `meeting-room.ts`.
 
+The voice socket does not take part: VoiceRoom's
+[reconnect hold](SOCKET_CORE.md#voice-reconnect-hold) keeps a participant's
+media through a voice-socket reconnect, and no roster changes either way.
+
 ## Event flow
 
 1. A room learns its channel id when it admits a room socket: the socket

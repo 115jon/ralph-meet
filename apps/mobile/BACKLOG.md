@@ -25,11 +25,6 @@ reopened.
       `@ralph/realtime` has no timeout on its ticket phase either. Check on a
       real phone (a real network change may reset the connection). Its own
       follow-up PR.
-- [ ] Reconnect grace does not protect audio (web and mobile): after a
-      remote person's voice socket reconnects, the server follows their
-      `ClientDisconnect` with `StopTracks` for all their tracks, so viewers
-      close the audio pull and pull it again (about 1.2 s of silence). The
-      grace only keeps them in the roster. Its own follow-up PR.
 
 ## In progress
 
@@ -84,6 +79,10 @@ reopened.
 
 ## Done
 
+- A remote person's voice-socket reconnect no longer cuts their audio:
+  VoiceRoom holds their tracks for 5 s (no `ClientDisconnect` or
+  `StopTracks`), so pulls keep running when they offer the same tracks
+  again (realtime/SOCKET_CORE.md, "Voice reconnect hold").
 - Voice on the shared packages: `@ralph/voice` (session phase and one
   teardown, publication reconciler, screen share, reconnect grace) and
   `@ralph/voice-media` (the web's PartyTracks media manager and transport);

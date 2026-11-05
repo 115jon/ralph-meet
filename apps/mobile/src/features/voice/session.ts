@@ -55,7 +55,8 @@ import type { CallTarget } from "./tickets";
 // - ScreenShare serializes starting and stopping a share (Android's
 //   MediaProjection capture) and Android's own Stop.
 // - RemoteReconnectGrace keeps a participant whose voice socket reconnects
-//   (VoiceRoom says ClientDisconnect first) for 3 s instead of dropping
+//   for 3 s after a ClientDisconnect (VoiceRoom holds their tracks without
+//   one, but sends one if the hold runs out first) instead of dropping
 //   their audio; only the room socket decides who left.
 //
 // The sockets and the PartyTracks media session are CallConnection's.
