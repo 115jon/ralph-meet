@@ -618,3 +618,78 @@ export async function kickMember(
     },
   };
 }
+
+// ─── leaveServer ─────────────────────────────────────────────────────────────
+
+export async function leaveServer(
+  db: D1Database,
+  serverId: string,
+  userId: string,
+): Promise<{
+  left: boolean;
+  cacheKeysToInvalidate: string[];
+  broadcasts: BroadcastDescriptor[];
+}> {
+  const server = (await db
+    .prepare(`SELECT owner_id FROM servers WHERE id = ?`)
+    .bind(serverId)
+    .first()) as { owner_id: string } | null;
+
+  if (!server) {
+    throw ServiceError.notFound("Server not found");
+  }
+
+  if (server.owner_id === userId) {
+    throw ServiceError.forbidden(
+      "Server owners can't leave. Transfer ownership or delete the server instead.",
+    );
+  }
+
+  const member = await db
+    .prepare(`SELECT 1 FROM server_members WHERE server_id = ? AND user_id = ?`)
+    .bind(serverId, userId)
+    .first();
+
+  if (!member) {
+    throw ServiceError.notFound("You are not a member of this server");
+  }
+
+  await db
+    .prepare(`DELETE FROM server_members WHERE server_id = ? AND user_id = ?`)
+    .bind(serverId, userId)
+    .run();
+  await db
+    .prepare(`DELETE FROM member_roles WHERE server_id = ? AND user_id = ?`)
+    .bind(serverId, userId)
+    .run();
+
+  const removed = { server_id: serverId, user_id: userId };
+
+  return {
+    left: true,
+    cacheKeysToInvalidate: [
+      CacheKey.serverMembers(serverId),
+      CacheKey.userServers(userId),
+    ],
+    broadcasts: [
+      {
+        type: "server",
+        target: serverId,
+        event: "GUILD_MEMBER_REMOVE",
+        data: removed,
+      },
+      {
+        type: "user",
+        target: userId,
+        event: "GUILD_MEMBER_REMOVE",
+        data: removed,
+      },
+      {
+        type: "user",
+        target: userId,
+        event: "GUILD_DELETE",
+        data: { id: serverId },
+      },
+    ],
+  };
+}

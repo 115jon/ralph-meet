@@ -11,6 +11,7 @@ import {
   createServer,
   deleteServer,
   kickMember,
+  leaveServer,
   listServerMembers,
   listUserServers,
   updateServer,
@@ -606,5 +607,80 @@ describe("kickMember", () => {
     await expect(
       kickMember(db as any, SERVER_ID, USER_ID, "target_user"),
     ).resolves.toMatchObject({ kicked: true });
+  });
+});
+
+// ─── leaveServer ─────────────────────────────────────────────────────────────
+
+describe("leaveServer", () => {
+  let db: ReturnType<typeof createMockD1>;
+
+  beforeEach(() => {
+    db = createMockD1();
+  });
+
+  it("removes only the caller and notifies the server and the leaver", async () => {
+    db.mockQuery(/SELECT owner_id FROM servers/, { owner_id: "owner_1" }, [
+      SERVER_ID,
+    ]);
+    db.mockQuery(/SELECT 1 FROM server_members/, { "1": 1 }, [
+      SERVER_ID,
+      USER_ID,
+    ]);
+
+    const result = await leaveServer(db as any, SERVER_ID, USER_ID);
+
+    expect(result.left).toBe(true);
+    expect(result.cacheKeysToInvalidate).toEqual([
+      CacheKey.serverMembers(SERVER_ID),
+      CacheKey.userServers(USER_ID),
+    ]);
+    const removed = { server_id: SERVER_ID, user_id: USER_ID };
+    expect(result.broadcasts).toEqual([
+      {
+        type: "server",
+        target: SERVER_ID,
+        event: "GUILD_MEMBER_REMOVE",
+        data: removed,
+      },
+      {
+        type: "user",
+        target: USER_ID,
+        event: "GUILD_MEMBER_REMOVE",
+        data: removed,
+      },
+      {
+        type: "user",
+        target: USER_ID,
+        event: "GUILD_DELETE",
+        data: { id: SERVER_ID },
+      },
+    ]);
+    db.assertCalledWith("DELETE FROM server_members", [SERVER_ID, USER_ID]);
+    db.assertCalledWith("DELETE FROM member_roles", [SERVER_ID, USER_ID]);
+  });
+
+  it("refuses the owner with a 403 and removes nothing", async () => {
+    db.mockQuery(/SELECT owner_id FROM servers/, { owner_id: USER_ID });
+
+    await expect(
+      leaveServer(db as any, SERVER_ID, USER_ID),
+    ).rejects.toMatchObject({ status: 403 });
+    db.assertNotCalled("DELETE FROM server_members");
+  });
+
+  it("throws 404 for an unknown server", async () => {
+    await expect(
+      leaveServer(db as any, SERVER_ID, USER_ID),
+    ).rejects.toMatchObject({ status: 404 });
+  });
+
+  it("throws 404 when the caller is not a member", async () => {
+    db.mockQuery(/SELECT owner_id FROM servers/, { owner_id: "owner_1" });
+
+    await expect(
+      leaveServer(db as any, SERVER_ID, USER_ID),
+    ).rejects.toMatchObject({ status: 404 });
+    db.assertNotCalled("DELETE FROM server_members");
   });
 });
