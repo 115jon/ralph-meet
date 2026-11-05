@@ -3,7 +3,8 @@
 This is the contract every Yap voice client follows: the web client (through
 `@ralph/voice`), the Expo app (once it adopts this package) and the native
 Rust client. `src/state-machine.ts` is the same table as code; the two must
-agree. Where this document says MUST, a client that does otherwise breaks
+agree. Device choice, fallback, persistence and output routing are in
+[DEVICES.md](DEVICES.md). Where this document says MUST, a client that does otherwise breaks
 something another client or the server relies on.
 
 A **session** is one user's presence in one voice room: a room socket
@@ -234,7 +235,9 @@ outbound-stall recovery, the republish after a voice reconnect, unmute
 replacing a promoted standby's silence) only changes the **intent** and asks
 for a **reconcile**. Screen share is not a slot: it keeps its own path for
 now. Getting the tracks (`getUserMedia`, audio processors, camera effects) is
-the platform's job; the reconciler only receives the finished track.
+the platform's job; the reconciler only receives the finished track. Which
+device to open, when to open it again and what to save are in
+[DEVICES.md](DEVICES.md) (`src/devices.ts`).
 
 ### Inputs
 
