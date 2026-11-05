@@ -4,6 +4,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 vi.mock("./tickets", () => ({
   acquireRoomTicket: vi.fn(),
   acquireVoiceTicket: vi.fn(async () => ({ url: "wss://meet.test/voice" })),
+  beginCallAdmission: vi.fn(),
 }));
 
 import { VoiceSocket, type VoiceSocketHandlers } from "./gateways";

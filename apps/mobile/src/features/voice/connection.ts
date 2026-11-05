@@ -30,7 +30,7 @@ import { VideoKeepalivePool } from "./keepalive";
 import type { RepublishRequest, VoiceAppEvent, VoiceState } from "./protocol";
 import { VIDEO_TRACK_PREFIXES } from "./remote-video";
 import { SplitVideoTransport } from "./split-transport";
-import type { CallTarget } from "./tickets";
+import { beginCallAdmission, type CallTarget } from "./tickets";
 
 // The connection of one call: the room socket (MeetingRoom), the voice
 // socket (VoiceRoom) and the PartyTracks sessions, through the media
@@ -86,10 +86,7 @@ export interface RemoteTrackEvent {
 
 /** What the connection reports to its call. */
 export interface ConnectionEvents {
-  roomReady(
-    credentials: MediaCredentials,
-    participants: readonly VoiceState[],
-  ): void;
+  roomReady(participantId: string, participants: readonly VoiceState[]): void;
   roomResumed(participants?: readonly VoiceState[]): void;
   voiceStateUpdate(
     participant: VoiceState,
@@ -181,9 +178,25 @@ export class CallConnection implements VoiceSessionClient {
       ready: (credentials, participants) => {
         if (this.disconnected) return;
         this.roomEstablished = true;
-        this.adoptCredentials(credentials);
+        const held = this.heldCredentials(credentials.participantId);
+        const current: MediaCredentials | null = credentials.voiceToken
+          ? {
+              participantId: credentials.participantId,
+              voiceToken: credentials.voiceToken,
+              ...(credentials.iceServers
+                ? { iceServers: credentials.iceServers }
+                : {}),
+            }
+          : held;
+        if (current) {
+          this.adoptCredentials(current);
+        } else {
+          // Neither Ready nor the admission gave us credentials: ask (op 40).
+          log.warn("Ready without voice credentials; requesting them");
+          this.room.requestCredentialRefresh();
+        }
         this.scheduleCredentialRefresh();
-        events.roomReady(credentials, participants);
+        events.roomReady(credentials.participantId, participants);
       },
       resumed: (credentials, participants) => {
         if (this.disconnected) return;
@@ -244,6 +257,8 @@ export class CallConnection implements VoiceSessionClient {
 
   /** Opens both sockets; the voice socket identifies once credentials land. */
   start(): void {
+    // One admission request for both sockets' first tickets.
+    beginCallAdmission(this.target);
     this.room.connect();
     this.voice.connect();
   }
@@ -414,6 +429,18 @@ export class CallConnection implements VoiceSessionClient {
       return;
     }
     this.adoptCredentials(credentials);
+  }
+
+  /** The credentials the admission's bootstrap gave `participantId`, if any. */
+  private heldCredentials(participantId: string): MediaCredentials | null {
+    if (this.participant !== participantId || !this.latestVoiceToken) {
+      return null;
+    }
+    return {
+      participantId,
+      voiceToken: this.latestVoiceToken,
+      ...(this.latestIceServers ? { iceServers: this.latestIceServers } : {}),
+    };
   }
 
   private onMediaReady(credentials: MediaCredentials): void {

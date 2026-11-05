@@ -55,8 +55,12 @@ export interface RoomSocketHandlers {
   mediaBootstrap(credentials: MediaBootstrap): void;
   /** MediaReady (early, after Identify) or a credential refresh. */
   mediaReady(credentials: MediaCredentials): void;
+  /**
+   * Ready. Its credentials are absent when the join's admission already
+   * carried them (the ticket's media bootstrap, same participant).
+   */
   ready(
-    credentials: MediaCredentials,
+    credentials: Partial<MediaCredentials> & { readonly participantId: string },
     participants: readonly VoiceState[],
   ): void;
   resumed(
@@ -184,8 +188,12 @@ export class RoomSocket {
         this.handlers.ready(
           {
             participantId: message.d.participant_id,
-            voiceToken: message.d.voice_token,
-            iceServers: toIceServers(message.d.ice_servers),
+            ...(message.d.voice_token
+              ? { voiceToken: message.d.voice_token }
+              : {}),
+            ...(message.d.ice_servers
+              ? { iceServers: toIceServers(message.d.ice_servers) }
+              : {}),
           },
           message.d.participants ?? [],
         );
@@ -270,7 +278,10 @@ export class VoiceSocket {
       label: "VoiceGW",
       policy: CALL_SOCKET_POLICY,
       decode: decodeVoiceServerFrame,
-      acquireTicket: () => acquireVoiceTicket(target),
+      // Bound to the participant it will identify as, when known (the
+      // voice room closes 1013 on a mismatch and this asks again).
+      acquireTicket: () =>
+        acquireVoiceTicket(target, this.credentials?.participantId ?? null),
       hooks: {
         ticketReady: () => this.resetIdentity(),
         authFailed: () => this.handlers.disconnected("auth-failed"),
