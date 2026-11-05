@@ -33,3 +33,4 @@ onlyBuiltDependencies:
   - workerd
 patchedDependencies:
   partytracks@0.0.56: patches/partytracks@0.0.56.patch
+  react-native-webrtc@155.0.1: patches/react-native-webrtc@155.0.1.patch
