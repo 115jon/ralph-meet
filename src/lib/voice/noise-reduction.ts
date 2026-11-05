@@ -1,6 +1,7 @@
 import rnnoiseSimdWasmUrl from "@sapphi-red/web-noise-suppressor/rnnoise_simd.wasm?url";
 import rnnoiseWasmUrl from "@sapphi-red/web-noise-suppressor/rnnoise.wasm?url";
 import rnnoiseWorkletUrl from "@sapphi-red/web-noise-suppressor/rnnoiseWorklet.js?url";
+import { captureProcessingFor } from "@ralph/voice";
 import {
   acquireCaptureAudioContext,
   loadCaptureWorkletModule,
@@ -137,21 +138,8 @@ export function resolveLocalAudioPublicationMode(
 export function resolveCaptureAudioProcessing(
   settings: VoiceAudioProcessingSettings,
 ): LocalAudioCaptureProcessing {
-  if (settings.streamHighFidelity) {
-    return {
-      noiseSuppression: false,
-      echoCancellation: false,
-      autoGainControl: false,
-    };
-  }
-
-  return {
-    noiseSuppression: settings.noiseReductionEnabled
-      ? false
-      : settings.noiseSuppression,
-    echoCancellation: settings.echoCancellation,
-    autoGainControl: true,
-  };
+  // packages/voice/DEVICES.md, "Capture processing".
+  return { ...captureProcessingFor(settings) };
 }
 
 function getEffectiveChannelCount(track: MediaStreamTrack): number {

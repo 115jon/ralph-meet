@@ -12,16 +12,21 @@
 // Livekit's `userMediaPromiseMap: Map<MediaDeviceKind, Promise<MediaStream>>`.
 // ============================================================================
 
+import {
+  captureAnswersRequest,
+  captureErrorAction,
+  captureProcessingMatches,
+  captureTarget,
+  deviceSatisfies,
+  type DeviceResolution,
+} from "@ralph/voice";
 import { clog } from "@/lib/console-logger";
 import { buildCameraVideoConstraints } from "@/lib/camera-quality";
 import {
   getMediaDeviceSnapshot,
   type MediaDeviceInfo_Custom,
 } from "@/lib/media-device-snapshot";
-import {
-  resolveStoredDeviceId,
-  type StoredDeviceLookup,
-} from "@/lib/stored-device";
+import { lookupSavedDevice } from "@/lib/stored-device";
 import { useMediaDeviceStore } from "@/lib/useMediaDevices";
 
 const lmLog = clog("LocalMedia");
@@ -124,40 +129,12 @@ function applyActiveAudioTrackLabel(
 
 // ── Helpers ───────────────────────────────────────────────────────────────
 
-/** True if the track's current settings match the given constraints */
-function audioConstraintsMatch(
+/** The capture-level processing (constraints) a track has applied. */
+function audioProcessingMatches(
   track: MediaStreamTrack,
   c: LocalAudioConstraints,
-  anyDevice = false,
 ): boolean {
-  const s = track.getSettings();
-  const idMatch =
-    anyDevice ||
-    !c.deviceId ||
-    c.deviceId === "default" ||
-    s.deviceId === c.deviceId;
-  return (
-    idMatch &&
-    s.noiseSuppression === c.noiseSuppression &&
-    s.echoCancellation === c.echoCancellation &&
-    s.autoGainControl === c.autoGainControl
-  );
-}
-
-function videoConstraintsMatch(
-  track: MediaStreamTrack,
-  c: LocalVideoConstraints,
-  activeVideoRequestKey: string | null,
-  anyDevice = false,
-): boolean {
-  const s = track.getSettings();
-  const idMatch =
-    anyDevice ||
-    !c.deviceId ||
-    c.deviceId === "default" ||
-    s.deviceId === c.deviceId;
-  const qualityMatch = activeVideoRequestKey === videoRequestKey(c);
-  return idMatch && qualityMatch;
+  return captureProcessingMatches(track.getSettings(), c);
 }
 
 function videoRequestKey(c: LocalVideoConstraints | null): string | null {
@@ -215,8 +192,8 @@ function mediaConstraints(
 function lookupStoredAudio(
   audio: LocalAudioConstraints,
   log: Logger,
-): Promise<StoredDeviceLookup> {
-  return resolveStoredDeviceId(
+): Promise<DeviceResolution> {
+  return lookupSavedDevice(
     "audioinput",
     {
       deviceId: audio.deviceId,
@@ -230,8 +207,8 @@ function lookupStoredAudio(
 function lookupStoredVideo(
   video: LocalVideoConstraints,
   log: Logger,
-): Promise<StoredDeviceLookup> {
-  return resolveStoredDeviceId(
+): Promise<DeviceResolution> {
+  return lookupSavedDevice(
     "videoinput",
     {
       deviceId: video.deviceId,
@@ -242,8 +219,8 @@ function lookupStoredVideo(
   );
 }
 
-const isConcreteDeviceId = (deviceId: string | undefined) =>
-  !!deviceId && deviceId !== "default";
+const isUnverified = (resolution: DeviceResolution | null | undefined) =>
+  resolution?.outcome === "unverified";
 
 /**
  * A saved id was tried blind because the device list was hidden, and the
@@ -270,8 +247,8 @@ async function reopenStoredDevices(
     log: Logger;
   },
 ): Promise<MediaStream> {
-  let audioRetry: StoredDeviceLookup | null;
-  let videoRetry: StoredDeviceLookup | null;
+  let audioRetry: DeviceResolution | null;
+  let videoRetry: DeviceResolution | null;
   try {
     [audioRetry, videoRetry] = await Promise.all([
       audioId === undefined ? lookupStoredAudio(audio, log) : null,
@@ -285,8 +262,9 @@ async function reopenStoredDevices(
   if (isStale()) return fallback;
   const nextAudioId = audioId ?? audioRetry?.deviceId;
   const nextVideoId = videoId ?? videoRetry?.deviceId;
-  const exactAudio = isConcreteDeviceId(nextAudioId);
-  const exactVideo = !!video && isConcreteDeviceId(nextVideoId);
+  // Still hidden: the saved id is tried exactly once more.
+  const exactAudio = captureTarget(nextAudioId).exact;
+  const exactVideo = !!video && captureTarget(nextVideoId).exact;
   if (!exactAudio && !exactVideo) return fallback;
 
   try {
@@ -342,54 +320,36 @@ export async function acquireLocalStream(
       ? await lookupStoredVideo(videoConstraint, log)
       : null;
     throwIfAcquisitionStale(state, generation, activeLookupOrder);
-    const resolvedAudioId = activeAudioLookup.deviceId;
-    const resolvedVideoId = activeVideoLookup?.deviceId;
-    // The list is still hidden, so the saved id can't be compared with the
-    // live track. A stream opened for this same saved id (it may have fallen
-    // back) already answers the request: don't reopen it.
-    const audioIdAnswered =
-      activeAudioLookup.unverified &&
-      state.activeAudioRequestDeviceId === audio.deviceId;
-    const videoIdAnswered =
-      !!activeVideoLookup?.unverified &&
-      state.activeVideoRequestDeviceId === videoConstraint?.deviceId;
-    const resolvedAudio = { ...audio, deviceId: resolvedAudioId };
-    const resolvedVideo = videoConstraint
-      ? { ...videoConstraint, deviceId: resolvedVideoId }
-      : null;
-    const audioFellBackToDefault = Boolean(
-      audio.deviceId &&
-      audio.deviceId !== "default" &&
-      resolvedAudioId === "default",
-    );
-    const videoFellBackToDefault = Boolean(
-      videoConstraint?.deviceId &&
-      videoConstraint.deviceId !== "default" &&
-      resolvedVideoId === "default",
-    );
     const audioTrack = state.activeStream.getAudioTracks()[0];
     const videoTrack = state.activeStream.getVideoTracks()[0];
     const audioLive = !audioTrack || audioTrack.readyState !== "ended";
     if ((videoConstraint && !videoTrack) || !audioLive) {
       supersededActiveStream = state.activeStream;
     }
+    // Device: @ralph/voice decides (hidden list, fallback, refreshed id).
+    // A stream with no audio track is judged on its request alone.
     const audioOk =
       audioLive &&
-      (!audioFellBackToDefault ||
-        state.activeAudioRequestDeviceId === audio.deviceId) &&
-      (!audioTrack ||
-        audioConstraintsMatch(audioTrack, resolvedAudio, audioIdAnswered));
+      captureAnswersRequest(audio.deviceId, activeAudioLookup, {
+        requestedId: state.activeAudioRequestDeviceId,
+        deviceId: audioTrack
+          ? audioTrack.getSettings().deviceId
+          : activeAudioLookup.deviceId,
+      }) &&
+      (!audioTrack || audioProcessingMatches(audioTrack, audio));
     const videoOk =
-      !resolvedVideo ||
-      ((!videoFellBackToDefault ||
-        state.activeVideoRequestDeviceId === videoConstraint?.deviceId) &&
-        videoTrack &&
-        videoConstraintsMatch(
-          videoTrack,
-          resolvedVideo,
-          state.activeVideoRequestKey,
-          videoIdAnswered,
-        ));
+      !videoConstraint ||
+      (!!activeVideoLookup &&
+        !!videoTrack &&
+        captureAnswersRequest(videoConstraint.deviceId, activeVideoLookup, {
+          requestedId: state.activeVideoRequestDeviceId,
+          deviceId: videoTrack.getSettings().deviceId,
+        }) &&
+        state.activeVideoRequestKey ===
+          videoRequestKey({
+            ...videoConstraint,
+            deviceId: activeVideoLookup.deviceId,
+          }));
     if (audioOk && videoOk) {
       log.debug("Reusing active stream (constraints match)");
       return state.activeStream;
@@ -405,15 +365,14 @@ export async function acquireLocalStream(
     throwIfAcquisitionStale(state, generation);
     if (existing) {
       const existingAudio = existing.getAudioTracks()[0];
-      const existingVideo = existing.getVideoTracks()[0];
       const audioMatches =
         !!existingAudio &&
         existingAudio.readyState !== "ended" &&
-        audioConstraintsMatch(existingAudio, audio);
-      const videoMatches =
-        !videoConstraint ||
-        (!!existingVideo &&
-          videoConstraintsMatch(existingVideo, videoConstraint, null));
+        deviceSatisfies(audio.deviceId, existingAudio.getSettings().deviceId) &&
+        audioProcessingMatches(existingAudio, audio);
+      // The shared request (startEarlyMic) is audio-only: a request that
+      // adds video always captures again.
+      const videoMatches = !videoConstraint;
       if (audioMatches && videoMatches) {
         state.activeStream = existing;
         return existing;
@@ -437,12 +396,9 @@ export async function acquireLocalStream(
   const resolvedVideo = videoConstraint
     ? { ...videoConstraint, deviceId: resolvedVideoId }
     : null;
-  const useResolvedExactAudio = !!(
-    resolvedAudio.deviceId && resolvedAudio.deviceId !== "default"
-  );
-  const useResolvedExactVideo = !!(
-    resolvedVideo?.deviceId && resolvedVideo.deviceId !== "default"
-  );
+  const useResolvedExactAudio = captureTarget(resolvedAudio.deviceId).exact;
+  const useResolvedExactVideo =
+    !!resolvedVideo && captureTarget(resolvedVideo.deviceId).exact;
 
   const doGetUserMedia = async (exactAudio: boolean, exactVideo: boolean) => {
     return navigator.mediaDevices.getUserMedia(
@@ -461,7 +417,8 @@ export async function acquireLocalStream(
       throwIfAcquisitionStale(state, generation, requestOrder);
     }
   } catch (err: any) {
-    if (err.name === "OverconstrainedError" || err.name === "NotFoundError") {
+    const action = captureErrorAction(err?.name);
+    if (action === "retry-system-default") {
       throwIfAcquisitionStale(state, generation, requestOrder);
       log.warn(
         `Exact device unavailable (${err.constraint ?? "unknown"}), retrying with system default`,
@@ -481,12 +438,14 @@ export async function acquireLocalStream(
         stopStreamTracks(stream);
         throwIfAcquisitionStale(state, generation, requestOrder);
       }
-      if (audioLookup.unverified || videoLookup?.unverified) {
+      if (isUnverified(audioLookup) || isUnverified(videoLookup)) {
         stream = await reopenStoredDevices(stream, {
           audio,
           video: videoConstraint,
-          audioId: audioLookup.unverified ? undefined : resolvedAudio.deviceId,
-          videoId: videoLookup?.unverified
+          audioId: isUnverified(audioLookup)
+            ? undefined
+            : resolvedAudio.deviceId,
+          videoId: isUnverified(videoLookup)
             ? undefined
             : resolvedVideo?.deviceId,
           isStale: () =>
@@ -502,7 +461,7 @@ export async function acquireLocalStream(
           throwIfAcquisitionStale(state, generation, requestOrder);
         }
       }
-    } else if (err.name === "NotAllowedError") {
+    } else if (action === "permission-denied") {
       // Permission denied — surface, don't swallow
       log.warn("Permission denied for getUserMedia");
       throw err;
@@ -560,7 +519,7 @@ export function startEarlyMic(
         mediaConstraints(
           { ...audio, deviceId: resolvedId },
           null,
-          !!(resolvedId && resolvedId !== "default"),
+          captureTarget(resolvedId).exact,
           false,
         ),
       );
