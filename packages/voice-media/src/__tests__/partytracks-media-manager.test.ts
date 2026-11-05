@@ -1,6 +1,6 @@
-import type { TrackInfo } from "@/lib/types";
-import type { PartyTracksPullError } from "@/lib/voice/partytracks-pull-errors";
-import type { RalphPublishedTrack } from "@/lib/voice/partytracks-transport";
+import type { TrackInfo } from "../track-info";
+import type { PartyTracksPullError } from "../partytracks-pull-errors";
+import type { RalphPublishedTrack } from "../partytracks-transport";
 import { Observable, Subject } from "rxjs";
 import { describe, expect, it, vi } from "vitest";
 import {

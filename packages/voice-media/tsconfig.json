@@ -1,0 +1,21 @@
+{
+  // Checks the package on its own. The DOM library is here for the WebRTC
+  // type shapes only (MediaStreamTrack, RTCPeerConnection): the platform
+  // supplies the implementation (a browser, or react-native-webrtc's
+  // registerGlobals()), and nothing here may reach for window, document,
+  // navigator or storage; src/__tests__/platform-free.test.ts checks that.
+  // Part of `pnpm typecheck`.
+  "compilerOptions": {
+    "target": "ES2022",
+    "lib": ["es2022", "dom"],
+    "types": [],
+    "module": "esnext",
+    "moduleResolution": "bundler",
+    "strict": true,
+    "noEmit": true,
+    "isolatedModules": true,
+    "skipLibCheck": true
+  },
+  "include": ["src/**/*.ts"],
+  "exclude": ["src/**/*.test.ts"]
+}

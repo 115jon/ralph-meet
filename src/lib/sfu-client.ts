@@ -2,7 +2,7 @@ import { RemoteReconnectGrace } from "@ralph/voice";
 import { markVoice } from "@/lib/voice/latency-marks";
 import { clog } from "./console-logger";
 import { TypedEventEmitter } from "./event-emitter";
-import { wsUrl } from "./platform";
+import { apiUrl, wsUrl } from "./platform";
 import { onPageWake } from "./realtime-socket/page-wake";
 import {
   type IceServer,
@@ -29,12 +29,12 @@ import {
 } from "./voice/native-screen-share-transport";
 import {
   PartyTracksMediaManager,
-  type PartyTracksMediaTransport,
-} from "./voice/partytracks-media-manager";
-import {
   PartyTracksTransport,
+  type PartyTracksMediaTransport,
   type PartyTracksTransportCredentials,
-} from "./voice/partytracks-transport";
+} from "@ralph/voice-media";
+import { opusPtimeConfigurator } from "./voice/opus-ptime";
+import { createVideoKeepalive } from "./voice/video-keepalive";
 import { StatsHub } from "./voice/stats-hub";
 import { ConnectionStatsMonitor } from "./voice/stats-monitor";
 import { VoiceActivityDetector } from "./voice/vad";
@@ -192,7 +192,11 @@ export class SFUClient extends TypedEventEmitter<SFUEventMap> {
     this.roomSlug = roomSlug;
     this.createPartyTracksTransport =
       options.createPartyTracksTransport ??
-      ((credentials) => new PartyTracksTransport(credentials));
+      ((credentials) =>
+        new PartyTracksTransport(credentials, {
+          resolveApiUrl: apiUrl,
+          configurePeerConnection: opusPtimeConfigurator(),
+        }));
 
     this.roomGW = new RoomGateway();
     this.voiceGW = new VoiceGateway();
@@ -894,6 +898,7 @@ export class SFUClient extends TypedEventEmitter<SFUEventMap> {
           });
         },
       },
+      { createVideoKeepalive },
     );
     for (const [trackName, subscribe] of this.remoteTrackSubscriptions) {
       this.partyTracksMedia.setRemoteTrackSubscription(trackName, subscribe);

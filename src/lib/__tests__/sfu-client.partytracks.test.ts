@@ -4,8 +4,8 @@ import type {
   PartyTracksClientTransport,
   SFUClientOptions,
 } from "@/lib/sfu-client";
-import type { PartyTracksPullError } from "@/lib/voice/partytracks-pull-errors";
-import type { RalphPublishedTrack } from "@/lib/voice/partytracks-transport";
+import type { PartyTracksPullError } from "@ralph/voice-media";
+import type { RalphPublishedTrack } from "@ralph/voice-media";
 import { Observable, Subject } from "rxjs";
 import { describe, expect, it, vi } from "vitest";
 import { SFUClient } from "../sfu-client";

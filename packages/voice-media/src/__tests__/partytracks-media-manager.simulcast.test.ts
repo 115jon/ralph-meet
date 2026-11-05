@@ -1,9 +1,9 @@
-import type { TrackInfo } from "@/lib/types";
+import type { TrackInfo } from "../track-info";
 import type {
   RalphPublishedTrack,
   RalphPullOptions,
   RalphPushOptions,
-} from "@/lib/voice/partytracks-transport";
+} from "../partytracks-transport";
 import { type Observable, Subject } from "rxjs";
 import { describe, expect, it, vi } from "vitest";
 import {

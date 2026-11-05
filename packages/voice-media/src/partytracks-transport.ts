@@ -1,5 +1,3 @@
-import { apiUrl } from "@/lib/platform";
-import type { IceServer, TrackInfo } from "@/lib/types";
 import {
   PartyTracks,
   type PartyTracksConfig,
@@ -15,14 +13,11 @@ import {
   type Subscription,
 } from "rxjs";
 import {
-  installOpusPtimePreference,
-  resolveVoiceOpusPtime,
-} from "./opus-ptime";
-import {
   observePullErrors,
   type PartyTracksApiHistory,
   type PartyTracksPullError,
 } from "./partytracks-pull-errors";
+import type { IceServer, TrackInfo } from "./track-info";
 
 const BOOTSTRAP_STUN_SERVERS: IceServer[] = [
   { urls: ["stun:stun.cloudflare.com:3478"] },
@@ -102,13 +97,16 @@ export function negotiatedSimulcastRids(
 
 export interface PartyTracksTransportOptions {
   factory?: (config: PartyTracksConfig) => PartyTracksClient;
+  /**
+   * The API URL for a path (web: the app's API origin; the Expo app: its
+   * configured API base). Defaults to the path itself (same origin).
+   */
   resolveApiUrl?: (path: string) => string;
   /**
-   * Opus frame length to ask for on every peer connection (see
-   * opus-ptime.ts); null keeps the browser default. Defaults to
-   * resolveVoiceOpusPtime().
+   * Runs on every PartyTracks peer connection before anything is negotiated
+   * on it (web: the Opus ptime preference, src/lib/voice/opus-ptime.ts).
    */
-  opusPtimeMs?: number | null;
+  configurePeerConnection?: (peerConnection: RTCPeerConnection) => void;
 }
 
 function requireMetadataField(
@@ -169,7 +167,7 @@ export class PartyTracksTransport {
         ? credentials.iceServers
         : BOOTSTRAP_STUN_SERVERS),
     ];
-    const resolveApiUrl = options.resolveApiUrl ?? apiUrl;
+    const resolveApiUrl = options.resolveApiUrl ?? ((path: string) => path);
     const prefix = resolveApiUrl(
       `/api/channels/${encodeURIComponent(credentials.roomSlug)}/partytracks`,
     );
@@ -185,19 +183,19 @@ export class PartyTracksTransport {
     this.pullErrors$ = this.client.history
       ? observePullErrors(this.client.history)
       : EMPTY;
-    const opusPtimeMs =
-      options.opusPtimeMs === undefined
-        ? resolveVoiceOpusPtime()
-        : options.opusPtimeMs;
+    const configurePeerConnection = options.configurePeerConnection;
     this.peerConnectionSubscription = this.peerConnection$.subscribe(
       (peerConnection) => {
         this.activePeerConnection = peerConnection;
         // Before PartyTracks negotiates anything on this connection.
-        if (opusPtimeMs !== null) {
-          installOpusPtimePreference(peerConnection, opusPtimeMs);
-        }
+        configurePeerConnection?.(peerConnection);
       },
     );
+  }
+
+  /** The current peer connection (for stats); null before the first one. */
+  get peerConnection(): RTCPeerConnection | null {
+    return this.activePeerConnection;
   }
 
   updateVoiceToken(voiceToken: string): void {

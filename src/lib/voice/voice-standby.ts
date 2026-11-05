@@ -11,7 +11,7 @@ import type { User } from "@/lib/types";
 import {
   createPublicationLiveness,
   type PublicationLiveness,
-} from "@/lib/voice/publication-liveness";
+} from "@ralph/voice-media";
 import {
   createSilentAudioTrack,
   type SilentAudioTrack,

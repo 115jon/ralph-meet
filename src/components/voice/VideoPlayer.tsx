@@ -1,5 +1,5 @@
 import { cn } from "@/lib/utils";
-import { videoRenderDemand } from "@/lib/voice/video-render-demand";
+import { videoRenderDemand } from "@ralph/voice-media";
 import React, { useEffect, useRef } from "react";
 
 interface VideoPlayerProps {

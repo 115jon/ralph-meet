@@ -1,6 +1,6 @@
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
-import type { TrackInfo } from "@/lib/types";
+import type { TrackInfo } from "../track-info";
 import type { ApiHistoryEntry, PartyTracksConfig } from "partytracks/client";
 import { BehaviorSubject, Observable, Subject, of } from "rxjs";
 import { describe, expect, it, vi } from "vitest";

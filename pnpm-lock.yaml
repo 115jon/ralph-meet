@@ -83,6 +83,9 @@ importers:
       '@ralph/voice':
         specifier: workspace:*
         version: link:packages/voice
+      '@ralph/voice-media':
+        specifier: workspace:*
+        version: link:packages/voice-media
       '@sapphi-red/web-noise-suppressor':
         specifier: ^0.3.5
         version: 0.3.5
@@ -542,6 +545,18 @@ importers:
         version: link:../protocol
 
   packages/voice: {}
+
+  packages/voice-media:
+    dependencies:
+      '@ralph/realtime':
+        specifier: workspace:*
+        version: link:../realtime
+      partytracks:
+        specifier: ^0.0.56
+        version: 0.0.56(patch_hash=0256b70ee75d1f18a83383e695d79820ee5e4e92c0dafe0122127f78924156be)
+      rxjs:
+        specifier: ^7.8.2
+        version: 7.8.2
 
 packages:
 
