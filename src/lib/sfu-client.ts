@@ -587,6 +587,16 @@ export class SFUClient extends TypedEventEmitter<SFUEventMap> {
           .then(() => this.nativeScreenShare.reconnect())
           .catch((error) => {
             sfuLog.warn("Native screen share reconnect failed", error);
+            // The transport stopped the pipeline and nothing retries it:
+            // the share owner falls back or ends the share, as for the
+            // backend's own `connection-failed`.
+            if (this.isLeaving) return;
+            this.emit("native-screen-share-ended", {
+              reason: "connection-failed",
+              detail: `reconnect failed: ${
+                error instanceof Error ? error.message : String(error)
+              }`,
+            });
           });
       }
     });

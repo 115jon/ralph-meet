@@ -85,6 +85,11 @@ export class NativeScreenShareTransport {
   private previewLoopbackPC: RTCPeerConnection | null = null;
   private previewLoopbackUnlisten: (() => void) | null = null;
   private requestSequence = 0;
+  /**
+   * Moves on every caller command (start, stop, reset, dispose): a
+   * reconnect that fails after one took over did not fail on its own.
+   */
+  private takeovers = 0;
   private tracksOffered = false;
   private trackNames: string[] = [];
   private readonly unsubscribeGatewayEvents: Array<() => void>;
@@ -117,6 +122,11 @@ export class NativeScreenShareTransport {
   }
 
   async start(options: NativeScreenShareOptions): Promise<void> {
+    this.takeovers += 1;
+    return this.startOwned(options);
+  }
+
+  private async startOwned(options: NativeScreenShareOptions): Promise<void> {
     this.assertUsable();
     const participantId = this.config.getParticipantId();
     if (!participantId) {
@@ -234,25 +244,42 @@ export class NativeScreenShareTransport {
 
   async stop(): Promise<void> {
     this.assertUsable();
+    this.takeovers += 1;
     await this.stopOwnedCapture({
       clearOptions: true,
       reason: new Error("Native screen share stopped"),
     });
   }
 
+  /**
+   * Starts the share again with the options it last started with (after a
+   * voice reconnect). Resolves once it is back, or when there is nothing to
+   * bring back (stopped, never started) or a caller's stop, start, reset or
+   * dispose took over meanwhile. Rejects when it could not come back on its
+   * own: the pipeline is then stopped and its options cleared, and nothing
+   * retries it (the caller ends or falls back the share).
+   */
   async reconnect(): Promise<void> {
     this.assertUsable();
-    const options = this.options;
-    if (!options) return;
+    if (!this.options) return;
+    const takeovers = this.takeovers;
     await this.stopOwnedCapture({
       clearOptions: false,
       reason: new Error("Native screen share reconnecting"),
     });
-    await this.start(options);
+    const options = this.options;
+    if (this.disposed || !options || takeovers !== this.takeovers) return;
+    try {
+      await this.startOwned(options);
+    } catch (error) {
+      if (this.disposed || takeovers !== this.takeovers) return;
+      throw error;
+    }
   }
 
   async reset(): Promise<void> {
     this.assertUsable();
+    this.takeovers += 1;
     await this.stopOwnedCapture({
       clearOptions: false,
       reason: new Error("Native screen share reset"),
@@ -394,6 +421,7 @@ export class NativeScreenShareTransport {
   async dispose(): Promise<void> {
     if (this.disposed) return;
     this.disposed = true;
+    this.takeovers += 1;
     await this.stopOwnedCapture({
       clearOptions: true,
       reason: new Error("Native screen share transport disposed"),

@@ -1229,6 +1229,29 @@ describe("useVoiceChannel SFU lifecycle", () => {
     },
   );
 
+  it("ends a native share whose reconnect failed (no CEF fallback allowed)", async () => {
+    const { hook, sfu } = await startNativeShare();
+    // The transport already stopped the pipeline when its reconnect failed.
+    sfu.isNativeScreenShareActive = false;
+
+    await act(async () => {
+      sfu.emit("native-screen-share-ended", {
+        reason: "connection-failed",
+        detail: "reconnect failed: connect timeout",
+      });
+    });
+
+    await waitFor(() =>
+      expect(hook.result.current.isScreenSharing).toBe(false),
+    );
+    expect(hook.result.current.currentScreenSource).toBeNull();
+    expect(sfu.stopTracks).toHaveBeenCalledWith([
+      "screen-video-self",
+      "screen-audio-self",
+    ]);
+    hook.unmount();
+  });
+
   async function startBrowserShare() {
     vi.mocked(acquireLocalStream).mockResolvedValue(
       createStream([createTrack("audio", "browser-share-mic").track]),
@@ -1288,6 +1311,21 @@ describe("useVoiceChannel SFU lifecycle", () => {
     expect(audio.stop).toHaveBeenCalled();
     expect(hook.result.current.isScreenSharing).toBe(false);
     expect(playScreenShareStop).toHaveBeenCalledOnce();
+    hook.unmount();
+  });
+
+  it("ignores a native reconnect failure while the live share is a browser one", async () => {
+    const { hook, sfu } = await startBrowserShare();
+
+    await act(async () => {
+      sfu.emit("native-screen-share-ended", {
+        reason: "connection-failed",
+        detail: "reconnect failed: superseded",
+      });
+    });
+
+    expect(hook.result.current.isScreenSharing).toBe(true);
+    expect(sfu.stopTracks).not.toHaveBeenCalled();
     hook.unmount();
   });
 

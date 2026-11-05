@@ -460,6 +460,70 @@ describe("NativeScreenShareTransport", () => {
     expect(fixture.transport.active).toBe(false);
   });
 
+  it("rejects a reconnect that fails on its own and forgets the share", async () => {
+    const fixture = createFixture();
+    await completeStart(fixture, fixture.transport.start(initialOptions), 0);
+    fixture.invoke.mockImplementation(async (command) => {
+      if (command === "start_native_screen_share") {
+        return { sdp: "native-offer", type: "offer" };
+      }
+      if (command === "wait_native_screen_share_connected") {
+        throw new Error("connect timeout");
+      }
+      return undefined;
+    });
+
+    fixture.sentMessages.length = 0;
+    const reconnect = fixture.transport.reconnect();
+    const rejected = expect(reconnect).rejects.toThrow("connect timeout");
+    await completeStart(fixture, rejected, 0);
+
+    expect(fixture.transport.active).toBe(false);
+    expect(fixture.sentMessages.map((message) => message.op)).toEqual([
+      GatewayOp.StopTracks,
+      GatewayOp.SelectProtocol,
+      GatewayOp.StopTracks,
+    ]);
+    // Its options are gone: a later voice reconnect brings nothing back.
+    fixture.sentMessages.length = 0;
+    await fixture.transport.reconnect();
+    expect(fixture.sentMessages).toEqual([]);
+  });
+
+  it("resolves a reconnect that a stop took over", async () => {
+    const fixture = createFixture();
+    await completeStart(fixture, fixture.transport.start(initialOptions), 0);
+
+    fixture.sentMessages.length = 0;
+    const reconnect = fixture.transport.reconnect();
+    await vi.waitFor(() => {
+      expect(selectProtocolMessages(fixture.sentMessages)).toHaveLength(1);
+    });
+    await fixture.transport.stop();
+
+    await expect(reconnect).resolves.toBeUndefined();
+    expect(fixture.transport.active).toBe(false);
+  });
+
+  it("does not restart a share stopped while the reconnect stopped the old one", async () => {
+    const fixture = createFixture();
+    await completeStart(fixture, fixture.transport.start(initialOptions), 0);
+    const stopNative = createDeferred<undefined>();
+    fixture.invoke.mockImplementationOnce(async (command) => {
+      expect(command).toBe("stop_preview_loopback");
+      return stopNative.promise;
+    });
+
+    fixture.sentMessages.length = 0;
+    const reconnect = fixture.transport.reconnect();
+    const stop = fixture.transport.stop();
+    stopNative.resolve(undefined);
+    await Promise.all([reconnect, stop]);
+
+    expect(selectProtocolMessages(fixture.sentMessages)).toEqual([]);
+    expect(fixture.transport.active).toBe(false);
+  });
+
   it("disposes native capture and detaches its gateway handlers", async () => {
     const fixture = createFixture();
     await completeStart(fixture, fixture.transport.start(initialOptions), 0);

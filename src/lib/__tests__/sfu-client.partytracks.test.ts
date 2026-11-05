@@ -121,6 +121,47 @@ class TestPartyTracksTransport implements PartyTracksClientTransport {
 }
 
 describe("SFUClient PartyTracks facade", () => {
+  it.each([
+    ["fails", true],
+    ["comes back", false],
+  ] as const)(
+    "tells the share owner when a native share reconnect %s",
+    async (_label, fails) => {
+      const client = new SFUClient("test-room", {
+        createPartyTracksTransport: vi.fn(() => new TestPartyTracksTransport()),
+      });
+      vi.spyOn(client.voiceGW, "connectVoice").mockImplementation(() => {});
+      emitMediaReady(client);
+      const native = client["nativeScreenShare"];
+      vi.spyOn(native, "active", "get").mockReturnValue(true);
+      vi.spyOn(native, "reset").mockResolvedValue();
+      const reconnect = vi
+        .spyOn(native, "reconnect")
+        .mockImplementation(() =>
+          fails
+            ? Promise.reject(new Error("connect timeout"))
+            : Promise.resolve(),
+        );
+      const ended = vi.fn();
+      client.on("native-screen-share-ended", ended);
+
+      client.voiceGW.emit("disconnected", undefined as never);
+      client.voiceGW.emit("voice-ready", { tracks: [] });
+      await vi.waitFor(() => expect(reconnect).toHaveBeenCalledOnce());
+      await new Promise((resolve) => setTimeout(resolve, 0));
+
+      if (fails) {
+        expect(ended).toHaveBeenCalledExactlyOnceWith({
+          reason: "connection-failed",
+          detail: "reconnect failed: connect timeout",
+        });
+      } else {
+        expect(ended).not.toHaveBeenCalled();
+      }
+      client.disconnect("component-unmount");
+    },
+  );
+
   it("releases an early pending publication as soon as media bootstrap arrives", async () => {
     const transport = new TestPartyTracksTransport();
     const createPartyTracksTransport = vi.fn(() => transport);

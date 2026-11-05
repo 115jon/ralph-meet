@@ -1067,6 +1067,14 @@ export function useVoiceChannel({
   );
   const standbyMediaOwnerRef = useRef<LocalMediaOwner | null>(null);
   const alwaysShowStreamPreviewRef = useRef(false);
+  // A native share ended by itself; set below, where it is defined.
+  const nativeShareEndedRef = useRef<
+    (
+      rawPayload: unknown,
+      client: SFUClient | null,
+      origin: "backend" | "reconnect",
+    ) => void
+  >(() => {});
   // The one owner of this session's screen share (packages/voice,
   // SCREEN_SHARE.md); it publishes through the client's reconciler.
   // Created for a client on first use and disposed by the teardown.
@@ -2688,6 +2696,11 @@ export function useVoiceChannel({
     // The room socket closed on its own (it reconnects); Resumed brings it
     // back as participants-sync, a new Ready as joined.
     onSfu("disconnected", () => voiceSession.connectionLost());
+
+    // The native share could not come back after the voice reconnect.
+    onSfu("native-screen-share-ended", (payload) => {
+      nativeShareEndedRef.current(payload, sfu, "reconnect");
+    });
 
     onSfu("voice-reconnected", () => {
       void (async () => {
@@ -4388,6 +4401,43 @@ export function useVoiceChannel({
   //   * `connection-failed` — the hardware stream's connection died mid-share.
   //     Restart the same source through CEF capture (quality and audio kept)
   //     unless the hook-exclusive policy forbids WGC/CEF capture, then stop.
+  // The client emits the same `connection-failed` when a native share could
+  // not reconnect after a voice reconnect (the backend says nothing for a
+  // stop the renderer made); it counts only while the live share is native.
+  const handleNativeShareEnded = useCallback(
+    (
+      rawPayload: unknown,
+      client: SFUClient | null,
+      origin: "backend" | "reconnect",
+    ) => {
+      const share = existingScreenShare(client);
+      const wanted = share?.wanted ?? null;
+      const payload = parseNativeShareEndedPayload(rawPayload);
+      const action = resolveNativeShareEndedAction(payload, {
+        isSharing:
+          wanted !== null &&
+          (origin === "backend" || share?.live?.path === "native"),
+        wgcCaptureAllowed: isWgcCaptureAllowed(),
+      });
+      vcLog.info("Native screen share ended by itself", {
+        origin,
+        payload,
+        action,
+      });
+      if (!share || !wanted || action === "ignore") return;
+      if (action === "fallback-cef") {
+        toast.info("Screen share switched to standard capture", {
+          id: "native-share-fallback",
+          description: "The hardware stream lost its connection.",
+        });
+        share.start({ ...wanted, preferNative: false });
+      } else {
+        share.stop();
+      }
+    },
+    [existingScreenShare],
+  );
+  nativeShareEndedRef.current = handleNativeShareEnded;
   useEffect(() => {
     if (!isDesktop()) return;
     let cancelled = false;
@@ -4396,27 +4446,7 @@ export function useVoiceChannel({
       try {
         const dispose = await getHost().media.onNativeScreenShareEnded(
           (rawPayload) => {
-            const share = existingScreenShare(sfuRef.current);
-            const wanted = share?.wanted ?? null;
-            const payload = parseNativeShareEndedPayload(rawPayload);
-            const action = resolveNativeShareEndedAction(payload, {
-              isSharing: wanted !== null,
-              wgcCaptureAllowed: isWgcCaptureAllowed(),
-            });
-            vcLog.info("Native screen share ended by the backend", {
-              payload,
-              action,
-            });
-            if (!share || !wanted) return;
-            if (action === "fallback-cef") {
-              toast.info("Screen share switched to standard capture", {
-                id: "native-share-fallback",
-                description: "The hardware stream lost its connection.",
-              });
-              share.start({ ...wanted, preferNative: false });
-            } else if (action === "stop") {
-              share.stop();
-            }
+            handleNativeShareEnded(rawPayload, sfuRef.current, "backend");
           },
         );
         if (cancelled) dispose();
@@ -4429,7 +4459,7 @@ export function useVoiceChannel({
       cancelled = true;
       if (unlisten) unlisten();
     };
-  }, [existingScreenShare]);
+  }, [handleNativeShareEnded]);
 
   // ── Toggle local preview capture ───────────────────────────────────────────
   // Stops or restarts the CEF preview MediaStream entirely for performance.
