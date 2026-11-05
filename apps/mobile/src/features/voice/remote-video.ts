@@ -47,6 +47,8 @@ export interface VideoSubscriber {
   setRemoteTrackSubscription(trackName: string, subscribe: boolean): void;
   /** Closes every video pull nobody subscribes to, kept ones included. */
   releaseUnwatchedVideo(): void;
+  /** A shown remote camera's flow (the media manager's videoHealth). */
+  videoFlowOf(track: MediaStreamTrack): VideoFlow | undefined;
 }
 
 /** A video publication the PartyTracks transport can pull. */
@@ -191,6 +193,12 @@ export class RemoteVideo {
     this.shown.set(trackName, shown);
     console.log(`[Voice] Remote video ${trackName}`);
     registerRenderStream(url, stream as unknown as MediaStream);
+    // The health monitor took the track before this (and said so while it
+    // was not shown yet): seed its flow first, so a re-pulled camera's tile
+    // shows the loading state, not black video, until it decodes.
+    if (shown.slot === "camera") {
+      setCameraFlow(shown.participantId, this.subscriber()?.videoFlowOf(track));
+    }
     if (this.subscribed) setVideo(shown.participantId, shown.slot, url);
   }
 

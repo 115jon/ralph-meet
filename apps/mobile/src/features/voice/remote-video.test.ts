@@ -26,16 +26,20 @@ vi.mock("./store", () => ({
   },
 }));
 
-import type { TrackInfo } from "@ralph/voice-media";
+import type { TrackInfo, VideoFlow } from "@ralph/voice-media";
 
 import { RemoteVideo, type VideoSubscriber } from "./remote-video";
 
-function setup() {
+function setup(
+  videoFlowOf: (track: MediaStreamTrack) => VideoFlow | undefined = () =>
+    undefined,
+) {
   const calls: string[] = [];
   const subscriber: VideoSubscriber = {
     setRemoteTrackSubscription: (trackName, subscribe) =>
       calls.push(`${subscribe ? "sub" : "unsub"}:${trackName}`),
     releaseUnwatchedVideo: () => calls.push("release"),
+    videoFlowOf,
   };
   const video = new RemoteVideo(() => subscriber);
   return { calls, video };
@@ -121,5 +125,28 @@ describe("RemoteVideo", () => {
     video.refreshFlows(() => "playing");
     video.onTrack("remove", camera, info("cam-video-a"));
     expect(store.call.cameraFlows).toEqual({});
+  });
+
+  it("shows a re-pulled camera as waiting from the moment it is added", () => {
+    store.call = { videos: {}, cameraFlows: {} };
+    const camera = { id: "camera" } as unknown as MediaStreamTrack;
+    // The health monitor watched the re-pull's track (and notified) before
+    // the track reached RemoteVideo: no flow change follows until a reading.
+    const { video } = setup((track) =>
+      track === camera ? "waiting" : undefined,
+    );
+    video.noteOffer("cam-video-a");
+    video.setWatching(true);
+    video.onTrack("add", camera, {
+      participant_id: "a",
+      track_name: "cam-video-a",
+      sfu_track_name: "cam-video-a-sfu",
+      session_id: "a-session",
+      kind: "video",
+    });
+    expect(store.call.cameraFlows).toEqual({ a: "waiting" });
+    expect(store.call.videos).toEqual({
+      a: { camera: "stream-url", screen: null },
+    });
   });
 });
