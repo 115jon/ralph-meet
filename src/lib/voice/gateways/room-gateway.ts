@@ -121,15 +121,17 @@ export class RoomGateway extends BaseGateway<
     this.socket.connect({ freshTicket: true });
   }
 
-  protected async acquireTicket(): Promise<RoomSocketTicket> {
+  protected async acquireTicket(
+    signal: AbortSignal,
+  ): Promise<RoomSocketTicket> {
     const options = this.options;
     if (!options) throw new Error("Room socket has no room to connect to");
     const audience = options.roomSlug === "global-gateway" ? "global" : "room";
     markVoice("RoomGW:ticket-start", { roomSlug: options.roomSlug });
     const bundle =
       audience === "global"
-        ? { protocols: await fetchSocketProtocols({ audience }) }
-        : await takeRoomSocketTicket(admissionTarget(options));
+        ? { protocols: await fetchSocketProtocols({ audience }, signal) }
+        : await takeRoomSocketTicket(admissionTarget(options), signal);
     const path =
       audience === "global"
         ? "/api/gateway"

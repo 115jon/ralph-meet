@@ -50,6 +50,7 @@ type AdmissionOptions = {
 function postAdmission(
   body: Record<string, unknown>,
   token: string | null,
+  signal?: AbortSignal,
 ): Promise<Response> {
   const headers = new Headers({ "Content-Type": "application/json" });
   if (token) headers.set("Authorization", `Bearer ${token}`);
@@ -61,6 +62,7 @@ function postAdmission(
     credentials: "include",
     headers,
     body: JSON.stringify(body),
+    signal,
   });
 }
 
@@ -68,10 +70,13 @@ function postAdmission(
  * One admission. A 401 asks Kova for a fresh app token (shared with every
  * other refused call, see app-session-recovery) and tries once more with it.
  * A 401 that survives that is the socket's to count (SocketTicketError).
+ * `signal` is a socket's (RealtimeSocket aborts it when the attempt times
+ * out or is dropped); a join's shared request and a prefetch take none.
  */
 export async function requestVoiceAdmission(
   target: CallAdmissionTarget,
   options: AdmissionOptions,
+  signal?: AbortSignal,
 ): Promise<VoiceAdmission> {
   // Moved here by a moderator: the grant stands in for CONNECT. The server
   // spends it once per use, so a hover prefetch never carries it.
@@ -88,11 +93,11 @@ export async function requestVoiceAdmission(
     ...(moveGrant ? { moveGrant } : {}),
   };
   const token = getDesktopToken() ?? getStoredKovaAuthSessionToken();
-  let response = await postAdmission(body, token);
+  let response = await postAdmission(body, token, signal);
   if (response.status === 401) {
     const freshToken = await recoverAppSession(token);
     if (freshToken && freshToken !== token) {
-      response = await postAdmission(body, freshToken);
+      response = await postAdmission(body, freshToken, signal);
     }
   }
   if (!response.ok) throw new SocketTicketError(response.status);
@@ -311,10 +316,12 @@ export type RoomSocketAdmission = {
  * The room socket's ticket: the join's admission the first time, then one
  * room-only request per reconnect. Those mint nothing: a Resume keeps the
  * credentials the client holds, and an Identify (a new participant) gets
- * them in MediaReady.
+ * them in MediaReady. `signal` aborts the room-only request, never the
+ * join's (the voice socket shares it).
  */
 export async function takeRoomSocketTicket(
   target: CallAdmissionTarget,
+  signal?: AbortSignal,
 ): Promise<RoomSocketAdmission> {
   const join = openJoin(target, "room");
   if (join) {
@@ -326,11 +333,11 @@ export async function takeRoomSocketTicket(
       };
     }
   }
-  const admission = await requestVoiceAdmission(target, {
-    sockets: ["room"],
-    media: false,
-    withMoveGrant: true,
-  });
+  const admission = await requestVoiceAdmission(
+    target,
+    { sockets: ["room"], media: false, withMoveGrant: true },
+    signal,
+  );
   return {
     protocols: buildSocketTicketProtocols(requireTicket(admission.roomTicket)),
   };
@@ -339,11 +346,13 @@ export async function takeRoomSocketTicket(
 /**
  * The voice socket's ticket, bound to `participantId` when known: the join's
  * admission the first time (bound to the participant it minted), then one
- * voice-only request per reconnect.
+ * voice-only request per reconnect. `signal` aborts that request, never
+ * the join's (the room socket shares it).
  */
 export async function takeVoiceSocketTicket(
   target: CallAdmissionTarget,
   participantId: string | null,
+  signal?: AbortSignal,
 ): Promise<string[]> {
   const join = openJoin(target, "voice");
   if (join) {
@@ -355,12 +364,16 @@ export async function takeVoiceSocketTicket(
       return buildSocketTicketProtocols(admission.voiceTicket);
     }
   }
-  const admission = await requestVoiceAdmission(target, {
-    sockets: ["voice"],
-    media: false,
-    ...(participantId ? { participantId } : {}),
-    withMoveGrant: true,
-  });
+  const admission = await requestVoiceAdmission(
+    target,
+    {
+      sockets: ["voice"],
+      media: false,
+      ...(participantId ? { participantId } : {}),
+      withMoveGrant: true,
+    },
+    signal,
+  );
   return buildSocketTicketProtocols(requireTicket(admission.voiceTicket));
 }
 

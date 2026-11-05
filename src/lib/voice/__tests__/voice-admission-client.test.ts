@@ -152,6 +152,24 @@ describe("a join's admission", () => {
     expect(fetch).toHaveBeenCalledTimes(3);
   });
 
+  it("passes a reconnect's signal to its request, never to the join's shared one", async () => {
+    const join = new AbortController();
+    const room = new AbortController();
+    const voice = new AbortController();
+    beginCallAdmission(target);
+    await Promise.all([
+      takeRoomSocketTicket(target, join.signal),
+      takeVoiceSocketTicket(target, null, join.signal),
+    ]);
+    await takeRoomSocketTicket(target, room.signal);
+    await takeVoiceSocketTicket(target, "participant-1", voice.signal);
+
+    const signals = vi
+      .mocked(fetch)
+      .mock.calls.map(([, init]) => (init as RequestInit).signal);
+    expect(signals).toEqual([undefined, room.signal, voice.signal]);
+  });
+
   it("does not hand the voice socket a ticket bound to another participant", async () => {
     beginCallAdmission(target);
     await takeRoomSocketTicket(target);

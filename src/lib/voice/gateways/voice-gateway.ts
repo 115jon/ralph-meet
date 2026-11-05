@@ -110,7 +110,7 @@ export class VoiceGateway extends BaseGateway<
     this.socket.connect();
   }
 
-  protected async acquireTicket() {
+  protected async acquireTicket(signal: AbortSignal) {
     const target = this.target;
     if (!target) throw new Error("Voice socket has no room to connect to");
     markVoice("VoiceGW:ticket-start", { roomSlug: target.roomSlug });
@@ -127,6 +127,7 @@ export class VoiceGateway extends BaseGateway<
           : {}),
       },
       this.participantId,
+      signal,
     );
     return {
       url: target.wsUrlGenerator(`/api/channels/${target.roomSlug}/voice?v=1`),
