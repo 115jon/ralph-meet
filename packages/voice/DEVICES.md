@@ -90,10 +90,12 @@ constraint).
 **Reopen after unlock.** When an `unverified` open fell back to the default,
 that fallback capture granted permission, so the list is readable now. The
 client looks the saved device up again (only for the kinds that were
-unverified; ids already verified are kept) and, if that gives a concrete id
-(`listed`, or still `unverified`), opens it exactly once more. If that
-works, the fallback capture is stopped and the reopened one is used; if not
-(or the device is `missing`), the fallback capture is kept.
+unverified; ids already verified are kept). If any kind then has a concrete
+id (a verified id, `listed`, or still `unverified`), it opens once more with
+those ids; a kind whose device is now `missing` is opened as the default in
+that same capture. If that works, the fallback capture is stopped and the
+reopened one is used. If no kind has a concrete id, or the reopen fails, the
+fallback capture is kept.
 
 ## Keeping a capture
 
@@ -182,7 +184,8 @@ After a capture is committed, `captureOutcome(saved, opened)` (with
 - **persist**: `deviceToPersist` — an id to write back, with the opened
   label and groupId, or nothing. Only a **refreshed id for the same physical
   device** is saved: a concrete choice is saved, the opened id differs and is
-  not `default`/`communications`, and either the labels are equal, or the
+  not `default`/`communications`, and either the labels are known (non-empty)
+  and equal, or the
   groupIds are equal and (when both labels are known) the labels overlap.
 - **fellBack**: a concrete choice is saved, the capture opened another id,
   and that is not a refreshed id.
