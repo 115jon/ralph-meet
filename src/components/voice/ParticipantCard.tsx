@@ -339,7 +339,7 @@ function ParticipantCardImpl({
                 <LedLabel state="idle" size={6} className="shrink-0">
                   Ringing
                 </LedLabel>
-              ) : isCamera && !isTray ? (
+              ) : isCamera && !isTray && cameraVideo === "video" ? (
                 <span
                   className={cn(
                     "shrink-0 rounded-xs px-1 text-num-xs",

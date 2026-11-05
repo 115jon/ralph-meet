@@ -119,6 +119,8 @@ describe("ParticipantCard remote camera video", () => {
     // the video kept mounted (it is measured on screen).
     act(() => sfu.set(track, "stalled"));
     expect(queryByText("Video unavailable")).not.toBeNull();
+    // No resolution readout for video that is not showing.
+    expect(queryByText(/FPS/)).toBeNull();
     expect(container.querySelector('[role="img"]')?.textContent).toBe("A");
     expect(videoLayer(container)?.className).toContain("opacity-0");
 
