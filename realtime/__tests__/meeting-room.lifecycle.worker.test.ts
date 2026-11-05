@@ -3241,12 +3241,21 @@ describe("MeetingRoom lifecycle", () => {
     resumedSocket.close();
   });
 
-  it("rejects Resume for an active session that has not disconnected", async () => {
+  // A client whose old socket's close never arrived (a network change)
+  // resumes on a new one: the same subject takes the live session over
+  // (SOCKET_CORE.md). Another subject is refused (see below and
+  // "Resume of a session still live on a lost socket").
+  it("moves an active session that has not disconnected to the same subject's Resume", async () => {
     const roomName = crypto.randomUUID();
     const original = await openMeetingSocket(roomName);
     const ready = await identifyMeetingSocket(original);
+    const originalClosed = new Promise<number>((resolve) => {
+      original.addEventListener("close", (event) => resolve(event.code), {
+        once: true,
+      });
+    });
     const takeover = await openMeetingSocket(roomName);
-    const error = nextJsonMessage(takeover);
+    const resumed = nextMessageWithOpcodeWithin(takeover, 9);
 
     takeover.send(
       JSON.stringify({
@@ -3255,12 +3264,8 @@ describe("MeetingRoom lifecycle", () => {
       }),
     );
 
-    await expect(error).resolves.toMatchObject({
-      op: 18,
-      d: { code: 4006 },
-    });
-
-    original.close();
+    await resumed;
+    await expect(originalClosed).resolves.toBe(4006);
     takeover.close();
   });
 
@@ -4195,5 +4200,91 @@ describe("VoiceRoom reaper confirms a joined participant", () => {
 
     meetingSocket.close();
     voiceSocket.close();
+  });
+});
+
+describe("Resume of a session still live on a lost socket", () => {
+  it("moves a global session to the resuming socket with no presence change", async () => {
+    const gateway = `resume-live-${crypto.randomUUID()}`;
+    const userId = `resume-live-user-${crypto.randomUUID()}`;
+    const observer = await openGlobalSocket(gateway, "resume-live-observer");
+    await identifyMeetingSocket(observer);
+    const lost = await openGlobalSocket(gateway, userId);
+    const ready = await identifyMeetingSocket(lost);
+    const presence: Array<{ user_id?: string; status?: string }> = [];
+    observer.addEventListener("message", (event) => {
+      const frame = JSON.parse(event.data as string) as {
+        op: number;
+        d?: { event?: string; data?: { user_id?: string; status?: string } };
+      };
+      if (frame.op === 19 && frame.d?.event === "PRESENCE_UPDATE") {
+        presence.push(frame.d.data ?? {});
+      }
+    });
+
+    const lostClosed = new Promise<{ code: number; reason: string }>(
+      (resolve) => {
+        lost.addEventListener(
+          "close",
+          (event) => resolve({ code: event.code, reason: event.reason }),
+          { once: true },
+        );
+      },
+    );
+    const resumed = await openGlobalSocket(gateway, userId);
+    const resumedReply = nextMessageWithOpcodeWithin(resumed, 9);
+    resumed.send(
+      JSON.stringify({
+        op: 7,
+        d: { session_id: ready.participant_id, seq_ack: 0 },
+      }),
+    );
+    await resumedReply;
+    await expect(lostClosed).resolves.toEqual({
+      code: 4006,
+      reason: "Session resumed on another connection",
+    });
+
+    const sessions = await runInDurableObject(
+      meetingRoom(gateway),
+      (instance) =>
+        [
+          ...(
+            instance as unknown as { sessions: Map<unknown, { id: string }> }
+          ).sessions.values(),
+        ].map((session) => session.id),
+    );
+    expect(sessions.filter((id) => id === ready.participant_id)).toHaveLength(
+      1,
+    );
+    // The heartbeat answers on the new socket: it holds the session.
+    const ack = nextMessageWithOpcodeWithin(resumed, 6);
+    resumed.send(JSON.stringify({ op: 3 }));
+    expect(((await ack).d as { seq: number }).seq).toBeGreaterThan(0);
+    expect(presence.filter((update) => update.user_id === userId)).toEqual([]);
+
+    resumed.close();
+    observer.close();
+  });
+
+  it("refuses a Resume of a live session from another subject", async () => {
+    const gateway = `resume-live-${crypto.randomUUID()}`;
+    const owner = await openGlobalSocket(gateway, "resume-live-owner");
+    const ready = await identifyMeetingSocket(owner);
+
+    const other = await openGlobalSocket(gateway, "resume-live-other");
+    const refused = nextMessageWithOpcodeWithin(other, 18);
+    other.send(
+      JSON.stringify({
+        op: 7,
+        d: { session_id: ready.participant_id, seq_ack: 0 },
+      }),
+    );
+    expect(((await refused).d as { code: number }).code).toBe(4008);
+
+    const ack = nextMessageWithOpcodeWithin(owner, 6);
+    owner.send(JSON.stringify({ op: 3 }));
+    expect(((await ack).d as { seq: number }).seq).toBeGreaterThan(0);
+    owner.close();
   });
 });

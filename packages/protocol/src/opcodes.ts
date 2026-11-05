@@ -147,6 +147,14 @@ export const HEARTBEAT_FRAME = '{"op":3}';
 export const VOICE_MOVED_CLOSE_REASON = "Moved to another voice channel";
 
 /**
+ * Close reason (with SessionInvalid) for a room or global socket whose
+ * session a Resume on a newer socket took over: the client lost this one
+ * without its close reaching the server. The client has left the socket
+ * already; one that still hears the close retries as for any drop.
+ */
+export const RESUMED_ELSEWHERE_REASON = "Session resumed on another connection";
+
+/**
  * Codes carried in `Error` frames (`d.code`) and, for some, as WebSocket close
  * codes. Clients compare against these, never against message text.
  */
