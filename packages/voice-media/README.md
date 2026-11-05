@@ -34,19 +34,23 @@ platform is injected:
 | manager `cameraSendEncodings`                        | three simulcast layers (default)                                                                         | `null`: one layer                                                                                                                                                                    |
 | manager `optInTrackPrefixes`                         | `screen-video-` (default)                                                                                | `screen-video-`, `cam-video-`: pulled while the call screen watches; `releaseUnsubscribedPulls()` in the background                                                                  |
 | transport                                            | `SplitVideoTransport`, `"fresh"`: one session, plus one per camera pulled again after a close or a stall | `SplitVideoTransport`, `"all"`: video pulls on a session of their own, dropped once they close                                                                                       |
-| manager `readVideoFrames`                            | the StatsHub's last snapshot (main session); the receiver's stats (a fresh one)                          | the receiver's stats                                                                                                                                                                 |
+| manager `readVideoFrames`                            | the StatsHub's last snapshot (main session; the receiver's until the hub has one); the receiver's stats  | the receiver's stats                                                                                                                                                                 |
 | `videoRenderDemand` (the registry the manager reads) | `VideoPlayer` reports                                                                                    | `VideoView` reports (`features/voice/render-demand.ts`)                                                                                                                              |
 
 ## A camera that shows nothing
 
-A video alias pulled again (its publication is a new SFU track, such as an
-iPhone turning its camera back on, or its pull was dropped by the
-watchdog) is pulled with `fresh`: on a new video session, as the SFU
-recycles a closed m-line under its old MID with other RTP header extension
-IDs, which libwebrtc rejects. A camera on screen that decodes no first frame
-in 6 s, or no new frame for 5 s, is pulled again that way once
-(`RemoteVideoHealth`); still stalled, its tile shows the avatar and "Video
-unavailable" until frames come back. Screen shares are not measured (a
+A video alias pulled again after its pull closed (its publication is a new
+SFU track, such as an iPhone turning its camera back on; its pull was
+dropped by the watchdog, unsubscribed or recovered) is pulled with `fresh`:
+on a new video session, as the SFU recycles a closed m-line under its old
+MID with other RTP header extension IDs, which libwebrtc rejects. The
+manager remembers the alias until a fresh pull brings it back, so every
+later pull of it is fresh too (one lost to a withdrawal, or cut short by a
+new offer). A camera on screen that decodes no first frame in 6 s, or no new
+frame for 5 s, is pulled again that way once (`RemoteVideoHealth`), and its
+re-pull gets 10 s for a first frame, as its new connection must connect
+first; still stalled, its tile shows the avatar and "Video unavailable"
+until frames come back. Screen shares are not measured (a
 still screen legitimately sends nothing).
 
 Nothing here changes the wire: gateway messages are sent by the platform's
