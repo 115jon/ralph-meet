@@ -81,6 +81,8 @@ describe("RemoteVideoHealth", () => {
 
     const second = track("second");
     health.watch("cam-video-a", second);
+    // The re-pull's track waits from the start: no black frame meanwhile.
+    expect(health.flowOf(second)).toBe("waiting");
     shown.add(second);
     frames.set(second, 0);
     await at(7_000);

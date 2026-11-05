@@ -78,7 +78,14 @@ export class RemoteVideoHealth implements RemoteVideoHealthSource {
   /** A remote camera track is shown (the manager's onRemoteTrack add). */
   watch(trackName: string, track: MediaStreamTrack): void {
     if (this.disposed || this.watched.has(track)) return;
-    this.watched.set(track, { trackName, track, detector: null });
+    // A re-pull's track is waiting from the start, so its tile shows the
+    // loading state rather than black until the first reading. Any other
+    // new track shows as before until it is measured.
+    const detector = this.recovered.has(trackName)
+      ? new VideoFlowDetector(this.now(), this.options)
+      : null;
+    this.watched.set(track, { trackName, track, detector });
+    if (detector) this.notify();
     this.ensureTicking();
   }
 
