@@ -398,6 +398,14 @@ export class CallSession {
     if (this.voice.isLive) this.video.setWatching(watching);
   }
 
+  /**
+   * The app went to the background (outside PiP), or came back: in the
+   * background no remote video is pulled at all (see RemoteVideo).
+   */
+  setInBackground(background: boolean): void {
+    if (this.voice.isLive) this.video.setBackground(background);
+  }
+
   /** Re-reads every pulled track's gain (a person's volume or mute changed). */
   refreshAudioGains(): void {
     for (const audio of this.remoteAudio.values()) this.applyGain(audio);

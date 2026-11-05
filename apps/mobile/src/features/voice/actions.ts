@@ -375,14 +375,20 @@ export function stopScreenShare(): void {
 function onAppStateChange(state: AppStateStatus): void {
   const current = session;
   if (!current) return;
-  // In PiP the call is still on screen: the camera stays on.
-  if (state === "background" && current.cameraOn && !inPip()) {
-    resumeCamera = current.facing;
-    current.setCamera(null);
-  } else if (state === "active" && resumeCamera) {
-    const facing = resumeCamera;
-    resumeCamera = null;
-    void startCamera(facing);
+  // In PiP the call is still on screen: the camera and remote video stay.
+  if (state === "background" && !inPip()) {
+    current.setInBackground(true);
+    if (current.cameraOn) {
+      resumeCamera = current.facing;
+      current.setCamera(null);
+    }
+  } else if (state === "active") {
+    current.setInBackground(false);
+    if (resumeCamera) {
+      const facing = resumeCamera;
+      resumeCamera = null;
+      void startCamera(facing);
+    }
   }
 }
 

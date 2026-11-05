@@ -9,13 +9,22 @@ import { updateCall, type ParticipantVideo } from "./store";
 
 // Remote camera and screen video of one call. Video is opt-in on the media
 // manager (optInTrackPrefixes): a publication is pulled only once the call
-// screen watches (it is up and the app is in front, or in PiP). Once
-// pulled, it stays pulled until it ends, even when the screen stops
-// watching: the SFU cannot pull a closed slot again in the same session
-// (it recycles the m-line under the same MID with other RTP header
-// extension IDs, which libwebrtc rejects; packages/voice/SCREEN_SHARE.md,
-// "Watching"). While nobody watches, nothing renders it, so a web camera
-// drops to its lowest simulcast layer, and the store shows no video.
+// screen watches (it is up and the app is in front, or in PiP).
+//
+// Once pulled, it stays pulled while the app is in front, even when the
+// screen stops watching (another screen, the call minimised): closing a
+// pull and pulling it again on the same session can fail (the SFU recycles
+// the m-line under the same MID with other RTP header extension IDs, which
+// libwebrtc rejects; packages/voice/SCREEN_SHARE.md, "Watching"). Meanwhile
+// nothing renders it, so a web camera drops to its lowest simulcast layer,
+// and the store shows no video; a single-layer source (a screen share, a
+// phone camera) keeps its rate.
+//
+// In the background (not PiP) every video pull closes, so a phone in a
+// pocket receives no video at all. Video pulls run on their own PartyTracks
+// session (./split-transport), which goes once they have closed; back in
+// front, watching pulls them on a new session, where no closed m-line is
+// recycled.
 //
 // Aliases follow the web's publishTracks(stream, prefix): `cam-video-<id>`
 // for a camera, `screen-video-<id>` for a screen share. A native (desktop
@@ -32,9 +41,12 @@ interface Shown {
   readonly url: string;
 }
 
-/** The media manager's per-alias subscription (see setRemoteTrackSubscription). */
+/** The call connection's side of remote video. */
 export interface VideoSubscriber {
+  /** The media manager's per-alias subscription. */
   setRemoteTrackSubscription(trackName: string, subscribe: boolean): void;
+  /** Closes every video pull nobody subscribes to, kept ones included. */
+  releaseUnwatchedVideo(): void;
 }
 
 /** A video publication the PartyTracks transport can pull. */
@@ -78,38 +90,66 @@ export class RemoteVideo {
   /** Video aliases offered to us now (the subscription follows watching). */
   private readonly offered = new Set<string>();
   private readonly shown = new Map<string, Shown>();
+  /** What the call screen asks for. */
   private watching = false;
+  /** The app is in the background (PiP does not count). */
+  private background = false;
+  /** What the manager was last told: watching, unless in the background. */
+  private subscribed = false;
 
   constructor(private readonly subscriber: () => VideoSubscriber | null) {}
 
   get isWatching(): boolean {
-    return this.watching;
+    return this.subscribed;
   }
 
   /** Before the manager hears of an offered video alias. */
   noteOffer(trackName: string): void {
     if (this.offered.has(trackName)) return;
     this.offered.add(trackName);
-    if (this.watching) {
+    if (this.subscribed) {
       this.subscriber()?.setRemoteTrackSubscription(trackName, true);
     }
   }
 
-  /** The alias ended (StopTracks, the participant left). */
+  /**
+   * The alias ended (StopTracks, the participant left). Its pull may be
+   * parked for the next publication; that one is pulled once offered and
+   * watched, like any other.
+   */
   forget(trackName: string): void {
-    this.offered.delete(trackName);
+    if (!this.offered.delete(trackName)) return;
+    this.subscriber()?.setRemoteTrackSubscription(trackName, false);
   }
 
   setWatching(watching: boolean): void {
-    if (watching === this.watching) return;
     this.watching = watching;
+    this.apply();
+  }
+
+  /**
+   * The app went to the background (outside PiP) or came back. In the
+   * background every video pull closes; back in front, what the call screen
+   * watches is pulled afresh.
+   */
+  setBackground(background: boolean): void {
+    if (background === this.background) return;
+    this.background = background;
+    this.apply();
+    if (background) this.subscriber()?.releaseUnwatchedVideo();
+  }
+
+  private apply(): void {
+    const subscribed = this.watching && !this.background;
+    if (subscribed === this.subscribed) return;
+    this.subscribed = subscribed;
     const subscriber = this.subscriber();
     for (const trackName of this.offered) {
-      subscriber?.setRemoteTrackSubscription(trackName, watching);
+      subscriber?.setRemoteTrackSubscription(trackName, subscribed);
     }
     // Kept pulls carry on; the store shows them only while watched.
     for (const shown of this.shown.values()) {
-      setVideo(shown.participantId, shown.slot, watching ? shown.url : null);
+      setVideo(shown.participantId, shown.slot, subscribed ? shown.url : null);
     }
   }
 
@@ -139,8 +179,9 @@ export class RemoteVideo {
       url,
     };
     this.shown.set(trackName, shown);
+    console.log(`[Voice] Remote video ${trackName}`);
     registerRenderStream(url, stream as unknown as MediaStream);
-    if (this.watching) setVideo(shown.participantId, shown.slot, url);
+    if (this.subscribed) setVideo(shown.participantId, shown.slot, url);
   }
 
   /** Drops every rendered stream (the media is going away). */

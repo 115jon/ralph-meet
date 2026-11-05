@@ -15,10 +15,12 @@ function appInFront(): boolean {
 }
 
 /**
- * Pulls remote camera and screen video while the calling screen is focused
- * and the app is in front (or shrunk into its PiP window); minimising the
- * call, opening another screen or backgrounding the app stops the video
- * pulls (audio keeps playing).
+ * Shows remote camera and screen video while the calling screen is focused
+ * and the app is in front (or shrunk into its PiP window); new video is
+ * pulled only then. Minimising the call or opening another screen hides it
+ * but keeps what was pulled (a web camera drops to its lowest layer).
+ * Backgrounding the app outside PiP closes every video pull (actions.ts,
+ * onAppStateChange); audio keeps playing either way. See RemoteVideo.
  */
 export function useWatchCallVideo(): void {
   const focused = useIsFocused();

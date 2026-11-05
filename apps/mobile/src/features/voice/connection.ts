@@ -14,6 +14,7 @@ import type {
 import {
   PartyTracksMediaManager,
   PartyTracksTransport,
+  type IceServer,
   type TrackInfo,
 } from "@ralph/voice-media";
 
@@ -28,11 +29,14 @@ import {
 import { VideoKeepalivePool } from "./keepalive";
 import type { RepublishRequest, VoiceAppEvent, VoiceState } from "./protocol";
 import { VIDEO_TRACK_PREFIXES } from "./remote-video";
+import { SplitVideoTransport } from "./split-transport";
 import type { CallTarget } from "./tickets";
 
 // The connection of one call: the room socket (MeetingRoom), the voice
-// socket (VoiceRoom) and the one PartyTracks session, through the media
-// manager the web runs too (@ralph/voice-media). The mobile counterpart of
+// socket (VoiceRoom) and the PartyTracks sessions, through the media
+// manager the web runs too (@ralph/voice-media): one for our tracks and
+// remote audio, and one for remote video while any is pulled
+// (./split-transport). The mobile counterpart of
 // the web's SFUClient plumbing; what the messages mean for the call (the
 // roster, the phase, what to publish) is CallSession's business.
 //
@@ -141,7 +145,10 @@ function isOwnTrack(
 export class CallConnection implements VoiceSessionClient {
   private readonly room: RoomSocket;
   private readonly voice: VoiceSocket;
+  /** The main PartyTracks session (pushes, audio pulls): the call's peer connection. */
   private transport: PartyTracksTransport | null = null;
+  /** It and the video pulls' own sessions, as the media manager sees them. */
+  private mediaTransport: SplitVideoTransport | null = null;
   private manager: PartyTracksMediaManager | null = null;
   private managerParticipantId: string | null = null;
   private participant: string | null = null;
@@ -157,6 +164,9 @@ export class CallConnection implements VoiceSessionClient {
   private readonly keepalives = new VideoKeepalivePool(2, (error) =>
     log.warn("Could not open a video keepalive", error),
   );
+  /** What a new PartyTracks session (a video one, see ./split-transport) uses. */
+  private latestVoiceToken = "";
+  private latestIceServers: IceServer[] | undefined;
   private credentialTimer: ReturnType<typeof setTimeout> | null = null;
   private disconnected = false;
 
@@ -178,14 +188,15 @@ export class CallConnection implements VoiceSessionClient {
       resumed: (credentials, participants) => {
         if (this.disconnected) return;
         if (credentials.voiceToken) {
-          this.transport?.updateVoiceToken(credentials.voiceToken);
+          this.updateMediaVoiceToken(credentials.voiceToken);
           this.voice.updateVoiceToken(credentials.voiceToken);
           if (!this.voice.isReady && this.participant) {
             this.voice.connectVoice(this.participant, credentials.voiceToken);
           }
         }
         if (credentials.iceServers?.length) {
-          this.transport?.updateIceServers([...credentials.iceServers]);
+          this.latestIceServers = [...credentials.iceServers];
+          this.mediaTransport?.updateIceServers([...credentials.iceServers]);
         }
         events.roomResumed(participants);
       },
@@ -304,6 +315,16 @@ export class CallConnection implements VoiceSessionClient {
   }
 
   /**
+   * The app went to the background: close the video pulls the media
+   * manager keeps (opt-in aliases nobody subscribes to now), so nothing
+   * streams video to a phone that shows none. Their video session drains
+   * and goes; watching again pulls on a new one (./split-transport).
+   */
+  releaseUnwatchedVideo(): void {
+    this.manager?.releaseUnsubscribedPulls();
+  }
+
+  /**
    * A remote participant's voice socket went and their grace ran out:
    * their tracks go, except the ones they offered again meanwhile.
    */
@@ -419,27 +440,36 @@ export class CallConnection implements VoiceSessionClient {
   private ensureMedia(credentials: MediaCredentials): void {
     if (
       this.manager &&
-      this.transport &&
+      this.mediaTransport &&
       this.managerParticipantId === credentials.participantId
     ) {
-      this.transport.updateVoiceToken(credentials.voiceToken);
+      this.updateMediaVoiceToken(credentials.voiceToken);
       return;
     }
     this.disposeMedia();
     const participantId = credentials.participantId;
-    const transport = new PartyTracksTransport(
-      {
-        roomSlug: this.target.roomSlug,
-        participantId,
-        voiceToken: credentials.voiceToken,
-        iceServers: credentials.iceServers
-          ? [...credentials.iceServers]
-          : undefined,
-      },
-      { resolveApiUrl: (path) => `${config.apiBaseUrl}${path}` },
-    );
+    this.latestVoiceToken = credentials.voiceToken;
+    this.latestIceServers = credentials.iceServers
+      ? [...credentials.iceServers]
+      : undefined;
+    const createSession = () =>
+      new PartyTracksTransport(
+        {
+          roomSlug: this.target.roomSlug,
+          participantId,
+          voiceToken: this.latestVoiceToken,
+          iceServers: this.latestIceServers
+            ? [...this.latestIceServers]
+            : undefined,
+        },
+        { resolveApiUrl: (path) => `${config.apiBaseUrl}${path}` },
+      );
+    const transport = createSession();
+    const mediaTransport = new SplitVideoTransport(transport, {
+      createVideoSession: createSession,
+    });
     const manager = new PartyTracksMediaManager(
-      transport,
+      mediaTransport,
       participantId,
       {
         onPublicationMetadata: (track) => {
@@ -495,11 +525,13 @@ export class CallConnection implements VoiceSessionClient {
         createVideoKeepalive: this.keepalives.create,
         // One camera layer from a phone; web cameras are pulled by layer.
         cameraSendEncodings: null,
-        // Video is pulled only while the call screen watches, and kept.
+        // Video is pulled only while the call screen watches, and kept
+        // until the app goes to the background (releaseUnwatchedVideo).
         optInTrackPrefixes: VIDEO_TRACK_PREFIXES,
       },
     );
     this.transport = transport;
+    this.mediaTransport = mediaTransport;
     this.manager = manager;
     this.managerParticipantId = participantId;
     for (const [trackName, subscribe] of this.subscriptions) {
@@ -513,11 +545,17 @@ export class CallConnection implements VoiceSessionClient {
     }
   }
 
+  private updateMediaVoiceToken(voiceToken: string): void {
+    this.latestVoiceToken = voiceToken;
+    this.mediaTransport?.updateVoiceToken(voiceToken);
+  }
+
   private disposeMedia(): void {
     this.manager?.dispose();
-    this.transport?.dispose();
+    this.mediaTransport?.dispose();
     this.manager = null;
     this.transport = null;
+    this.mediaTransport = null;
     this.managerParticipantId = null;
   }
 
