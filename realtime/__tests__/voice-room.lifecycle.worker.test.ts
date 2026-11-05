@@ -572,6 +572,34 @@ async function identifyVoiceSocket(
   });
 }
 
+/** The participant's held_until (the voice reconnect hold), or undefined without a row. */
+async function heldUntil(
+  roomName: string,
+  participantId: string,
+): Promise<number | null | undefined> {
+  const room = env.VOICE_ROOM.get(env.VOICE_ROOM.idFromName(roomName));
+  return runInDurableObject(room, (_instance, state) => {
+    const row = [
+      ...state.storage.sql.exec(
+        "SELECT held_until FROM participants WHERE id = ?",
+        participantId,
+      ),
+    ][0];
+    return row ? ((row.held_until as number | null) ?? null) : undefined;
+  });
+}
+
+/** Runs the hold out: every held participant's held_until is now past. */
+async function expireReconnectHolds(roomName: string): Promise<void> {
+  const room = env.VOICE_ROOM.get(env.VOICE_ROOM.idFromName(roomName));
+  await runInDurableObject(room, (_instance, state) => {
+    state.storage.sql.exec(
+      "UPDATE participants SET held_until = 1 WHERE held_until IS NOT NULL",
+    );
+  });
+  expect(await runDurableObjectAlarm(room)).toBe(true);
+}
+
 async function trackNames(roomName: string): Promise<string[]> {
   const room = env.VOICE_ROOM.get(env.VOICE_ROOM.idFromName(roomName));
   return runInDurableObject(room, (_instance, state) =>
@@ -2946,13 +2974,15 @@ describe("VoiceRoom lifecycle", () => {
       ).toHaveLength(1);
     });
 
-    const disconnected = nextMessageWithOpcode(observer, 11);
     const staleDescription = hasMessageWithOpcode(publisher, 4, 250);
     const staleNegotiation = hasMessageWithOpcode(publisher, 10, 250);
     const stalePublication = hasMessageWithOpcode(observer, 12, 250);
     publisher.close();
-    await expect(disconnected).resolves.toMatchObject({
-      d: { participant_id: participantId },
+    // Held through a possible reconnect; the native share ends at once.
+    await vi.waitFor(async () => {
+      expect(await heldUntil(roomName, participantId)).toEqual(
+        expect.any(Number),
+      );
     });
 
     delayedTracksResponse.resolve(undefined);
@@ -2994,6 +3024,12 @@ describe("VoiceRoom lifecycle", () => {
         ),
       ),
     ).toHaveLength(1);
+
+    const disconnected = nextMessageWithOpcode(observer, 11);
+    await expireReconnectHolds(roomName);
+    await expect(disconnected).resolves.toMatchObject({
+      d: { participant_id: participantId },
+    });
     observer.close();
     late.close();
   });
@@ -3574,20 +3610,27 @@ describe("VoiceRoom lifecycle", () => {
     });
 
     publisher.close();
+    // At once, though the participant is held through a possible reconnect.
     await expect(nextMessageWithOpcode(observer, 5)).resolves.toMatchObject({
       d: { participant_id: publisherId, speaking: 0 },
     });
 
     const room = env.VOICE_ROOM.get(env.VOICE_ROOM.idFromName(roomName));
-    await runInDurableObject(room, (_instance, state) => {
-      const row = [
-        ...state.storage.sql.exec(
-          "SELECT speaking FROM participants WHERE id = ?",
-          publisherId,
-        ),
-      ][0];
-      expect(row).toBeUndefined();
-    });
+    const speakingRow = () =>
+      runInDurableObject(
+        room,
+        (_instance, state) =>
+          [
+            ...state.storage.sql.exec(
+              "SELECT speaking FROM participants WHERE id = ?",
+              publisherId,
+            ),
+          ][0],
+      );
+    expect(await speakingRow()).toMatchObject({ speaking: 0 });
+
+    await expireReconnectHolds(roomName);
+    expect(await speakingRow()).toBeUndefined();
 
     observer.close();
   });
@@ -5686,6 +5729,352 @@ describe("VoiceRoom lifecycle", () => {
       d: { type: "listen_together.error", code: "EMPTY_QUEUE" },
     });
     socket.close();
+  });
+});
+
+describe("VoiceRoom voice reconnect hold", () => {
+  /** Every frame the socket receives from now on. */
+  function recordFrames(socket: WebSocket): Array<{ op: number; d: unknown }> {
+    const frames: Array<{ op: number; d: unknown }> = [];
+    socket.addEventListener("message", (event: MessageEvent<string>) => {
+      frames.push(JSON.parse(event.data) as { op: number; d: unknown });
+    });
+    return frames;
+  }
+
+  function opcodes(frames: Array<{ op: number }>): number[] {
+    return frames.map((frame) => frame.op);
+  }
+
+  async function publish(
+    socket: WebSocket,
+    participantId: string,
+    roomName: string,
+    sessionLabel: string,
+    tracks: Array<{ name: string; sfu: string; kind: "audio" | "video" }>,
+  ) {
+    const sessionId = await issuePartyTracksSessionCapability(
+      participantId,
+      roomName,
+      sessionLabel,
+    );
+    socket.send(
+      JSON.stringify({
+        op: 12,
+        d: {
+          tracks: tracks.map((track) => ({
+            participant_id: participantId,
+            track_name: track.name,
+            sfu_track_name: track.sfu,
+            session_id: sessionId,
+            kind: track.kind,
+          })),
+        },
+      }),
+    );
+    return sessionId;
+  }
+
+  async function heldTrackFlags(
+    roomName: string,
+  ): Promise<Record<string, number>> {
+    const room = env.VOICE_ROOM.get(env.VOICE_ROOM.idFromName(roomName));
+    return runInDurableObject(room, (_instance, state) =>
+      Object.fromEntries(
+        [...state.storage.sql.exec("SELECT track_name, held FROM tracks")].map(
+          (row) => [row.track_name as string, Number(row.held)],
+        ),
+      ),
+    );
+  }
+
+  async function setUp() {
+    const roomName = crypto.randomUUID();
+    const publisherId = crypto.randomUUID();
+    const listenerId = crypto.randomUUID();
+    await mockCallsApi(roomName, async () => Response.json({}));
+    const publisher = await openVoiceSocket(roomName);
+    await identifyVoiceSocket(publisher, publisherId, roomName);
+    const listener = await openVoiceSocket(roomName, "listener-user");
+    await identifyVoiceSocket(listener, listenerId, roomName, "listener-user");
+    const audio = `cam-audio-${publisherId}`;
+    const video = `cam-video-${publisherId}`;
+    const offered = nextMessageWithOpcode(listener, 12);
+    const sessionId = await publish(
+      publisher,
+      publisherId,
+      roomName,
+      "held-session",
+      [
+        { name: audio, sfu: "sfu-audio-1", kind: "audio" },
+        { name: video, sfu: "sfu-video-1", kind: "video" },
+      ],
+    );
+    await offered;
+    return {
+      roomName,
+      publisherId,
+      publisher,
+      listener,
+      audio,
+      video,
+      sessionId,
+    };
+  }
+
+  it("keeps a reconnecting publisher's tracks with no op 11 or 13 when it offers them again", async () => {
+    const { roomName, publisherId, publisher, listener, audio, video } =
+      await setUp();
+    const frames = recordFrames(listener);
+
+    publisher.close();
+    await vi.waitFor(async () => {
+      expect(await heldUntil(roomName, publisherId)).toEqual(
+        expect.any(Number),
+      );
+    });
+    expect(await heldTrackFlags(roomName)).toEqual({ [audio]: 1, [video]: 1 });
+
+    const replacement = await openVoiceSocket(roomName);
+    await identifyVoiceSocket(replacement, publisherId, roomName);
+    const reoffered = nextMessageWithOpcode(listener, 12);
+    // The PartyTracks session survived the socket: the same SFU tracks.
+    await publish(replacement, publisherId, roomName, "held-session", [
+      { name: audio, sfu: "sfu-audio-1", kind: "audio" },
+      { name: video, sfu: "sfu-video-1", kind: "video" },
+    ]);
+    await expect(reoffered).resolves.toMatchObject({
+      d: {
+        participant_id: publisherId,
+        tracks: [
+          expect.objectContaining({
+            track_name: audio,
+            sfu_track_name: "sfu-audio-1",
+          }),
+          expect.objectContaining({
+            track_name: video,
+            sfu_track_name: "sfu-video-1",
+          }),
+        ],
+      },
+    });
+    await vi.waitFor(async () => {
+      expect(await heldTrackFlags(roomName)).toEqual({
+        [audio]: 0,
+        [video]: 0,
+      });
+    });
+
+    await expireReconnectHolds(roomName);
+    expect(await heldUntil(roomName, publisherId)).toBeNull();
+    expect((await trackNames(roomName)).sort()).toEqual([audio, video].sort());
+    await expect(hasMessageWithOpcode(listener, 13, 150)).resolves.toBe(false);
+    expect(opcodes(frames)).not.toContain(11);
+    expect(opcodes(frames)).not.toContain(13);
+
+    replacement.close();
+    listener.close();
+  });
+
+  it("holds the tracks when the participant identifies again before its old socket closes", async () => {
+    const { roomName, publisherId, publisher, listener, audio, video } =
+      await setUp();
+    const frames = recordFrames(listener);
+    const replaced = new Promise<CloseEvent>((resolve) =>
+      publisher.addEventListener("close", resolve, { once: true }),
+    );
+
+    const replacement = await openVoiceSocket(roomName);
+    await identifyVoiceSocket(replacement, publisherId, roomName);
+    await expect(replaced).resolves.toMatchObject({
+      reason: "Replaced by new connection",
+    });
+    expect(await heldTrackFlags(roomName)).toEqual({ [audio]: 1, [video]: 1 });
+
+    await publish(replacement, publisherId, roomName, "held-session", [
+      { name: audio, sfu: "sfu-audio-1", kind: "audio" },
+      { name: video, sfu: "sfu-video-1", kind: "video" },
+    ]);
+    await vi.waitFor(async () => {
+      expect(await heldTrackFlags(roomName)).toEqual({
+        [audio]: 0,
+        [video]: 0,
+      });
+    });
+    await expireReconnectHolds(roomName);
+    await expect(hasMessageWithOpcode(listener, 13, 150)).resolves.toBe(false);
+    expect(opcodes(frames)).not.toContain(11);
+    expect(opcodes(frames)).not.toContain(13);
+    expect((await trackNames(roomName)).sort()).toEqual([audio, video].sort());
+
+    replacement.close();
+    listener.close();
+  });
+
+  it("moves listeners to changed tracks and stops only those not offered again", async () => {
+    const { roomName, publisherId, publisher, listener, audio, video } =
+      await setUp();
+    const frames = recordFrames(listener);
+
+    publisher.close();
+    await vi.waitFor(async () => {
+      expect(await heldUntil(roomName, publisherId)).toEqual(
+        expect.any(Number),
+      );
+    });
+    const replacement = await openVoiceSocket(roomName);
+    await identifyVoiceSocket(replacement, publisherId, roomName);
+    // A rebuilt PartyTracks session republished the microphone only.
+    const reoffered = nextMessageWithOpcode(listener, 12);
+    const newSession = await publish(
+      replacement,
+      publisherId,
+      roomName,
+      "rebuilt-session",
+      [{ name: audio, sfu: "sfu-audio-2", kind: "audio" }],
+    );
+    await expect(reoffered).resolves.toMatchObject({
+      d: {
+        tracks: [
+          expect.objectContaining({
+            track_name: audio,
+            sfu_track_name: "sfu-audio-2",
+            session_id: newSession,
+          }),
+        ],
+      },
+    });
+    expect(opcodes(frames)).not.toContain(13);
+
+    const stopped = nextMessageWithOpcode(listener, 13);
+    await expireReconnectHolds(roomName);
+    await expect(stopped).resolves.toMatchObject({
+      d: { participant_id: publisherId, track_names: [video] },
+    });
+    expect(await trackNames(roomName)).toEqual([audio]);
+    expect(opcodes(frames)).not.toContain(11);
+
+    replacement.close();
+    listener.close();
+  });
+
+  it("purges a participant that does not reconnect within the hold", async () => {
+    const { roomName, publisherId, publisher, listener, audio, video } =
+      await setUp();
+    const frames = recordFrames(listener);
+
+    publisher.close();
+    await vi.waitFor(async () => {
+      expect(await heldUntil(roomName, publisherId)).toEqual(
+        expect.any(Number),
+      );
+    });
+    expect(opcodes(frames)).not.toContain(11);
+    expect(opcodes(frames)).not.toContain(13);
+    // The alarm is due when the hold ends, not at the next zombie sweep.
+    const room = env.VOICE_ROOM.get(env.VOICE_ROOM.idFromName(roomName));
+    const until = await heldUntil(roomName, publisherId);
+    const alarm = await runInDurableObject(room, (_instance, state) =>
+      state.storage.getAlarm(),
+    );
+    expect(alarm).not.toBeNull();
+    expect(alarm as number).toBeLessThanOrEqual(until as number);
+
+    // Someone joining meanwhile is offered the held tracks.
+    const lateId = crypto.randomUUID();
+    const late = await openVoiceSocket(roomName, "late-user");
+    await grantVoiceJoin(roomName, lateId, "late-user");
+    const ready = nextMessageWithOpcode(late, 101);
+    late.send(
+      JSON.stringify({
+        op: 100,
+        d: {
+          participant_id: lateId,
+          voice_token: await issueVoiceToken(lateId, roomName, "late-user"),
+        },
+      }),
+    );
+    const readyFrame = (await ready) as {
+      d: { tracks: Array<{ track_name: string }> };
+    };
+    expect(readyFrame.d.tracks.map((track) => track.track_name).sort()).toEqual(
+      [audio, video].sort(),
+    );
+
+    const disconnected = nextMessageWithOpcode(listener, 11);
+    const stopped = nextMessageWithOpcode(listener, 13);
+    await expireReconnectHolds(roomName);
+    await expect(disconnected).resolves.toMatchObject({
+      d: { participant_id: publisherId },
+    });
+    await expect(stopped).resolves.toMatchObject({
+      d: {
+        participant_id: publisherId,
+        track_names: expect.arrayContaining([audio, video]),
+      },
+    });
+    expect(await heldUntil(roomName, publisherId)).toBeUndefined();
+    expect(await trackNames(roomName)).toEqual([]);
+
+    late.close();
+    listener.close();
+  });
+
+  it("purges a held participant at once when it leaves during the hold", async () => {
+    const { roomName, publisherId, publisher, listener, audio, video } =
+      await setUp();
+
+    publisher.close();
+    await vi.waitFor(async () => {
+      expect(await heldUntil(roomName, publisherId)).toEqual(
+        expect.any(Number),
+      );
+    });
+
+    const disconnected = nextMessageWithOpcode(listener, 11);
+    const stopped = nextMessageWithOpcode(listener, 13);
+    const room = env.VOICE_ROOM.get(env.VOICE_ROOM.idFromName(roomName));
+    const response = await room.fetch(
+      "https://internal/disconnect-participant",
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          participant_id: publisherId,
+          user_id: TEST_SUBJECT,
+        }),
+      },
+    );
+    await expect(response.json()).resolves.toEqual({ disconnected: true });
+    await expect(disconnected).resolves.toMatchObject({
+      d: { participant_id: publisherId },
+    });
+    await expect(stopped).resolves.toMatchObject({
+      d: { track_names: expect.arrayContaining([audio, video]) },
+    });
+    expect(await heldUntil(roomName, publisherId)).toBeUndefined();
+    expect(await trackNames(roomName)).toEqual([]);
+
+    listener.close();
+  });
+
+  it("purges at once, with no hold, on a leave (op 11)", async () => {
+    const { roomName, publisherId, publisher, listener, audio, video } =
+      await setUp();
+
+    const disconnected = nextMessageWithOpcode(listener, 11);
+    const stopped = nextMessageWithOpcode(listener, 13);
+    publisher.send(JSON.stringify({ op: 11, d: {} }));
+    await expect(disconnected).resolves.toMatchObject({
+      d: { participant_id: publisherId },
+    });
+    await expect(stopped).resolves.toMatchObject({
+      d: { track_names: expect.arrayContaining([audio, video]) },
+    });
+    expect(await heldUntil(roomName, publisherId)).toBeUndefined();
+    expect(await trackNames(roomName)).toEqual([]);
+
+    listener.close();
   });
 });
 
