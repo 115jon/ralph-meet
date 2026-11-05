@@ -3870,6 +3870,19 @@ export class MeetingRoom extends DurableObject<Env> {
       return;
     }
 
+    // A resuming socket that is already closing must not take a live session:
+    // it would leave the session persisted nowhere.
+    if (liveSocket && this.isSocketClosed(ws)) {
+      this.sendTo(ws, {
+        op: Op.Error,
+        d: {
+          code: CloseCode.SessionInvalid,
+          message: "Session not found for resume",
+        },
+      });
+      return;
+    }
+
     // Consume the resumable generation before any await. A second socket must
     // never be able to replay or take over the same disconnected session.
     if (liveSocket) this.takeOverLiveSession(liveSocket, oldAttachment);
