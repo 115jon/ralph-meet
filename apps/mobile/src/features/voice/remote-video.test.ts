@@ -12,7 +12,21 @@ vi.mock("./render-demand", () => ({
   registerRenderStream: vi.fn(),
   unregisterRenderStream: vi.fn(),
 }));
-vi.mock("./store", () => ({ updateCall: vi.fn() }));
+interface StoredCall {
+  videos: Record<string, unknown>;
+  cameraFlows: Record<string, string>;
+}
+const store = vi.hoisted(() => {
+  const call: StoredCall = { videos: {}, cameraFlows: {} };
+  return { call };
+});
+vi.mock("./store", () => ({
+  updateCall: (update: (call: typeof store.call) => typeof store.call) => {
+    store.call = update(store.call);
+  },
+}));
+
+import type { TrackInfo } from "@ralph/voice-media";
 
 import { RemoteVideo, type VideoSubscriber } from "./remote-video";
 
@@ -80,5 +94,32 @@ describe("RemoteVideo", () => {
     // Offered again while watched: subscribed again.
     video.noteOffer("cam-video-a");
     expect(calls).toEqual(["unsub:cam-video-a", "sub:cam-video-a"]);
+  });
+
+  it("mirrors each shown camera's flow into the store, and drops it when hidden", () => {
+    store.call = { videos: {}, cameraFlows: {} };
+    const { video } = setup();
+    video.noteOffer("cam-video-a");
+    video.setWatching(true);
+    const camera = { id: "camera" } as unknown as MediaStreamTrack;
+    const share = { id: "share" } as unknown as MediaStreamTrack;
+    const info = (trackName: string): TrackInfo => ({
+      participant_id: "a",
+      track_name: trackName,
+      sfu_track_name: `${trackName}-sfu`,
+      session_id: "a-session",
+      kind: "video",
+    });
+    video.onTrack("add", camera, info("cam-video-a"));
+    video.onTrack("add", share, info("screen-video-a"));
+
+    video.refreshFlows((track) => (track === camera ? "stalled" : "playing"));
+    expect(store.call.cameraFlows).toEqual({ a: "stalled" });
+    video.refreshFlows(() => undefined);
+    expect(store.call.cameraFlows).toEqual({});
+
+    video.refreshFlows(() => "playing");
+    video.onTrack("remove", camera, info("cam-video-a"));
+    expect(store.call.cameraFlows).toEqual({});
   });
 });

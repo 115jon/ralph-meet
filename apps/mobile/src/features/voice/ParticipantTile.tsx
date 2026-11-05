@@ -1,24 +1,34 @@
+import { CAMERA_UNAVAILABLE_LABEL } from "@ralph/voice-media/video-flow";
 import {
   CameraRotate,
   MicrophoneSlash,
   Monitor,
   SpeakerSlash,
   SpeakerX,
+  VideoCameraSlash,
 } from "phosphor-react-native";
 import { lazy, memo, Suspense } from "react";
-import { Pressable, View, type StyleProp, type ViewStyle } from "react-native";
+import {
+  Pressable,
+  StyleSheet,
+  View,
+  type StyleProp,
+  type ViewStyle,
+} from "react-native";
 
 import { mediaUrl } from "@/lib/api";
 import { RADIUS, useTheme } from "@/theme";
 import { Avatar, Icon, Led, Text } from "@/ui";
 
 import { flipCamera } from "./actions";
+import { useCameraTileView } from "./camera-tile";
 import { PEER_VOLUME, usePeerSettings } from "./peer-settings";
 import {
   type CallTile,
   useIsSelf,
   useIsSpeaking,
   useParticipant,
+  useRemoteCamera,
   useTileMirrored,
   useTileStream,
 } from "./store";
@@ -43,6 +53,10 @@ interface ParticipantTileProps {
  * tile in talk green; muted or deafened shows the glyph in danger, and so
  * does a struck speaker when you muted them for yourself. A volume other
  * than 100% shows as a readout on the plate. All state, nothing animates.
+ * A remote camera announced on that does not play shows the avatar (with
+ * "Video unavailable" once it never came or stalled), never a black or
+ * frozen frame; its video stays mounted underneath, measured, and shows
+ * again as soon as frames come back.
  */
 export const ParticipantTile = memo(function ParticipantTile({
   tile,
@@ -57,6 +71,9 @@ export const ParticipantTile = memo(function ParticipantTile({
   const speaking = useIsSpeaking(tile.participantId);
   const self = useIsSelf(tile.participantId);
   const stream = useTileStream(tile);
+  const remoteCamera = useRemoteCamera(tile);
+  const cameraView = useCameraTileView(remoteCamera, stream !== null);
+  const showsVideo = stream !== null && cameraView === "video";
   const mirrored = useTileMirrored(tile);
   const settings = usePeerSettings(self ? null : (participant?.userId ?? null));
   if (!participant) return null;
@@ -77,9 +94,12 @@ export const ParticipantTile = memo(function ParticipantTile({
           ? { icon: MicrophoneSlash, label: "muted" }
           : null;
   const name = self ? `${participant.name} (you)` : participant.name;
+  const unavailable = cameraView === "unavailable";
   const label = screen
     ? `${name}, sharing their screen`
-    : `${name}${mark ? `, ${mark.label}` : ""}${speaking ? ", speaking" : ""}`;
+    : `${name}${mark ? `, ${mark.label}` : ""}${speaking ? ", speaking" : ""}${
+        unavailable ? `, ${CAMERA_UNAVAILABLE_LABEL.toLowerCase()}` : ""
+      }`;
 
   return (
     <Pressable
@@ -99,7 +119,7 @@ export const ParticipantTile = memo(function ParticipantTile({
         {
           flex: 1,
           borderRadius: RADIUS,
-          backgroundColor: screen || stream ? theme.ply0 : theme.ply2,
+          backgroundColor: screen || showsVideo ? theme.ply0 : theme.ply2,
           borderWidth: ringed ? 2 : 1,
           borderColor: ringed ? theme.talk : theme.line,
           alignItems: "center",
@@ -117,12 +137,49 @@ export const ParticipantTile = memo(function ParticipantTile({
             mirror={mirrored}
           />
         </Suspense>
-      ) : (
-        <Avatar
-          name={participant.name}
-          size={compact ? 40 : 56}
-          uri={mediaUrl(participant.avatarUrl)}
-        />
+      ) : null}
+      {showsVideo ? null : (
+        <View
+          style={[
+            StyleSheet.absoluteFill,
+            {
+              alignItems: "center",
+              justifyContent: "center",
+              gap: compact ? 4 : 8,
+              backgroundColor: theme.ply2,
+            },
+          ]}
+        >
+          <Avatar
+            name={participant.name}
+            size={compact ? 40 : 56}
+            uri={mediaUrl(participant.avatarUrl)}
+          />
+          {unavailable ? (
+            <View
+              style={{
+                height: 20,
+                flexDirection: "row",
+                alignItems: "center",
+                gap: 4,
+                paddingHorizontal: compact ? 4 : 6,
+                borderRadius: RADIUS,
+                backgroundColor: theme.ply4,
+              }}
+            >
+              <Icon icon={VideoCameraSlash} size={12} color={theme.ink3} />
+              {compact ? null : (
+                <Text
+                  variant="row"
+                  tone="ink2"
+                  style={{ fontSize: 11, lineHeight: 14 }}
+                >
+                  {CAMERA_UNAVAILABLE_LABEL}
+                </Text>
+              )}
+            </View>
+          ) : null}
+        </View>
       )}
       {self && stream && !screen && !compact ? (
         <Pressable

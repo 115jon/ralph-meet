@@ -14,8 +14,12 @@ import type {
 import {
   PartyTracksMediaManager,
   PartyTracksTransport,
+  readReceiverFrames,
+  SplitVideoTransport,
   type IceServer,
   type TrackInfo,
+  type VideoFlow,
+  type VideoFrameReading,
 } from "@ralph/voice-media";
 
 import { config } from "@/lib/config";
@@ -29,14 +33,13 @@ import {
 import { VideoKeepalivePool } from "./keepalive";
 import type { RepublishRequest, VoiceAppEvent, VoiceState } from "./protocol";
 import { VIDEO_TRACK_PREFIXES } from "./remote-video";
-import { SplitVideoTransport } from "./split-transport";
 import { beginCallAdmission, type CallTarget } from "./tickets";
 
 // The connection of one call: the room socket (MeetingRoom), the voice
 // socket (VoiceRoom) and the PartyTracks sessions, through the media
 // manager the web runs too (@ralph/voice-media): one for our tracks and
 // remote audio, and one for remote video while any is pulled
-// (./split-transport). The mobile counterpart of
+// (SplitVideoTransport). The mobile counterpart of
 // the web's SFUClient plumbing; what the messages mean for the call (the
 // roster, the phase, what to publish) is CallSession's business.
 //
@@ -122,6 +125,8 @@ export interface ConnectionEvents {
   mediaReset(): void;
   peerState(state: RTCPeerConnectionState): void;
   remoteTrack(event: RemoteTrackEvent): void;
+  /** A shown remote camera started or stopped playing (videoFlowOf). */
+  videoFlow(): void;
   /** A socket gave up for good (no retry): the call ends. */
   giveUp(reason: SocketGiveUp): void;
 }
@@ -161,11 +166,12 @@ export class CallConnection implements VoiceSessionClient {
   private readonly keepalives = new VideoKeepalivePool(2, (error) =>
     log.warn("Could not open a video keepalive", error),
   );
-  /** What a new PartyTracks session (a video one, see ./split-transport) uses. */
+  /** What a new PartyTracks session (a video one, see SplitVideoTransport) uses. */
   private latestVoiceToken = "";
   private latestIceServers: IceServer[] | undefined;
   private credentialTimer: ReturnType<typeof setTimeout> | null = null;
   private disconnected = false;
+  private stopVideoHealth: (() => void) | null = null;
 
   constructor(
     private readonly target: CallTarget,
@@ -333,7 +339,7 @@ export class CallConnection implements VoiceSessionClient {
    * The app went to the background: close the video pulls the media
    * manager keeps (opt-in aliases nobody subscribes to now), so nothing
    * streams video to a phone that shows none. Their video session drains
-   * and goes; watching again pulls on a new one (./split-transport).
+   * and goes; watching again pulls on a new one (SplitVideoTransport).
    */
   releaseUnwatchedVideo(): void {
     this.manager?.releaseUnsubscribedPulls();
@@ -494,6 +500,12 @@ export class CallConnection implements VoiceSessionClient {
     const transport = createSession();
     const mediaTransport = new SplitVideoTransport(transport, {
       createVideoSession: createSession,
+      onVideoSession: (event) =>
+        console.log(
+          event === "opened"
+            ? "[Voice] Video session opened"
+            : "[Voice] Video session closed (nothing pulled)",
+        ),
     });
     const manager = new PartyTracksMediaManager(
       mediaTransport,
@@ -555,8 +567,14 @@ export class CallConnection implements VoiceSessionClient {
         // Video is pulled only while the call screen watches, and kept
         // until the app goes to the background (releaseUnwatchedVideo).
         optInTrackPrefixes: VIDEO_TRACK_PREFIXES,
+        // A camera that decodes nothing is pulled again on a new video
+        // session, then shown as unavailable (RemoteVideoHealth).
+        readVideoFrames: (track) => this.readVideoFrames(track),
       },
     );
+    this.stopVideoHealth = manager.videoHealth.subscribe(() => {
+      if (!this.disconnected) this.events.videoFlow();
+    });
     this.transport = transport;
     this.mediaTransport = mediaTransport;
     this.manager = manager;
@@ -577,7 +595,22 @@ export class CallConnection implements VoiceSessionClient {
     this.mediaTransport?.updateVoiceToken(voiceToken);
   }
 
+  /** A shown remote camera's flow (see RemoteVideoHealth). */
+  videoFlowOf(track: MediaStreamTrack): VideoFlow | undefined {
+    return this.manager?.videoHealth.flowOf(track);
+  }
+
+  /** A pulled track's decoded frames, from its receiver's stats. */
+  private readVideoFrames(
+    track: MediaStreamTrack,
+  ): Promise<VideoFrameReading> | null {
+    const receiver = this.mediaTransport?.receiverFor(track);
+    return receiver ? readReceiverFrames(receiver) : null;
+  }
+
   private disposeMedia(): void {
+    this.stopVideoHealth?.();
+    this.stopVideoHealth = null;
     this.manager?.dispose();
     this.mediaTransport?.dispose();
     this.manager = null;

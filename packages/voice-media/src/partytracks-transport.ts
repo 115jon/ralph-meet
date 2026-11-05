@@ -73,6 +73,13 @@ export interface RalphPullOptions {
    * tracks/update, without renegotiating or replacing the track.
    */
   preferredRid$?: Observable<string | undefined>;
+  /**
+   * Pull on a peer connection that has closed no m-line (a new video
+   * session, see SplitVideoTransport): for a video alias pulled again after
+   * its pull closed or stalled, where the same connection could get the
+   * recycled MID back. One session (this transport) ignores it.
+   */
+  fresh?: boolean;
 }
 
 /**
@@ -197,7 +204,6 @@ export class PartyTracksTransport {
   get peerConnection(): RTCPeerConnection | null {
     return this.activePeerConnection;
   }
-
   updateVoiceToken(voiceToken: string): void {
     this.headers.set("Authorization", `Bearer ${voiceToken}`);
   }
@@ -296,6 +302,7 @@ export class PartyTracksTransport {
     track$: Observable<TrackInfo>,
     options: RalphPullOptions = {},
   ): Observable<MediaStreamTrack> {
+    // `fresh` asks for another session; this transport is one session.
     const pullOptions: PullOptions | undefined = options.preferredRid$
       ? {
           simulcast: {
