@@ -116,7 +116,14 @@ reopened.
   identifies; react-native-webrtc no longer crashes when an SDP answer lands
   on a closed peer connection. Main never reconnected; with the fix chat is
   back 1–6 s after Android reports the network, and call audio 4–10 s.
-  Needs the real-phone pass (wireless ADB drops with airplane mode).
+  Review fixes: a stalled ticket only cancels the ticket requests (an
+  upload on a slow uplink carries on), an app launched offline reports
+  the network when it comes, and web/desktop abort a timed-out ticket
+  request. Server: a Resume takes over a session still live on the socket
+  the phone lost in a network change (Wi-Fi to mobile data), so the call
+  keeps its participant instead of rejoining (`realtime/SOCKET_CORE.md`).
+  Needs the real-phone pass (wireless ADB drops with airplane mode, and a
+  Wi-Fi to mobile data switch in a call).
 - Voice on the shared packages: `@ralph/voice` (session phase and one
   teardown, publication reconciler, screen share, reconnect grace) and
   `@ralph/voice-media` (the web's PartyTracks media manager and transport);
