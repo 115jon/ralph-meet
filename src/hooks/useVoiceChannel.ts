@@ -74,7 +74,7 @@ import {
 } from "@/lib/voice/voice-standby";
 import { prewarmAudioContext } from "@/lib/voice/audio-pipeline";
 import { markVoice } from "@/lib/voice/latency-marks";
-import { prefetchVoiceChannelJoin } from "@/lib/voice/socket-ticket-client";
+import { prefetchVoiceChannelJoin } from "@/lib/voice/voice-admission-client";
 import { prewarmWebRtc } from "@/lib/voice/webrtc-prewarm";
 import { getVoiceActivityThreshold } from "@/lib/voice/vad";
 import {

@@ -2,11 +2,11 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { GatewayOp, VOICE_MOVED_CLOSE_REASON } from "@/lib/gateway-protocol";
 
 const mocks = vi.hoisted(() => ({
-  fetchSocketProtocols: vi.fn(),
+  takeVoiceSocketTicket: vi.fn(),
 }));
 
-vi.mock("@/lib/voice/socket-ticket-client", () => ({
-  fetchSocketProtocols: mocks.fetchSocketProtocols,
+vi.mock("@/lib/voice/voice-admission-client", () => ({
+  takeVoiceSocketTicket: mocks.takeVoiceSocketTicket,
 }));
 
 import { VoiceGateway } from "./voice-gateway";
@@ -43,7 +43,7 @@ class TestWebSocket {
 describe("VoiceGateway", () => {
   beforeEach(() => {
     TestWebSocket.instances = [];
-    mocks.fetchSocketProtocols.mockReset();
+    mocks.takeVoiceSocketTicket.mockReset();
     vi.stubGlobal("WebSocket", TestWebSocket);
   });
 
@@ -51,7 +51,7 @@ describe("VoiceGateway", () => {
     const { SocketTicketError } = await vi.importActual<
       typeof import("@/lib/voice/socket-ticket-client")
     >("@/lib/voice/socket-ticket-client");
-    mocks.fetchSocketProtocols
+    mocks.takeVoiceSocketTicket
       .mockRejectedValueOnce(new SocketTicketError(503))
       .mockResolvedValue(["ralph.realtime.v1", "ralph.ticket.test"]);
     const gateway = new VoiceGateway();
@@ -67,13 +67,13 @@ describe("VoiceGateway", () => {
     await vi.waitFor(() => expect(TestWebSocket.instances).toHaveLength(1), {
       timeout: 2_000,
     });
-    expect(mocks.fetchSocketProtocols).toHaveBeenCalledTimes(2);
+    expect(mocks.takeVoiceSocketTicket).toHaveBeenCalledTimes(2);
     expect(errors).toEqual([{ message: "Could not open voice socket" }]);
     gateway.disconnect();
   });
 
   it("prepares without credentials and identifies once when credentials arrive after Hello", async () => {
-    mocks.fetchSocketProtocols.mockResolvedValue([
+    mocks.takeVoiceSocketTicket.mockResolvedValue([
       "ralph.realtime.v1",
       "ralph.ticket.test",
     ]);
@@ -118,7 +118,7 @@ describe("VoiceGateway", () => {
       }),
     } as MessageEvent);
 
-    expect(mocks.fetchSocketProtocols).toHaveBeenCalledOnce();
+    expect(mocks.takeVoiceSocketTicket).toHaveBeenCalledOnce();
     expect(TestWebSocket.instances).toHaveLength(1);
     expect(socket.sent.map((message) => JSON.parse(message))).toEqual([
       {
@@ -139,7 +139,7 @@ describe("VoiceGateway", () => {
   ])(
     "does not identify with %s credentials",
     async (_label, participantId, voiceToken) => {
-      mocks.fetchSocketProtocols.mockResolvedValue([
+      mocks.takeVoiceSocketTicket.mockResolvedValue([
         "ralph.realtime.v1",
         "ralph.ticket.test",
       ]);
@@ -169,7 +169,7 @@ describe("VoiceGateway", () => {
   );
 
   it("replaces an identified socket before a fresh participant generation can identify", async () => {
-    mocks.fetchSocketProtocols.mockResolvedValue([
+    mocks.takeVoiceSocketTicket.mockResolvedValue([
       "ralph.realtime.v1",
       "ralph.ticket.test",
     ]);
@@ -235,7 +235,7 @@ describe("VoiceGateway", () => {
   });
 
   it("keeps an identified socket when only the voice token is refreshed", async () => {
-    mocks.fetchSocketProtocols.mockResolvedValue([
+    mocks.takeVoiceSocketTicket.mockResolvedValue([
       "ralph.realtime.v1",
       "ralph.ticket.test",
     ]);
@@ -281,7 +281,7 @@ describe("VoiceGateway", () => {
   });
 
   it("identifies again with a refreshed token after the voice room refused an expired one", async () => {
-    mocks.fetchSocketProtocols.mockResolvedValue([
+    mocks.takeVoiceSocketTicket.mockResolvedValue([
       "ralph.realtime.v1",
       "ralph.ticket.test",
     ]);
@@ -323,7 +323,7 @@ describe("VoiceGateway", () => {
   });
 
   it("ignores a stale close callback after creating a replacement socket", async () => {
-    mocks.fetchSocketProtocols.mockResolvedValue([
+    mocks.takeVoiceSocketTicket.mockResolvedValue([
       "ralph.realtime.v1",
       "ralph.ticket.test",
     ]);
@@ -383,7 +383,7 @@ describe("VoiceGateway", () => {
   });
 
   it("does not identify stale credentials on a fresh prepared socket after disconnect", async () => {
-    mocks.fetchSocketProtocols.mockResolvedValue([
+    mocks.takeVoiceSocketTicket.mockResolvedValue([
       "ralph.realtime.v1",
       "ralph.ticket.test",
     ]);
@@ -457,7 +457,7 @@ describe("VoiceGateway", () => {
     const firstTicket = new Promise<string[]>((resolve) => {
       resolveFirstTicket = resolve;
     });
-    mocks.fetchSocketProtocols
+    mocks.takeVoiceSocketTicket
       .mockReturnValueOnce(firstTicket)
       .mockResolvedValue(["ralph.realtime.v1", "ralph.ticket.test"]);
     const gateway = new VoiceGateway();
@@ -516,7 +516,7 @@ describe("VoiceGateway", () => {
 
   it("opens a new socket after a prior disconnect while ticket acquisition is asynchronous", async () => {
     let resolveTicket: ((protocols: string[]) => void) | undefined;
-    mocks.fetchSocketProtocols.mockReturnValue(
+    mocks.takeVoiceSocketTicket.mockReturnValue(
       new Promise<string[]>((resolve) => {
         resolveTicket = resolve;
       }),
@@ -541,7 +541,7 @@ describe("VoiceGateway", () => {
   });
 
   it("advertises Listen Together snapshot event support in Voice Identify", async () => {
-    mocks.fetchSocketProtocols.mockResolvedValue([
+    mocks.takeVoiceSocketTicket.mockResolvedValue([
       "ralph.realtime.v1",
       "ralph.ticket.test",
     ]);
@@ -580,7 +580,7 @@ describe("VoiceGateway", () => {
   });
 
   it("forwards PartyTracks descriptors on VoiceReady without legacy transfer state", async () => {
-    mocks.fetchSocketProtocols.mockResolvedValue([
+    mocks.takeVoiceSocketTicket.mockResolvedValue([
       "ralph.realtime.v1",
       "ralph.ticket.test",
     ]);
@@ -627,7 +627,7 @@ describe("VoiceGateway", () => {
   });
 
   it("preserves PartyTracks metadata on offered and stopped tracks", async () => {
-    mocks.fetchSocketProtocols.mockResolvedValue([
+    mocks.takeVoiceSocketTicket.mockResolvedValue([
       "ralph.realtime.v1",
       "ralph.ticket.test",
     ]);
@@ -676,7 +676,7 @@ describe("VoiceGateway", () => {
   });
 
   it("emits remote client disconnects so speaking state can be cleared", async () => {
-    mocks.fetchSocketProtocols.mockResolvedValue([
+    mocks.takeVoiceSocketTicket.mockResolvedValue([
       "ralph.realtime.v1",
       "ralph.ticket.test",
     ]);
@@ -708,7 +708,7 @@ describe("VoiceGateway", () => {
   });
 
   it("emits a republish request and drops a malformed one", async () => {
-    mocks.fetchSocketProtocols.mockResolvedValue([
+    mocks.takeVoiceSocketTicket.mockResolvedValue([
       "ralph.realtime.v1",
       "ralph.ticket.test",
     ]);
@@ -742,7 +742,7 @@ describe("VoiceGateway", () => {
   });
 
   it("flushes app events queued while the initial ticket is loading", async () => {
-    mocks.fetchSocketProtocols.mockResolvedValue([
+    mocks.takeVoiceSocketTicket.mockResolvedValue([
       "ralph.realtime.v1",
       "ralph.ticket.test",
     ]);
@@ -771,7 +771,7 @@ describe("VoiceGateway", () => {
   });
 
   it("does not replay stale listen-together controls after reconnect", async () => {
-    mocks.fetchSocketProtocols.mockResolvedValue([
+    mocks.takeVoiceSocketTicket.mockResolvedValue([
       "ralph.realtime.v1",
       "ralph.ticket.test",
     ]);
@@ -832,7 +832,7 @@ describe("VoiceGateway", () => {
   });
 
   it("returns true when a listen-together command is accepted by the ready socket", async () => {
-    mocks.fetchSocketProtocols.mockResolvedValue([
+    mocks.takeVoiceSocketTicket.mockResolvedValue([
       "ralph.realtime.v1",
       "ralph.ticket.test",
     ]);
@@ -866,8 +866,8 @@ describe("VoiceGateway", () => {
 describe("VoiceGateway frame decoding", () => {
   beforeEach(() => {
     TestWebSocket.instances = [];
-    mocks.fetchSocketProtocols.mockReset();
-    mocks.fetchSocketProtocols.mockResolvedValue([
+    mocks.takeVoiceSocketTicket.mockReset();
+    mocks.takeVoiceSocketTicket.mockResolvedValue([
       "ralph.realtime.v1",
       "ralph.ticket.test",
     ]);
@@ -929,7 +929,7 @@ describe("VoiceGateway frame decoding", () => {
 describe("VoiceGateway lifecycle", () => {
   beforeEach(() => {
     TestWebSocket.instances = [];
-    mocks.fetchSocketProtocols.mockReset();
+    mocks.takeVoiceSocketTicket.mockReset();
     vi.stubGlobal("WebSocket", TestWebSocket);
   });
 
@@ -946,7 +946,7 @@ describe("VoiceGateway lifecycle", () => {
     const { SocketTicketError } = await vi.importActual<
       typeof import("@/lib/voice/socket-ticket-client")
     >("@/lib/voice/socket-ticket-client");
-    mocks.fetchSocketProtocols.mockRejectedValue(new SocketTicketError(401));
+    mocks.takeVoiceSocketTicket.mockRejectedValue(new SocketTicketError(401));
     const gateway = new VoiceGateway();
     const authFailed = vi.fn();
     gateway.on("auth-failed", authFailed);
@@ -955,19 +955,19 @@ describe("VoiceGateway lifecycle", () => {
     await vi.waitFor(() => expect(authFailed).toHaveBeenCalledOnce(), {
       timeout: 2_000,
     });
-    expect(mocks.fetchSocketProtocols).toHaveBeenCalledTimes(2);
+    expect(mocks.takeVoiceSocketTicket).toHaveBeenCalledTimes(2);
     await new Promise((resolve) => setTimeout(resolve, 700));
-    expect(mocks.fetchSocketProtocols).toHaveBeenCalledTimes(2);
+    expect(mocks.takeVoiceSocketTicket).toHaveBeenCalledTimes(2);
 
-    mocks.fetchSocketProtocols.mockResolvedValue(["ralph.realtime.v1"]);
+    mocks.takeVoiceSocketTicket.mockResolvedValue(["ralph.realtime.v1"]);
     gateway.wake();
     await vi.waitFor(() => expect(TestWebSocket.instances).toHaveLength(1));
-    expect(mocks.fetchSocketProtocols).toHaveBeenCalledTimes(3);
+    expect(mocks.takeVoiceSocketTicket).toHaveBeenCalledTimes(3);
     gateway.disconnect();
   });
 
   it("is kicked without reconnecting when the room replaces the socket", async () => {
-    mocks.fetchSocketProtocols.mockResolvedValue(["ralph.realtime.v1"]);
+    mocks.takeVoiceSocketTicket.mockResolvedValue(["ralph.realtime.v1"]);
     const gateway = new VoiceGateway();
     const kicked = vi.fn();
     const disconnected = vi.fn();
@@ -986,11 +986,11 @@ describe("VoiceGateway lifecycle", () => {
     expect(kicked).toHaveBeenCalledOnce();
     expect(disconnected).toHaveBeenCalledOnce();
     await new Promise((resolve) => setTimeout(resolve, 700));
-    expect(mocks.fetchSocketProtocols).toHaveBeenCalledOnce();
+    expect(mocks.takeVoiceSocketTicket).toHaveBeenCalledOnce();
   });
 
   it("tells a moderator's move from a takeover by the close reason", async () => {
-    mocks.fetchSocketProtocols.mockResolvedValue(["ralph.realtime.v1"]);
+    mocks.takeVoiceSocketTicket.mockResolvedValue(["ralph.realtime.v1"]);
     const gateway = new VoiceGateway();
     const kicked = vi.fn();
     gateway.on("kicked", kicked);
@@ -1009,7 +1009,7 @@ describe("VoiceGateway lifecycle", () => {
   });
 
   it("wakes a pending retry at once instead of waiting out the backoff", async () => {
-    mocks.fetchSocketProtocols.mockResolvedValue(["ralph.realtime.v1"]);
+    mocks.takeVoiceSocketTicket.mockResolvedValue(["ralph.realtime.v1"]);
     vi.useFakeTimers();
     try {
       const gateway = new VoiceGateway();
@@ -1018,11 +1018,11 @@ describe("VoiceGateway lifecycle", () => {
       const first = TestWebSocket.instances[0]!;
       first.readyState = TestWebSocket.OPEN;
       first.onclose?.({ code: 1006, reason: "" } as CloseEvent);
-      expect(mocks.fetchSocketProtocols).toHaveBeenCalledOnce();
+      expect(mocks.takeVoiceSocketTicket).toHaveBeenCalledOnce();
 
       gateway.wake();
       await vi.advanceTimersByTimeAsync(0);
-      expect(mocks.fetchSocketProtocols).toHaveBeenCalledTimes(2);
+      expect(mocks.takeVoiceSocketTicket).toHaveBeenCalledTimes(2);
       expect(TestWebSocket.instances).toHaveLength(2);
       gateway.disconnect();
     } finally {

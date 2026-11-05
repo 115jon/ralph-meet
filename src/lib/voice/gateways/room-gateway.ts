@@ -13,10 +13,12 @@ import {
   type VoiceStateDelta,
 } from "@/lib/types";
 import { GatewayOp } from "@/lib/gateway-protocol";
+import { fetchSocketProtocols } from "@/lib/voice/socket-ticket-client";
 import {
-  fetchSocketTicketBundle,
+  beginCallAdmission,
+  takeRoomSocketTicket,
   type MediaBootstrap,
-} from "@/lib/voice/socket-ticket-client";
+} from "@/lib/voice/voice-admission-client";
 import { markVoice } from "@/lib/voice/latency-marks";
 import type { SharedSpatialAudioState } from "@/lib/voice/spatial-audio";
 import { BaseGateway, type BaseGatewayEvents } from "./base-gateway";
@@ -31,8 +33,12 @@ export interface RoomGatewayEvents extends BaseGatewayEvents {
   ready: {
     participantId: string;
     sessionId: string;
-    iceServers: IceServer[];
-    voiceToken: string;
+    /**
+     * Absent when the join's admission already brought them (the room
+     * ticket's media bootstrap): Identify mints nothing then.
+     */
+    iceServers?: IceServer[];
+    voiceToken?: string;
     tracksToQueue: TrackInfo[];
     participants: VoiceState[];
     spatialAudioState?: SharedSpatialAudioState;
@@ -107,6 +113,10 @@ export class RoomGateway extends BaseGateway<
 
   public connectRoom(options: ConnectOptions) {
     this.options = options;
+    if (options.roomSlug !== "global-gateway") {
+      // One admission for this join's room and voice tickets.
+      beginCallAdmission(admissionTarget(options));
+    }
     // A ticket already in flight was requested for the previous options.
     this.socket.connect({ freshTicket: true });
   }
@@ -116,12 +126,10 @@ export class RoomGateway extends BaseGateway<
     if (!options) throw new Error("Room socket has no room to connect to");
     const audience = options.roomSlug === "global-gateway" ? "global" : "room";
     markVoice("RoomGW:ticket-start", { roomSlug: options.roomSlug });
-    const bundle = await fetchSocketTicketBundle({
-      audience,
-      channelId: options.channelId,
-      roomSlug: options.roomSlug,
-      serverId: options.serverId,
-    });
+    const bundle =
+      audience === "global"
+        ? { protocols: await fetchSocketProtocols({ audience }) }
+        : await takeRoomSocketTicket(admissionTarget(options));
     const path =
       audience === "global"
         ? "/api/gateway"
@@ -129,7 +137,9 @@ export class RoomGateway extends BaseGateway<
     return {
       url: options.wsUrlGenerator(path),
       protocols: bundle.protocols,
-      mediaBootstrap: bundle.mediaBootstrap,
+      ...("mediaBootstrap" in bundle && bundle.mediaBootstrap
+        ? { mediaBootstrap: bundle.mediaBootstrap }
+        : {}),
       roomSlug: options.roomSlug,
     };
   }
@@ -216,8 +226,8 @@ export class RoomGateway extends BaseGateway<
         this.emit("ready", {
           participantId: ready.participant_id,
           sessionId: ready.participant_id,
-          iceServers: ready.ice_servers,
-          voiceToken: ready.voice_token,
+          ...(ready.ice_servers ? { iceServers: ready.ice_servers } : {}),
+          ...(ready.voice_token ? { voiceToken: ready.voice_token } : {}),
           tracksToQueue,
           participants: ready.participants ?? [],
           spatialAudioState: ready.spatial_audio_state,
@@ -341,4 +351,12 @@ export class RoomGateway extends BaseGateway<
   public get isReady() {
     return this.socket.isReady;
   }
+}
+
+function admissionTarget(options: ConnectOptions) {
+  return {
+    roomSlug: options.roomSlug,
+    ...(options.channelId ? { channelId: options.channelId } : {}),
+    ...(options.serverId ? { serverId: options.serverId } : {}),
+  };
 }
