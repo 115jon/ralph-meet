@@ -35,11 +35,8 @@ import {
   type ListenTogetherMutationResult,
 } from "../src/lib/voice/listen-together-state";
 import { getNextVoicePresenceAlarmTime } from "../src/lib/voice-presence";
-import {
-  calculatePermissions,
-  hasPermission,
-  PERMISSIONS,
-} from "../src/lib/permissions";
+import { PERMISSIONS } from "../src/lib/permissions";
+import { hasServerPermission, isServerMember } from "../src/lib/channel-access";
 import { isSoundboardPlaybackOwnedBy } from "../src/lib/voice/soundboard-playback-id";
 import {
   getSoundboardUploadUrl,
@@ -3885,23 +3882,11 @@ export class VoiceRoom extends DurableObject<Env, unknown> {
     }
   }
 
-  private async hasServerMembership(
+  private hasServerMembership(
     serverId: string,
     userId: string,
   ): Promise<boolean> {
-    try {
-      const row = await this.env.DB.prepare(
-        `SELECT 1
-           FROM server_members
-          WHERE server_id = ? AND user_id = ?
-          LIMIT 1`,
-      )
-        .bind(serverId, userId)
-        .first();
-      return !!row;
-    } catch {
-      return false;
-    }
+    return isServerMember(this.env.DB, serverId, userId);
   }
 
   private async hasAuthorizedDmSoundboardMedia(
@@ -3987,26 +3972,16 @@ export class VoiceRoom extends DurableObject<Env, unknown> {
     }
   }
 
-  private async hasManageServerPermission(
+  private hasManageServerPermission(
     serverId: string,
     userId: string,
   ): Promise<boolean> {
-    try {
-      const { results } = await this.env.DB.prepare(
-        `SELECT r.permissions
-           FROM member_roles mr
-           JOIN roles r ON r.id = mr.role_id AND r.server_id = mr.server_id
-          WHERE mr.server_id = ? AND mr.user_id = ?`,
-      )
-        .bind(serverId, userId)
-        .all<{ permissions: number }>();
-      const permissions = calculatePermissions(
-        (results ?? []).map((row) => Number(row.permissions ?? 0)),
-      );
-      return hasPermission(permissions, PERMISSIONS.MANAGE_SERVER);
-    } catch {
-      return false;
-    }
+    return hasServerPermission(
+      this.env.DB,
+      serverId,
+      userId,
+      PERMISSIONS.MANAGE_SERVER,
+    );
   }
 
   private sanitizeSoundboardDataUrl(value: unknown): string | null {

@@ -1,4 +1,8 @@
-import { hasPermission, PERMISSIONS } from "@/lib/permissions";
+import {
+  calculatePermissions,
+  hasPermission,
+  PERMISSIONS,
+} from "@/lib/permissions";
 import { getUserChannelPermissionsForDb } from "@/lib/require-permission";
 import type { D1Database } from "@cloudflare/workers-types";
 
@@ -361,4 +365,56 @@ export function hasChannelPermission(
     (access.permissions !== null &&
       hasPermission(access.permissions, permission))
   );
+}
+
+// ── Server scope ───────────────────────────────────────────────────────────
+// For checks that name a server rather than a channel (the voice room's
+// soundboard catalog). Both fail closed: a D1 error reads as "no".
+
+/** Whether the user is a member of the server. */
+export async function isServerMember(
+  db: D1Database,
+  serverId: string,
+  userId: string,
+): Promise<boolean> {
+  try {
+    const row = await db
+      .prepare(
+        "SELECT 1 FROM server_members WHERE server_id = ? AND user_id = ? LIMIT 1",
+      )
+      .bind(serverId, userId)
+      .first();
+    return !!row;
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Whether the user's roles in the server grant `permission` (ADMINISTRATOR
+ * grants all). Only roles of that server count; no roles grants nothing.
+ */
+export async function hasServerPermission(
+  db: D1Database,
+  serverId: string,
+  userId: string,
+  permission: number,
+): Promise<boolean> {
+  try {
+    const { results } = await db
+      .prepare(
+        `SELECT r.permissions
+           FROM member_roles mr
+           JOIN roles r ON r.id = mr.role_id AND r.server_id = mr.server_id
+          WHERE mr.server_id = ? AND mr.user_id = ?`,
+      )
+      .bind(serverId, userId)
+      .all<{ permissions: number }>();
+    const permissions = calculatePermissions(
+      (results ?? []).map((row) => Number(row.permissions ?? 0)),
+    );
+    return hasPermission(permissions, permission);
+  } catch {
+    return false;
+  }
 }
