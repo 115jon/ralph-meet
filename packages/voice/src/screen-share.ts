@@ -298,8 +298,10 @@ export class ScreenShare<T, S, C extends ScreenCapture<T>> {
 
   /**
    * `capture` stopped producing video by itself. Ends the share if it is
-   * the live capture; ignored otherwise. A restart in flight decides on
-   * its own (it replaces the capture, or finds it dead and ends the share).
+   * the live capture and nothing newer is wanted; ignored otherwise. A
+   * newer `start` queued meanwhile still runs (it replaces the dead
+   * capture), and a restart in flight decides on its own (it replaces the
+   * capture, or finds it dead and ends the share).
    */
   captureEnded(capture: C): void {
     if (this.disposed) return;
@@ -364,7 +366,9 @@ export class ScreenShare<T, S, C extends ScreenCapture<T>> {
     const live = this.current;
     if (live && this.endedCapture === live.capture) {
       this.endedCapture = null;
-      if (this.wish) {
+      // Only the wish for the capture that ended goes: a newer start
+      // queued meanwhile replaces it.
+      if (this.wish?.token === live.token) {
         this.wish = null;
         this.endReason = "source-ended";
       }
@@ -395,7 +399,15 @@ export class ScreenShare<T, S, C extends ScreenCapture<T>> {
       native !== null &&
       (await this.attempt("eligible", () => native.eligible(request), false));
     if (this.disposed) return;
-    if (
+    if (useNative && previous?.capture.path === "browser") {
+      // The native pipeline publishes the share's track names itself: the
+      // browser publication on them is withdrawn first (web: StopTracks for
+      // both names, the video parked on its keepalive), then its capture
+      // is released, so one publisher holds the names at a time.
+      if (!(await this.withdraw())) return;
+      if (!previous.released) await this.releaseCapture(previous);
+      if (this.disposed) return;
+    } else if (
       previous &&
       !previous.released &&
       this.sources.releaseBeforeRestart(request)
@@ -418,10 +430,21 @@ export class ScreenShare<T, S, C extends ScreenCapture<T>> {
       this.releaseLocal(capture);
       return;
     }
-    if (capture.path === "browser" && !this.wish) {
-      // Stopped while capturing: released, never published.
-      this.releaseLocal(capture);
-      return;
+    if (this.wish?.token !== target.token) {
+      if (capture.path === "browser") {
+        // Stopped, or replaced by a newer start, while capturing: released,
+        // never published (the driver goes on with what is wanted now).
+        this.releaseLocal(capture);
+        return;
+      }
+      if (this.wish) {
+        // A native capture a newer start replaced: its pipeline is stopped
+        // (it withdraws what it pushed) and the newer start runs.
+        await this.stopNativeCapture(capture);
+        return;
+      }
+      // A native capture stopped while starting is on the wire already: it
+      // is recorded below and ended like a live share.
     }
     // The old share goes once the new one is ready (a swap restart).
     if (previous && !previous.released) await this.releaseCapture(previous);
@@ -516,6 +539,9 @@ export class ScreenShare<T, S, C extends ScreenCapture<T>> {
       if (started) {
         if (!native.isActive()) {
           // Not a fallback case: the pipeline answered and then went away.
+          // Stop it anyway, so nothing it kept (web: the transport's options,
+          // which a voice reconnect would start again) outlives the failure.
+          await this.attempt("native-stop", () => native.stop(), undefined);
           this.releaseLocal(started);
           throw new Error(
             "The native screen share was inactive after it started",
@@ -677,16 +703,7 @@ export class ScreenShare<T, S, C extends ScreenCapture<T>> {
       await this.releaseCapture(live);
       if (this.disposed) return;
     }
-    this.publication.setTrack("screen", null);
-    const result = await this.publication.reconcile();
-    if (this.disposed) return;
-    if (result.status === "disposed") {
-      this.dispose();
-      return;
-    }
-    if (result.status === "failed" && result.failedSlots.includes("screen")) {
-      this.onError?.("publish", result.error);
-    }
+    if (!(await this.withdraw())) return;
     if (live && !live.released) await this.releaseCapture(live);
     if (this.disposed) return;
     this.current = null;
@@ -698,6 +715,33 @@ export class ScreenShare<T, S, C extends ScreenCapture<T>> {
         ? { type: "ended", reason, announced }
         : { type: "ended", reason, announced, error },
     );
+  }
+
+  /**
+   * Withdraws the `screen` slot: its intent becomes nothing and the module
+   * awaits `reconcile()`. False: the module was disposed meanwhile.
+   */
+  private async withdraw(): Promise<boolean> {
+    this.publication.setTrack("screen", null);
+    const result = await this.publication.reconcile();
+    if (this.disposed) return false;
+    if (result.status === "disposed") {
+      this.dispose();
+      return false;
+    }
+    if (result.status === "failed" && result.failedSlots.includes("screen")) {
+      this.onError?.("publish", result.error);
+    }
+    return true;
+  }
+
+  /** Stops a native capture that never became the live share. */
+  private async stopNativeCapture(capture: C): Promise<void> {
+    const native = this.sources.native;
+    if (native) {
+      await this.attempt("native-stop", () => native.stop(), undefined);
+    }
+    this.releaseLocal(capture);
   }
 
   /** Stops a native pipeline (for a native capture) and the local tracks. */

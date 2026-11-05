@@ -650,6 +650,120 @@ describe("ScreenShare: native path", () => {
     expect(ctx.share.phase).toBe("off");
     expect(ctx.sources.browser.capture).not.toHaveBeenCalled();
     expect(ctx.sources.released).toEqual(["n1"]);
+    // Stopped anyway: nothing it kept (its reconnect options) survives.
+    expect(ctx.sources.log).toEqual([
+      "native-start:n1:audio=true:q=1080p30",
+      "native-stop",
+      "release:n1",
+    ]);
+    expect(ctx.named("ended")).toMatchObject([
+      { reason: "failed", announced: false },
+    ]);
+  });
+
+  it("stops the pipeline when a restart's native start ends inactive", async () => {
+    const ctx = setup();
+    await live(ctx);
+    ctx.sources.nativeSteps.push("inactive");
+    ctx.share.toggleAudio();
+    await ctx.share.idle();
+
+    expect(ctx.sources.log.slice(-3)).toEqual([
+      "native-start:n2:audio=false:q=1080p30",
+      "native-stop",
+      "release:n2",
+    ]);
+    expect(ctx.share.phase).toBe("off");
+  });
+
+  it("withdraws a live browser share before a native restart publishes the same names", async () => {
+    const ctx = setup();
+    ctx.sources.nativeEligible = false;
+    await live(ctx, request({ sourceKey: "device:1" }));
+    ctx.sources.nativeEligible = true;
+    let publishedAtNativeStart: PublicationValue<string> | null | "unset" =
+      "unset";
+    let opsAtNativeStart: string[] = [];
+    let sourceLogAtNativeStart: string[] = [];
+    ctx.sources.native.start.mockImplementationOnce(async () => {
+      publishedAtNativeStart = ctx.media.published.get("screen") ?? null;
+      opsAtNativeStart = ctx.media.screenOps();
+      sourceLogAtNativeStart = [...ctx.sources.log];
+      ctx.sources.nativeActive = true;
+      return { id: "nX", path: "native", video: null, audio: null };
+    });
+    ctx.share.start(request({ sourceKey: "window:2" }));
+    await ctx.share.idle();
+
+    // Withdrawn (the video parked on its keepalive), then released.
+    expect(publishedAtNativeStart).toBeNull();
+    expect(opsAtNativeStart).toEqual([
+      "publish:screen:tracks(b1-video,b1-audio)",
+      "unpublish:screen",
+    ]);
+    expect(sourceLogAtNativeStart.at(-1)).toBe("release:b1");
+    expect(ctx.share.live?.path).toBe("native");
+    expect(ctx.publication.appliedFor("screen")?.track).toEqual({
+      kind: "native",
+    });
+    expect(ctx.named("started")).toMatchObject([
+      { restarted: false },
+      { restarted: true },
+    ]);
+    expect(ctx.named("ended")).toEqual([]);
+
+    // Stopping withdraws the native names; a browser share afterwards
+    // publishes on the kept-alive slot again.
+    ctx.share.stop();
+    await ctx.share.idle();
+    expect(ctx.sources.log.slice(-2)).toEqual(["native-stop", "release:nX"]);
+    ctx.sources.nativeEligible = false;
+    await live(ctx, request({ sourceKey: "device:1" }));
+    expect(ctx.media.screenOps()).toEqual([
+      "publish:screen:tracks(b1-video,b1-audio)",
+      "unpublish:screen",
+      "unpublish:screen",
+      "publish:screen:tracks(b2-video,b2-audio)",
+    ]);
+  });
+
+  it("republishes the withdrawn browser share when the native restart falls back", async () => {
+    const ctx = setup();
+    ctx.sources.nativeEligible = false;
+    ctx.sources.fallback = true;
+    await live(ctx, request({ sourceKey: "device:1" }));
+    ctx.sources.nativeEligible = true;
+    ctx.sources.nativeSteps.push("throw");
+    ctx.share.start(request({ sourceKey: "window:2" }));
+    await ctx.share.idle();
+
+    expect(ctx.share.live?.path).toBe("browser");
+    expect(ctx.media.screenOps()).toEqual([
+      "publish:screen:tracks(b1-video,b1-audio)",
+      "unpublish:screen",
+      "publish:screen:tracks(b3-video,b3-audio)",
+    ]);
+    expect(ctx.named("ended")).toEqual([]);
+  });
+
+  it("ends the share when a native restart over a browser share fails", async () => {
+    const ctx = setup();
+    ctx.sources.nativeEligible = false;
+    await live(ctx, request({ sourceKey: "device:1" }));
+    ctx.sources.nativeEligible = true;
+    ctx.sources.nativeSteps.push("throw");
+    ctx.share.start(request({ sourceKey: "window:2" }));
+    await ctx.share.idle();
+
+    expect(ctx.share.phase).toBe("off");
+    expect(ctx.sources.released).toEqual(["b1"]);
+    expect(ctx.media.screenOps()).toEqual([
+      "publish:screen:tracks(b1-video,b1-audio)",
+      "unpublish:screen",
+    ]);
+    expect(ctx.named("ended")).toMatchObject([
+      { reason: "failed", announced: true },
+    ]);
   });
 
   it("falls back to the browser path when the native start throws and fallback is allowed", async () => {
@@ -822,6 +936,121 @@ describe("ScreenShare: commands during a step", () => {
     }
     await ctx.share.idle();
     expect(ctx.media.screenOps().at(-1)).toBe("unpublish:screen");
+  });
+});
+
+describe("ScreenShare: superseded captures", () => {
+  it("never publishes a capture that lands after stop() and a newer start()", async () => {
+    const ctx = setup();
+    ctx.sources.nativeEligible = false;
+    const first = deferred();
+    ctx.sources.browserSteps.push(first);
+    ctx.share.start(request({ sourceKey: null }));
+    await flush();
+    ctx.share.stop();
+    ctx.share.start(request({ sourceKey: null, quality: "720p30" }));
+    first.resolve();
+    await ctx.share.idle();
+
+    expect(ctx.share.live?.capture.id).toBe("b2");
+    expect(
+      ctx
+        .named("started")
+        .map((event) =>
+          event.type === "started" ? event.share.capture.id : null,
+        ),
+    ).toEqual(["b2"]);
+    expect(ctx.named("started")).toMatchObject([{ restarted: false }]);
+    expect(ctx.sources.released).toEqual(["b1"]);
+    expect(ctx.media.screenOps()).toEqual([
+      "publish:screen:tracks(b2-video,b2-audio)",
+    ]);
+  });
+
+  it("does not bring back a stopped capture when the newer start is cancelled", async () => {
+    const ctx = setup();
+    ctx.sources.nativeEligible = false;
+    const first = deferred();
+    ctx.sources.browserSteps.push(first, "throw");
+    ctx.share.start(request({ sourceKey: null }));
+    await flush();
+    ctx.share.stop();
+    ctx.share.start(request({ sourceKey: null }));
+    first.resolve();
+    await ctx.share.idle();
+
+    expect(ctx.share.phase).toBe("off");
+    expect(ctx.share.wanted).toBeNull();
+    expect(ctx.sources.released).toEqual(["b1"]);
+    expect(ctx.named("started")).toEqual([]);
+    expect(ctx.media.screenOps()).toEqual([]);
+    expect(ctx.named("ended")).toMatchObject([
+      { reason: "failed", announced: false },
+    ]);
+  });
+
+  it("stops a native capture a newer start replaced, then runs the newer one", async () => {
+    const ctx = setup();
+    const first = deferred();
+    ctx.sources.nativeSteps.push(first);
+    ctx.share.start(request({ sourceKey: "window:1" }));
+    await flush();
+    ctx.share.start(request({ sourceKey: "window:2" }));
+    first.resolve();
+    await ctx.share.idle();
+
+    expect(ctx.sources.log).toEqual([
+      "native-start:n1:audio=true:q=1080p30",
+      "native-stop",
+      "release:n1",
+      "native-start:n2:audio=true:q=1080p30",
+    ]);
+    expect(ctx.share.live?.request.sourceKey).toBe("window:2");
+    expect(ctx.named("started")).toMatchObject([{ restarted: false }]);
+    expect(ctx.media.screenOps()).toEqual([]);
+  });
+
+  it("keeps a newer start queued when the live capture ends by itself", async () => {
+    const ctx = setup();
+    ctx.sources.nativeEligible = false;
+    await live(ctx, request({ sourceKey: "device:1" }));
+    const a = ctx.share.live!.capture;
+    const step = deferred();
+    ctx.sources.browser.applyQuality.mockImplementationOnce(() => step.promise);
+    ctx.share.setQuality("720p30");
+    await flush();
+    ctx.share.start(request({ sourceKey: "device:2" }));
+    ctx.share.captureEnded(a);
+    step.resolve();
+    await ctx.share.idle();
+
+    expect(ctx.share.phase).toBe("live");
+    expect(ctx.share.live?.request.sourceKey).toBe("device:2");
+    expect(ctx.named("ended")).toEqual([]);
+    expect(ctx.named("started")).toMatchObject([
+      { restarted: false },
+      { restarted: true },
+    ]);
+  });
+
+  it("still ends with source-ended when only the ended capture's audio or quality changed", async () => {
+    const ctx = setup();
+    ctx.sources.nativeEligible = false;
+    await live(ctx, request({ sourceKey: "device:1" }));
+    const a = ctx.share.live!.capture;
+    const step = deferred();
+    ctx.sources.browser.applyQuality.mockImplementationOnce(() => step.promise);
+    ctx.share.setQuality("720p30");
+    await flush();
+    ctx.share.setAudio(false);
+    ctx.share.captureEnded(a);
+    step.resolve();
+    await ctx.share.idle();
+
+    expect(ctx.share.phase).toBe("off");
+    expect(ctx.named("ended")).toMatchObject([
+      { reason: "source-ended", announced: true },
+    ]);
   });
 });
 
