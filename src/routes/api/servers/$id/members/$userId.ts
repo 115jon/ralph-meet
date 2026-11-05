@@ -2,7 +2,7 @@ import { createFileRoute } from "@tanstack/react-router";
 
 import { apiError, apiSuccess, getDB, requireAuth } from "@/lib/api-helpers";
 import { ServiceError } from "@/lib/service-error";
-import { kickMember } from "@/services/server.service";
+import { kickMember, leaveServer } from "@/services/server.service";
 import {
   executeAuditLog,
   executeBroadcast,
@@ -19,7 +19,8 @@ const PATCH = async ({ request: _request, params: _params }: any) => {
 };
 
 // DELETE /api/servers/:id/members/:userId — kick a member
-const DELETE = async ({ request: _request, params }: any) => {
+// DELETE /api/servers/:id/members/@me — leave the server (the owner cannot)
+export const DELETE = async ({ request: _request, params }: any) => {
   const authResult = await requireAuth();
   if (authResult instanceof Response) return authResult;
   const { userId: actorId } = authResult;
@@ -28,6 +29,17 @@ const DELETE = async ({ request: _request, params }: any) => {
   const db = getDB();
 
   try {
+    if (targetUserId === "@me") {
+      const result = await leaveServer(db, serverId, actorId);
+
+      await executeInvalidation(result.cacheKeysToInvalidate);
+      for (const broadcast of result.broadcasts) {
+        await executeBroadcast(broadcast);
+      }
+
+      return apiSuccess({ left: true });
+    }
+
     const result = await kickMember(db, serverId, actorId, targetUserId);
 
     // Execute side effects

@@ -1108,6 +1108,7 @@ export default function ChannelSidebar({
   const {
     deleteChannel,
     deleteCategory,
+    leaveServer,
     openDm,
     dispatch,
     setProfileUser,
@@ -1220,6 +1221,12 @@ export default function ChannelSidebar({
   const [pendingDelete, setPendingDelete] = useState<PendingDelete | null>(
     null,
   );
+  const [pendingLeave, setPendingLeave] = useState(false);
+  const isServerOwner = useChatStore(
+    (s) =>
+      s.servers.find((server) => server.id === serverId)?.owner_id ===
+      s.user?.id,
+  );
 
   const {
     handleChannelContextMenu,
@@ -1232,6 +1239,7 @@ export default function ChannelSidebar({
     onInviteClick,
     onSettingsClick,
     onRequestDelete: setPendingDelete,
+    onRequestLeave: isServerOwner ? undefined : () => setPendingLeave(true),
     uiDispatch,
     openMenu,
     markChannelRead,
@@ -1545,6 +1553,17 @@ export default function ChannelSidebar({
           }}
         />
 
+        <ConfirmDialog
+          open={pendingLeave}
+          onOpenChange={setPendingLeave}
+          irreversible
+          title="Leave server"
+          description={`You will leave ${serverName ?? "this server"} and need a new invite to rejoin.`}
+          confirmLabel="Leave server"
+          errorAction="leave this server"
+          onConfirm={() => (serverId ? leaveServer(serverId) : undefined)}
+        />
+
         {/* Context Menu Placeholder */}
         <div id="channel-context-menu" />
         {menu.isOpen && (
@@ -1631,6 +1650,8 @@ interface UseSidebarContextMenusProps {
   onInviteClick?: () => void;
   onSettingsClick?: () => void;
   onRequestDelete: (target: PendingDelete) => void;
+  /** Set for non-owners; the owner cannot leave. */
+  onRequestLeave?: () => void;
   uiDispatch: React.Dispatch<SidebarAction>;
   openMenu: (e: React.MouseEvent, items: any[]) => void;
   markChannelRead: (channelId: string) => void;
@@ -1648,6 +1669,7 @@ function useSidebarContextMenus({
   onInviteClick,
   onSettingsClick,
   onRequestDelete,
+  onRequestLeave,
   uiDispatch,
   openMenu,
   markChannelRead,
@@ -1942,9 +1964,26 @@ function useSidebarContextMenus({
           icon: <Icon name="eyeOff" size="sm" />,
           onClick: () => {},
         },
+        ...(onRequestLeave
+          ? [
+              {
+                label: "Leave server",
+                icon: <Icon name="logout" size="sm" />,
+                variant: "danger" as const,
+                onClick: onRequestLeave,
+              },
+            ]
+          : []),
       ]);
     },
-    [canManageChannels, onInviteClick, onSettingsClick, openMenu, uiDispatch],
+    [
+      canManageChannels,
+      onInviteClick,
+      onRequestLeave,
+      onSettingsClick,
+      openMenu,
+      uiDispatch,
+    ],
   );
 
   return {
