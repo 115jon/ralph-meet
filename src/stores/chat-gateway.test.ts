@@ -72,6 +72,12 @@ vi.mock("./useSoundSettingsStore", () => ({
 
 import { createChatGateway } from "./chat-gateway";
 import { SocketTicketError } from "@/lib/voice/socket-ticket-client";
+import {
+  playCallConnect,
+  playCallEnd,
+  playOutgoingRingStop,
+  playRingStop,
+} from "@/lib/sounds";
 
 class FakeWebSocket {
   static instances: FakeWebSocket[] = [];
@@ -766,5 +772,104 @@ describe("chat gateway frame decoding", () => {
     gateway.disconnectGateway();
     mocks.callState = {};
     vi.unstubAllGlobals();
+  });
+});
+
+describe("chat gateway CALL_RING_STOP", () => {
+  beforeEach(() => {
+    FakeWebSocket.instances = [];
+    mocks.fetchSocketProtocols.mockResolvedValue([]);
+    vi.stubGlobal("WebSocket", FakeWebSocket);
+    vi.clearAllMocks();
+  });
+
+  afterEach(() => {
+    mocks.callState = {};
+    vi.unstubAllGlobals();
+  });
+
+  async function connectWithCall(callState: {
+    status: string;
+    callId: string | null;
+  }) {
+    const endCall = vi.fn();
+    const acceptCall = vi.fn();
+    mocks.callState = { ...callState, endCall, acceptCall };
+    const { gateway } = createFixture();
+    gateway.initGateway("user-1");
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    const socket = FakeWebSocket.instances[0]!;
+    socket.open();
+    socket.message({ op: 8, d: { heartbeat_interval: 45_000 } });
+    socket.message({ op: 2, d: { participant_id: "session-1" } });
+    return { gateway, socket, endCall, acceptCall };
+  }
+
+  function ringStop(
+    socket: FakeWebSocket,
+    data: { call_id: string | null; reason: string },
+  ) {
+    socket.message({
+      op: 19,
+      d: { seq: 1, event: "CALL_RING_STOP", data },
+    });
+  }
+
+  it("ignores a stop for another call while a call is active", async () => {
+    const { gateway, socket, endCall, acceptCall } = await connectWithCall({
+      status: "active",
+      callId: "call-mine",
+    });
+
+    ringStop(socket, { call_id: "call-foreign", reason: "declined" });
+
+    expect(endCall).not.toHaveBeenCalled();
+    expect(acceptCall).not.toHaveBeenCalled();
+    expect(playRingStop).not.toHaveBeenCalled();
+    expect(playOutgoingRingStop).not.toHaveBeenCalled();
+    expect(playCallEnd).not.toHaveBeenCalled();
+    expect(playCallConnect).not.toHaveBeenCalled();
+    gateway.disconnectGateway();
+  });
+
+  it("still ends the call when the stop carries the matching id", async () => {
+    const { gateway, socket, endCall } = await connectWithCall({
+      status: "active",
+      callId: "call-mine",
+    });
+
+    ringStop(socket, { call_id: "call-mine", reason: "cancelled" });
+
+    expect(endCall).toHaveBeenCalledWith("cancelled");
+    expect(playRingStop).toHaveBeenCalledTimes(1);
+    expect(playOutgoingRingStop).toHaveBeenCalledTimes(1);
+    expect(playCallEnd).toHaveBeenCalledTimes(1);
+    gateway.disconnectGateway();
+  });
+
+  it("keeps the existing behaviour when the stop has no call id", async () => {
+    const { gateway, socket, endCall } = await connectWithCall({
+      status: "active",
+      callId: "call-mine",
+    });
+
+    ringStop(socket, { call_id: null, reason: "busy" });
+
+    expect(endCall).toHaveBeenCalledWith("busy");
+    expect(playRingStop).toHaveBeenCalledTimes(1);
+    expect(playOutgoingRingStop).toHaveBeenCalledTimes(1);
+    gateway.disconnectGateway();
+  });
+
+  it("keeps the existing behaviour when the store has no call id", async () => {
+    const { gateway, socket, endCall } = await connectWithCall({
+      status: "ringing_outgoing",
+      callId: null,
+    });
+
+    ringStop(socket, { call_id: "call-x", reason: "cancelled" });
+
+    expect(endCall).toHaveBeenCalledWith("cancelled");
+    gateway.disconnectGateway();
   });
 });
