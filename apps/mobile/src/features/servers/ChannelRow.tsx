@@ -231,13 +231,17 @@ const OccupantRow = memo(function OccupantRow({
   const theme = useTheme();
   const name = memberName(member);
   const state = memberState(member, theme);
+  // Their socket was lost and the room holds the seat for a resume: dimmed,
+  // as on web and desktop, until they are back or the hold runs out.
+  const reconnecting = member.connected === false;
   return (
     <View
       accessible
       accessibilityLabel={`${name}${isMe ? ", you" : ""}${
-        state ? `, ${state.label}` : ""
+        reconnecting ? ", reconnecting" : state ? `, ${state.label}` : ""
       }`}
       style={{
+        opacity: reconnecting ? 0.5 : 1,
         minHeight: 40,
         flexDirection: "row",
         alignItems: "center",
@@ -249,7 +253,7 @@ const OccupantRow = memo(function OccupantRow({
       {branchContinues ? (
         <TreeGuide x={BRANCH_X} last={false} tick={false} />
       ) : null}
-      <TreeGuide x={OCCUPANT_X} last={last} lit={isMe} />
+      <TreeGuide x={OCCUPANT_X} last={last} lit={isMe && !reconnecting} />
       <Avatar name={name} size={24} uri={mediaUrl(member.avatar_url)} />
       <Text
         variant="body"
