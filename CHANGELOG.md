@@ -1,5 +1,43 @@
 # Changelog
 
+## [3.14.0](https://github.com/115jon/yap/compare/v3.13.0...v3.14.0) (2026-11-06)
+
+
+### Features
+
+* **realtime:** ✨ time out each connect step, wake on network change ([8abe51c](https://github.com/115jon/yap/commit/8abe51c16c8aac959bec297bfdea25a9de344571))
+* **servers:** ✨ let members leave a server ([c0d0030](https://github.com/115jon/yap/commit/c0d0030ce7ee545ec1030bb3c3ee2cde14594257))
+* **servers:** members can leave a server ([12610e9](https://github.com/115jon/yap/commit/12610e9a6009d128f4472e4924e90fe246590a81))
+* **voice:** ✨ recover stalled remote cameras or mark them unavailable ([8b90b79](https://github.com/115jon/yap/commit/8b90b7975e43eadc81be86430548e87496ab6aa3))
+
+
+### Bug Fixes
+
+* **calls:** 🐛 ignore a ring stop that belongs to another call ([c77e87a](https://github.com/115jon/yap/commit/c77e87a660d566bbdb4bd806341ebeb666888d03))
+* **calls:** a second caller no longer ends an active DM call ([9da8d1d](https://github.com/115jon/yap/commit/9da8d1d1ffe30901b44e29898f587c96c06e26ed))
+* **chat:** 🐛 send invite expiry and use limits the server reads ([fde6306](https://github.com/115jon/yap/commit/fde6306bd0b152d3b05bb05c35e77be43b58c626))
+* **chat:** invite expiry and use limits now apply from the invite dialog ([f484ed7](https://github.com/115jon/yap/commit/f484ed71413ce9f11851d579c527c759ec1fa0c3))
+* **mobile:** 🐛 dim voice members that are reconnecting ([0f2c25c](https://github.com/115jon/yap/commit/0f2c25c86fb4fe0c9b9e587bd4732bfbd83aafca))
+* **mobile:** 🐛 keep webrtc from crashing on a closed peer connection ([3b770d1](https://github.com/115jon/yap/commit/3b770d1387d39dbd6ee17907e91fdc5f362ee41e))
+* **mobile:** 🐛 load the profile when the network comes back ([8720ed5](https://github.com/115jon/yap/commit/8720ed5913f6d3294793db8bbdeb05cb7281ff7e))
+* **mobile:** 🐛 only cancel ticket requests when a ticket stalls ([58150a2](https://github.com/115jon/yap/commit/58150a2a5e85ee966289f2a6a6c908f161e09b0f))
+* **mobile:** 🐛 reconnect every socket after the network drops ([84812f5](https://github.com/115jon/yap/commit/84812f55cdda35d3dbc9a669e4ae0b7e6ec284c8))
+* **mobile:** 🐛 show a re-pulled camera as loading from its first add ([33823e6](https://github.com/115jon/yap/commit/33823e6687e61fddfc31165a5ebdda0d9beb24d3))
+* **mobile:** reconnect every socket after the network drops ([3be4b64](https://github.com/115jon/yap/commit/3be4b641718a4706aa1a8a898ac28d3d9ce6866a))
+* **realtime:** 🐛 hold a voice participant's tracks across a reconnect ([dc433cb](https://github.com/115jon/yap/commit/dc433cbf1e15a84a14c234bb72c674d47afc7da1))
+* **realtime:** 🐛 let a resume take over a session still live elsewhere ([a712c5d](https://github.com/115jon/yap/commit/a712c5d74926a5c5a4936f7983385ff6c70e9728))
+* **realtime:** 🐛 skip a live-session takeover from a closing socket ([a1a7d28](https://github.com/115jon/yap/commit/a1a7d28fe26b57444f85462cfae683b3273f7b95))
+* **voice-media:** 🐛 give a re-pulled camera longer for its first frame ([924c720](https://github.com/115jon/yap/commit/924c720fc2d90899518c2df2cf8f2c0e90abaab0))
+* **voice-media:** 🐛 pull a closed camera alias fresh from every path ([a4ec763](https://github.com/115jon/yap/commit/a4ec76306fd8a671428c0976fa3c8e885b95a633))
+* **voice-media:** 🐛 show a re-pulled camera as loading until measured ([7a08a5a](https://github.com/115jon/yap/commit/7a08a5a688ff44fc8745b1e17bf364d55c2a626c))
+* **voice:** 🐛 abort a call socket's ticket request with its attempt ([8298030](https://github.com/115jon/yap/commit/8298030f6a01f4f431237b11d3190d3f98af7c8d))
+* **voice:** 🐛 count a silent session's grace from its last heartbeat ([f77070d](https://github.com/115jon/yap/commit/f77070d23bba27f34703e9046596a1026299fb1a))
+* **voice:** 🐛 hide the resolution readout of a camera not showing ([ea80033](https://github.com/115jon/yap/commit/ea80033b7ca6323b9831b8d2e35c8de496d0494d))
+* **voice:** 🐛 read camera frames from the receiver until stats match ([66e2d91](https://github.com/115jon/yap/commit/66e2d91b4ed88b2a55ad43bb538cb4185379c5cd))
+* **voice:** a camera turned back on or stalled no longer stays black for viewers ([c38fadc](https://github.com/115jon/yap/commit/c38fadc3c3bb21136fd187eba14945175e9b92f8))
+* **voice:** a dead client's seat no longer lingers for 3.5 minutes ([380ddfa](https://github.com/115jon/yap/commit/380ddface604cc8fa56deedb4ccda69681d74a2d))
+* **voice:** a voice socket reconnect no longer cuts the speaker's audio ([096e357](https://github.com/115jon/yap/commit/096e357c919ca14f353b99c9c8d73e03af891f02))
+
 ## [3.13.0](https://github.com/115jon/yap/compare/v3.12.0...v3.13.0) (2026-11-05)
 
 
