@@ -1398,7 +1398,12 @@ export class MeetingRoom extends DurableObject<Env> {
 
       for (const ws of zombies) {
         try {
-          await this.handleLeave(ws, false, true);
+          // Held for resume as any lost socket, but its grace counts from
+          // when it last spoke: it has been gone that long already, so the
+          // roster shows it reconnecting for at most the grace in all,
+          // not the zombie timeout plus the grace.
+          const lastHeard = this.sessions.get(ws)?.last_heartbeat;
+          await this.handleLeave(ws, false, true, false, false, lastHeard);
         } catch (e) {
           log.error(`alarm: handleLeave threw for zombie session:`, e);
         }
@@ -4358,6 +4363,11 @@ export class MeetingRoom extends DurableObject<Env> {
     replaced: boolean = false,
     /** Ended by a moderator's move (implies replaced). */
     moved: boolean = false,
+    /**
+     * When the client was last heard from, if that was before now (a zombie
+     * socket): the resume grace of a held session counts from then.
+     */
+    lostAt?: number,
   ) {
     const session = this.getSession(ws);
     if (!session) return;
@@ -4420,7 +4430,10 @@ export class MeetingRoom extends DurableObject<Env> {
     if (shouldKeepResumableSession(intentional)) {
       // Keep resumable session alive for RESUME_GRACE_PERIOD_MS so the client
       // can reconnect and resume without a full re-identify. Mark expiry.
-      this.resumableSessionExpiry.set(participantId, now);
+      this.resumableSessionExpiry.set(
+        participantId,
+        typeof lostAt === "number" && lostAt < now ? lostAt : now,
+      );
       const resumableAttachment = { ...session };
       this.resumableSessions.set(participantId, resumableAttachment);
       this.replayPersistWrites.set(participantId, 0);

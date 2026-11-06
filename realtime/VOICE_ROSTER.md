@@ -22,7 +22,8 @@ media through a voice-socket reconnect, and no roster changes either way.
 2. The roster is computed from the room's own sessions: one member per user,
    from live non-standby authenticated sessions (`connected`) and sessions held
    for resume within the 120 s grace (`reconnecting`, with `disconnected_at` and
-   `reconnect_expires_at`). A live session beats a held one; between two of a
+   `reconnect_expires_at`). For a zombie (90 s without heartbeat) both count
+   from its last heartbeat, not from when the alarm ended it. A live session beats a held one; between two of a
    kind the newest join wins. Fields: profile (name, username, display name,
    avatar), `self_mute`, `self_deaf`, `self_video`, `self_stream`,
    `self_stream_audio`, spatial flags, `joined_at` (when that session joined:

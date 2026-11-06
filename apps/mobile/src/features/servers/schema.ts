@@ -58,5 +58,7 @@ export const VoiceMemberSchema = Schema.Struct({
   self_deaf: Schema.optional(Schema.Boolean),
   self_video: Schema.optional(Schema.Boolean),
   self_stream: Schema.optional(Schema.Boolean),
+  /** False while the room holds their session for a resume (a lost socket). */
+  connected: Schema.optional(Schema.Boolean),
 });
 export type VoiceMember = typeof VoiceMemberSchema.Type;
