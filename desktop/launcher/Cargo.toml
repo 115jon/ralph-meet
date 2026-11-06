@@ -1,6 +1,6 @@
 [package]
 name = "yap-launcher"
-version = "3.13.0"
+version = "3.14.0"
 description = "Yap root launcher: starts the active app-<version> Yap.exe"
 authors = ["115jon"]
 license = "MIT"
