@@ -895,8 +895,16 @@ export function createChatGateway(
         break;
       }
       case "CALL_RING_STOP": {
-        const { call_id: _call_id, reason } = d.data;
+        const { call_id, reason } = d.data;
         const callState = useCallStore.getState();
+
+        // A stop for a different call (e.g. the ring we auto-declined while
+        // busy) must not touch the call we are in. A missing id on either
+        // side keeps the legacy behaviour: the server sends a null call_id
+        // for busy/invalid rejections.
+        if (callState.callId && call_id && callState.callId !== call_id) {
+          break;
+        }
 
         playRingStop();
         playOutgoingRingStop();
