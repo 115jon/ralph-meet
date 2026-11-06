@@ -78,6 +78,14 @@ last-heard time is never kept only in memory, so it survives hibernation:
 - identified voice participants: `participants.last_heartbeat` in the
   VoiceRoom's SQLite.
 
+A MeetingRoom session ended this way is held for resume like any lost
+socket, but its 120 s resume grace counts from when it was last heard, not
+from the alarm. So a client that died without its close reaching the room
+(a crash with the network gone, a half-open connection) shows as
+reconnecting for at most 120 s after it went silent, and a zombie silent for
+longer than that is dropped by the same alarm. Before, the grace started at
+the alarm: up to 90 s + 120 s on the roster.
+
 **Broadcast.** Only identified sockets receive room broadcasts.
 MeetingRoom's session map holds identified sessions only. VoiceRoom
 broadcasts through `broadcastToIdentified`, which skips sockets that have not

@@ -417,6 +417,53 @@ describe("voice roster: the room is the authority", () => {
     await waitForMember(channelId, userId, null);
   });
 
+  it("counts a zombie's resume grace from when it was last heard", async () => {
+    const userId = `roster-zombie-grace-${crypto.randomUUID()}`;
+    const { channelId, roomSlug } = await dmRoom([userId]);
+    const socket = await openRoomSocket(roomSlug, userId, { channelId });
+    await identify(socket);
+    await waitForMember(channelId, userId, { connection_state: "connected" });
+
+    const room = meetingRoom(roomSlug);
+    const lastHeard = Date.now() - 100_000;
+    await runInDurableObject(room, (instance) => {
+      const live = instance as unknown as {
+        sessions: Map<unknown, { last_heartbeat?: number }>;
+      };
+      for (const session of live.sessions.values()) {
+        session.last_heartbeat = lastHeard;
+      }
+    });
+    expect(await runDurableObjectAlarm(room)).toBe(true);
+    // Held, but only for what is left of the grace since it went silent.
+    await waitForMember(channelId, userId, {
+      connection_state: "reconnecting",
+      disconnected_at: lastHeard,
+      reconnect_expires_at: lastHeard + 120_000,
+    });
+  });
+
+  it("drops a zombie silent for longer than the resume grace at once", async () => {
+    const userId = `roster-zombie-late-${crypto.randomUUID()}`;
+    const { channelId, roomSlug } = await dmRoom([userId]);
+    const socket = await openRoomSocket(roomSlug, userId, { channelId });
+    await identify(socket);
+    await waitForMember(channelId, userId, { connection_state: "connected" });
+
+    const room = meetingRoom(roomSlug);
+    await runInDurableObject(room, (instance) => {
+      const live = instance as unknown as {
+        sessions: Map<unknown, { last_heartbeat?: number }>;
+      };
+      for (const session of live.sessions.values()) {
+        session.last_heartbeat = Date.now() - 125_000;
+      }
+    });
+    // One alarm: the zombie is ended and its grace has already run out.
+    expect(await runDurableObjectAlarm(room)).toBe(true);
+    await waitForMember(channelId, userId, null);
+  });
+
   it("keeps one connected member through a device takeover, and drops it on a kick", async () => {
     const userId = `roster-takeover-${crypto.randomUUID()}`;
     const observerId = `roster-takeover-observer-${crypto.randomUUID()}`;
